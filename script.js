@@ -8,7 +8,7 @@ const CONFIG = {
 };
 
 // Initialize Supabase client
-const supabase = window.supabase.createClient(
+const supabase = window.supabase ? window.supabase : window.supabase.createClient(
     CONFIG.SUPABASE_URL,
     CONFIG.SUPABASE_KEY
 );
@@ -548,3 +548,4 @@ window.exportData = function() {
 };
 
 console.log('🎉 Script loaded successfully');
+
