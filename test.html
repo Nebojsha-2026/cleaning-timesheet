@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<body>
+    <h1>API Direct Test</h1>
+    <p>This bypasses CORS by loading the API in an iframe</p>
+    
+    <iframe id="apiFrame" style="display:none;"></iframe>
+    
+    <button onclick="testAPI()">Test API in Console</button>
+    <div id="result"></div>
+    
+    <script>
+    function testAPI() {
+        const url = 'https://script.google.com/macros/s/AKfycbyOXay6DbeEX2kdaPzKVmakaHAS1l0hMzlzFFKy2Jh7zxwi8zjpzvtKM8ZUSfli8EfSMA/exec?path=test&apiKey=Timesheet_2026';
+        
+        // Method 1: Use iframe
+        document.getElementById('apiFrame').src = url;
+        
+        // Method 2: Use fetch with no-cors (just to see if it connects)
+        fetch(url, { mode: 'no-cors' })
+            .then(response => {
+                document.getElementById('result').innerHTML = 
+                    `<div style="background:#d4edda;padding:10px;">
+                        ✅ API is reachable (CORS blocked, but server responds)
+                        <br><small>Status: ${response.type}</small>
+                    </div>`;
+            })
+            .catch(error => {
+                document.getElementById('result').innerHTML = 
+                    `<div style="background:#f8d7da;padding:10px;">
+                        ❌ Error: ${error.message}
+                    </div>`;
+            });
+            
+        // Method 3: Try in new tab
+        window.open(url, '_blank');
+    }
+    
+    // Auto-test on load
+    setTimeout(testAPI, 1000);
+    </script>
+</body>
+</html>

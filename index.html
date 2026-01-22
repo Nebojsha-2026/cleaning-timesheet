@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cleaning Timesheet Manager</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h2>Loading Cleaning Timesheet</h2>
+            <p>Connecting to your data...</p>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container" style="display: none;">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-broom"></i> Cleaning Timesheet</h1>
+                <p class="subtitle">Track your cleaning jobs and generate invoices</p>
+                <div class="header-stats">
+                    <div class="stat-badge">
+                        <i class="fas fa-clock"></i>
+                        <span>Rate: <strong>$23/hr</strong></span>
+                    </div>
+                    <div class="stat-badge">
+                        <i class="fas fa-calendar"></i>
+                        <span id="currentDate">Today</span>
+                    </div>
+                    <div class="stat-badge" id="connectionStatus">
+                        <i class="fas fa-wifi"></i>
+                        <span>Connecting...</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Quick Stats Row -->
+            <div class="stats-row" id="statsRow">
+                <div class="stat-card loading">
+                    <div class="stat-icon"><i class="fas fa-list"></i></div>
+                    <div class="stat-info">
+                        <h3>Total Entries</h3>
+                        <div class="stat-value">...</div>
+                    </div>
+                </div>
+                <div class="stat-card loading">
+                    <div class="stat-icon"><i class="fas fa-map-marker-alt"></i></div>
+                    <div class="stat-info">
+                        <h3>Locations</h3>
+                        <div class="stat-value">...</div>
+                    </div>
+                </div>
+                <div class="stat-card loading">
+                    <div class="stat-icon"><i class="fas fa-file-invoice-dollar"></i></div>
+                    <div class="stat-info">
+                        <h3>Timesheets</h3>
+                        <div class="stat-value">...</div>
+                    </div>
+                </div>
+                <div class="stat-card loading">
+                    <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
+                    <div class="stat-info">
+                        <h3>Total Earned</h3>
+                        <div class="stat-value">...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Two Column Layout -->
+            <div class="two-column">
+                <!-- Left Column -->
+                <div class="column">
+                    <!-- Add Entry Form -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-plus-circle"></i> Add New Entry</h2>
+                        </div>
+                        <div class="card-body">
+                            <form id="entryForm">
+                                <div class="form-group">
+                                    <label for="location"><i class="fas fa-map-marker-alt"></i> Location</label>
+                                    <input type="text" id="location" placeholder="e.g., Main Office, Private House" required>
+                                    <div class="suggestions" id="locationSuggestions"></div>
+                                </div>
+                                
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="hours"><i class="fas fa-clock"></i> Hours</label>
+                                        <input type="number" id="hours" min="0.5" max="24" step="0.5" value="2.0" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="date"><i class="fas fa-calendar"></i> Date</label>
+                                        <input type="date" id="date" required>
+                                    </div>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="notes"><i class="fas fa-sticky-note"></i> Notes (Optional)</label>
+                                    <textarea id="notes" rows="2" placeholder="Any additional notes..."></textarea>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-primary btn-block">
+                                    <i class="fas fa-check"></i> Add Entry
+                                </button>
+                            </form>
+                            <div id="formMessage" class="message"></div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Entries -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-history"></i> Recent Entries</h2>
+                            <button onclick="refreshData()" class="btn-icon">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="entriesList" class="entries-list">
+                                <div class="loading-simple">
+                                    <div class="spinner-small"></div>
+                                    Loading entries...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="column">
+                    <!-- Quick Actions -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-bolt"></i> Quick Actions</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="actions-grid">
+                                <button onclick="generateTimesheet()" class="action-btn">
+                                    <i class="fas fa-file-invoice"></i>
+                                    <span>Generate Timesheet</span>
+                                </button>
+                                <button onclick="viewLocations()" class="action-btn">
+                                    <i class="fas fa-map"></i>
+                                    <span>Manage Locations</span>
+                                </button>
+                                <button onclick="viewTimesheets()" class="action-btn">
+                                    <i class="fas fa-folder"></i>
+                                    <span>View Timesheets</span>
+                                </button>
+                                <button onclick="exportData()" class="action-btn">
+                                    <i class="fas fa-download"></i>
+                                    <span>Export Data</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Timesheet Generator -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-calendar-alt"></i> Generate Timesheet</h2>
+                        </div>
+                        <div class="card-body">
+                            <form id="timesheetForm">
+                                <div class="form-group">
+                                    <label for="startDate">Start Date</label>
+                                    <input type="date" id="startDate" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="endDate">End Date</label>
+                                    <input type="date" id="endDate" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="checkbox">
+                                        <input type="checkbox" id="sendEmail" checked>
+                                        <span>Send email notification</span>
+                                    </label>
+                                </div>
+                                <button type="submit" class="btn btn-success btn-block">
+                                    <i class="fas fa-file-export"></i> Generate Timesheet
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- System Info -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-info-circle"></i> System Info</h2>
+                        </div>
+                        <div class="card-body">
+                            <div class="info-item">
+                                <i class="fas fa-database"></i>
+                                <div>
+                                    <strong>Data Source:</strong>
+                                    <span>Google Sheets</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-money-bill"></i>
+                                <div>
+                                    <strong>Hourly Rate:</strong>
+                                    <span>$23 AUD</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-sync-alt"></i>
+                                <div>
+                                    <strong>Last Updated:</strong>
+                                    <span id="lastUpdated">Never</span>
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <i class="fas fa-server"></i>
+                                <div>
+                                    <strong>API Status:</strong>
+                                    <span id="apiStatus">Checking...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Cleaning Timesheet Manager • Powered by Google Sheets API</p>
+            <p class="footer-links">
+                <a href="#" onclick="showSettings()">Settings</a> • 
+                <a href="#" onclick="showHelp()">Help</a> • 
+                <span id="version">v1.0</span>
+            </p>
+        </footer>
+    </div>
+
+    <!-- Modals will be inserted here by JavaScript -->
+
+    <!-- JavaScript Files -->
+    <script src="script.js"></script>
+</body>
+</html>
