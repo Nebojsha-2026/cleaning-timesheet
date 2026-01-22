@@ -1,9 +1,10 @@
 // Configuration
 const CONFIG = {
-    API_URL: 'https://script.google.com/macros/s/AKfycbyOXay6DbeEX2kdaPzKVmakaHAS1l0hMzlzFFKy2Jh7zxwi8zjpzvtKM8ZUSfli8EfSMA/exec', // ← UPDATE THIS!
-    API_KEY: 'Timesheet_2026',
+    SUPABASE_URL: 'https://hqmtigcjyqckqdzepcdu.supabase.co',
+    SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbXRpZ2NqeXFja3FkemVwY2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwODgwMjYsImV4cCI6MjA4NDY2NDAyNn0.Rs6yv54hZyXzqqWQM4m-Z4g3gKqacBeDfHiMfpOuFRw',
     HOURLY_RATE: 23,
-    CURRENCY: 'AUD'
+    CURRENCY: 'AUD',
+    VERSION: '1.0.0'
 };
 
 console.log('🚀 Cleaning Timesheet App Starting...');
@@ -361,5 +362,6 @@ window.generateTimesheet = function() {
 window.exportData = function() {
     alert('Export feature coming soon!');
 };
+
 
 console.log('🎉 Script loaded successfully');
