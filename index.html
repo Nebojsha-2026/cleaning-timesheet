@@ -16,7 +16,6 @@
             <p>Connecting to your data...</p>
         </div>
     </div>
-
     <!-- Main Container -->
     <div class="container" style="display: none;">
         <!-- Header -->
@@ -40,7 +39,6 @@
                 </div>
             </div>
         </header>
-
         <!-- Main Content -->
         <main class="main-content">
             <!-- Quick Stats Row -->
@@ -74,7 +72,6 @@
                     </div>
                 </div>
             </div>
-
             <!-- Two Column Layout -->
             <div class="two-column">
                 <!-- Left Column -->
@@ -88,11 +85,14 @@
                             <form id="entryForm">
                                 <div class="form-group">
                                     <label for="location"><i class="fas fa-map-marker-alt"></i> Location</label>
-                                    <input type="text" id="location" placeholder="e.g., Main Office, Private House" required>
+                                    <input type="text" id="location" placeholder="e.g., Main Office, Private House" required list="locationList">
                                     <datalist id="locationList"></datalist>
                                     <div class="suggestions" id="locationSuggestions"></div>
                                 </div>
-                                
+                                <div class="form-group" id="rateGroup" style="display: none;">
+                                    <label for="rate"><i class="fas fa-dollar-sign"></i> Hourly Rate (Optional, default $23)</label>
+                                    <input type="number" id="rate" min="1" step="0.01" placeholder="e.g., 25.00">
+                                </div>
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label for="hours"><i class="fas fa-clock"></i> Hours</label>
@@ -103,12 +103,10 @@
                                         <input type="date" id="date" required>
                                     </div>
                                 </div>
-                                
                                 <div class="form-group">
                                     <label for="notes"><i class="fas fa-sticky-note"></i> Notes (Optional)</label>
                                     <textarea id="notes" rows="2" placeholder="Any additional notes..."></textarea>
                                 </div>
-                                
                                 <button type="submit" class="btn btn-primary btn-block">
                                     <i class="fas fa-check"></i> Add Entry
                                 </button>
@@ -116,7 +114,6 @@
                             <div id="formMessage" class="message"></div>
                         </div>
                     </div>
-
                     <!-- Recent Entries -->
                     <div class="card">
                         <div class="card-header">
@@ -135,7 +132,6 @@
                         </div>
                     </div>
                 </div>
-
                 <!-- Right Column -->
                 <div class="column">
                     <!-- Quick Actions -->
@@ -164,7 +160,6 @@
                             </div>
                         </div>
                     </div>
-
                     <!-- Timesheet Generator -->
                     <div class="card">
                         <div class="card-header">
@@ -192,7 +187,6 @@
                             </form>
                         </div>
                     </div>
-
                     <!-- System Info -->
                     <div class="card">
                         <div class="card-header">
@@ -203,7 +197,7 @@
                                 <i class="fas fa-database"></i>
                                 <div>
                                     <strong>Data Source:</strong>
-                                    <span>Google Sheets</span>
+                                    <span>Google Sheets</span> <!-- Note: Actually Supabase, but kept as is -->
                                 </div>
                             </div>
                             <div class="info-item">
@@ -232,22 +226,20 @@
                 </div>
             </div>
         </main>
-
         <!-- Footer -->
         <footer class="footer">
-            <p>Cleaning Timesheet Manager • Powered by Google Sheets API</p>
+            <p>Cleaning Timesheet Manager • Powered by Supabase</p> <!-- Updated from Google Sheets -->
             <p class="footer-links">
-                <a href="#" onclick="showSettings()">Settings</a> • 
-                <a href="#" onclick="showHelp()">Help</a> • 
-                <span id="version">v1.0</span>
+                <a href="#" onclick="showSettings()">Settings</a> •
+                <a href="#" onclick="showHelp()">Help</a> •
+                <span id="version">v1.1</span> <!-- Bumped version -->
             </p>
         </footer>
     </div>
-
-    <!-- Modals will be inserted here by JavaScript -->
-
+    <!-- Modals Container -->
+    <div id="modalsContainer"></div>
     <!-- JavaScript Files -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>    <script src="script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
+    <script src="script.js"></script>
 </body>
-
 </html>
