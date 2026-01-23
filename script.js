@@ -6,26 +6,21 @@ const CONFIG = {
     CURRENCY: 'AUD',
     VERSION: '1.0.0'
 };
-
-// Initialize Supabase client
-// Debug Supabase object
-console.log('🔌 Supabase object:', window.supabase);
-console.log('🔌 Supabase keys:', Object.keys(window.supabase));
-console.log('🔌 createClient exists?', typeof window.supabase.createClient);
-console.log('🔌 supabase exists?', typeof window.supabase.supabase);
-https://github.com/Nebojsha-2026/cleaning-timesheet/blob/main/script.js
-// Try different ways to get client
-let supabase;
-if (window.supabase && window.supabase.createClient) {
-    supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-    console.log('✅ Created client via createClient');
-} else if (window.supabase && window.supabase.supabase) {
-    supabase = window.supabase.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-    console.log('✅ Created client via supabase.createClient');
-} else {
-    console.error('❌ Cannot find Supabase client creation method');
-    throw new Error('Supabase client not available');
+// Modern Supabase client initialization (CDN/UMD style)
+if (!window.supabase) {
+    console.error('❌ Supabase global not found. Check your <script> tag for https://cdn.jsdelivr.net/npm/@supabase/supabase-js');
+    throw new Error('Supabase not loaded');
 }
+
+const { createClient } = window.supabase;
+
+const supabase = createClient(
+    CONFIG.SUPABASE_URL,
+    CONFIG.SUPABASE_KEY
+);
+
+console.log('✅ Supabase client initialized (modern way)');
+
 
 console.log('🚀 Cleaning Timesheet App Starting...');
 console.log('📡 Supabase URL:', CONFIG.SUPABASE_URL);
@@ -562,6 +557,7 @@ window.exportData = function() {
 };
 
 console.log('🎉 Script loaded successfully');
+
 
 
 
