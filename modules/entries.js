@@ -27,6 +27,18 @@ function handleEmailCheckbox(event) {
         const emailInput = document.getElementById('emailAddress');
         if (emailInput) {
             emailInput.value = '';
+            
+            // Make functions globally accessible
+window.handleAddEntry = handleAddEntry;
+window.handleLocationInput = handleLocationInput;
+window.handleLocationSelection = handleLocationSelection;
+window.handleEmailCheckbox = handleEmailCheckbox;
+window.loadRecentEntries = loadRecentEntries;
+window.loadLocations = loadLocations;
+window.loadStats = loadStats;
+window.findOrCreateLocation = findOrCreateLocation;
+
+console.log('✅ Entries module loaded');
         }
     }
 }
