@@ -49,6 +49,9 @@ async function initializeApp() {
         // Setup location input listener for auto-fill and rate field
         document.getElementById('location').addEventListener('input', handleLocationInput);
         document.getElementById('location').addEventListener('change', handleLocationSelection);
+        
+        // Setup email notification checkbox
+        document.getElementById('sendEmail').addEventListener('change', handleEmailCheckbox);
       
         // Test connection
         const connected = await testConnection();
@@ -77,6 +80,30 @@ async function initializeApp() {
     } catch (error) {
         console.error('💥 Init error:', error);
         showError('Error loading app: ' + error.message);
+    }
+}
+
+// Handle email checkbox change
+function handleEmailCheckbox(event) {
+    const emailGroup = document.getElementById('emailGroup');
+    if (!emailGroup) {
+        // Create email group if it doesn't exist
+        const checkbox = event.target;
+        const formGroup = checkbox.closest('.form-group');
+        
+        const emailHtml = `
+            <div class="form-group" id="emailGroup">
+                <label for="emailAddress"><i class="fas fa-envelope"></i> Email Address</label>
+                <input type="email" id="emailAddress" placeholder="your@email.com" required>
+            </div>
+        `;
+        
+        formGroup.insertAdjacentHTML('afterend', emailHtml);
+    }
+    
+    emailGroup.style.display = event.target.checked ? 'block' : 'none';
+    if (!event.target.checked) {
+        document.getElementById('emailAddress').value = '';
     }
 }
 
@@ -455,14 +482,23 @@ async function handleGenerateTimesheet(event) {
     try {
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
+        const sendEmail = document.getElementById('sendEmail').checked;
+        const emailAddress = sendEmail ? document.getElementById('emailAddress').value.trim() : null;
       
         if (!startDate || !endDate) throw new Error('Please select start and end dates');
+        if (sendEmail && (!emailAddress || !validateEmail(emailAddress))) {
+            throw new Error('Please enter a valid email address');
+        }
       
         const { data: entries, error: entriesError } = await supabase
             .from('entries')
-            .select('hours, locations (hourly_rate)')
+            .select(`
+                *,
+                locations (name, hourly_rate)
+            `)
             .gte('work_date', startDate)
-            .lte('work_date', endDate);
+            .lte('work_date', endDate)
+            .order('work_date', { ascending: true });
       
         if (entriesError) throw entriesError;
         if (!entries?.length) throw new Error('No entries found for selected period');
@@ -477,16 +513,48 @@ async function handleGenerateTimesheet(event) {
       
         const { data: timesheet, error: tsError } = await supabase
             .from('timesheets')
-            .insert([{ ref_number: refNumber, start_date: startDate, end_date: endDate, total_hours: totalHours, total_earnings: totalEarnings }])
+            .insert([{ 
+                ref_number: refNumber, 
+                start_date: startDate, 
+                end_date: endDate, 
+                total_hours: totalHours, 
+                total_earnings: totalEarnings,
+                email_sent: sendEmail,
+                email_address: emailAddress
+            }])
             .select()
             .single();
       
         if (tsError) throw tsError;
       
+        // Prepare timesheet details for display/email
+        const timesheetDetails = {
+            refNumber,
+            startDate,
+            endDate,
+            totalHours: totalHours.toFixed(2),
+            totalEarnings,
+            entriesCount: entries.length,
+            entries: entries.map(entry => ({
+                date: formatDate(entry.work_date),
+                location: entry.locations?.name || 'Unknown',
+                hours: entry.hours,
+                rate: entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE,
+                earnings: (entry.hours * (entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE)).toFixed(2),
+                notes: entry.notes || ''
+            }))
+        };
+      
         showMessage(`✅ Timesheet ${refNumber} generated!`, 'success');
         await loadStats();
       
-        alert(`Timesheet ${refNumber} generated!\n\nPeriod: ${formatDate(startDate)} to ${formatDate(endDate)}\nTotal Hours: ${totalHours.toFixed(2)}\nTotal Earnings: $${totalEarnings}\nEntries: ${entries.length}`);
+        // Show timesheet details
+        viewTimesheetDetails(timesheetDetails);
+      
+        // Send email if requested
+        if (sendEmail && emailAddress) {
+            await sendTimesheetEmail(timesheetDetails, emailAddress);
+        }
       
     } catch (error) {
         console.error('❌ Timesheet error:', error);
@@ -495,6 +563,322 @@ async function handleGenerateTimesheet(event) {
         button.innerHTML = originalText;
         button.disabled = false;
     }
+}
+
+// Email validation helper
+function validateEmail(email) {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email);
+}
+
+// Send timesheet email
+async function sendTimesheetEmail(timesheetDetails, emailAddress) {
+    try {
+        // For now, we'll show a message that email would be sent
+        // In a real app, you would integrate with an email service like SendGrid, etc.
+        console.log('📧 Would send timesheet to:', emailAddress);
+        console.log('Timesheet details:', timesheetDetails);
+        
+        // Show a message that email functionality is coming soon
+        setTimeout(() => {
+            showMessage(`📧 Timesheet summary would be sent to ${emailAddress} (Email integration coming soon!)`, 'info');
+        }, 1000);
+        
+        return true;
+    } catch (error) {
+        console.error('❌ Email error:', error);
+        showMessage('⚠️ Could not send email (feature in development)', 'info');
+        return false;
+    }
+}
+
+// View timesheet details
+function viewTimesheetDetails(timesheetDetails) {
+    let entriesHtml = '';
+    timesheetDetails.entries.forEach(entry => {
+        entriesHtml += `
+            <div style="padding: 10px 0; border-bottom: 1px solid #eee;">
+                <div style="display: flex; justify-content: space-between;">
+                    <div>
+                        <strong>${entry.date}</strong> • ${entry.location}
+                        ${entry.notes ? `<br><small>${escapeHtml(entry.notes)}</small>` : ''}
+                    </div>
+                    <div style="text-align: right;">
+                        ${entry.hours} hrs @ $${entry.rate}/hr<br>
+                        <strong>$${entry.earnings}</strong>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+  
+    const html = `
+        <div class="modal-content">
+            <h2>Timesheet ${timesheetDetails.refNumber}</h2>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <div>
+                        <strong>Period:</strong><br>
+                        ${formatDate(timesheetDetails.startDate)} to ${formatDate(timesheetDetails.endDate)}
+                    </div>
+                    <div style="text-align: right;">
+                        <strong>Total Hours:</strong><br>
+                        ${timesheetDetails.totalHours} hrs
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <div>
+                        <strong>Total Earnings:</strong><br>
+                        $${timesheetDetails.totalEarnings}
+                    </div>
+                    <div style="text-align: right;">
+                        <strong>Entries:</strong><br>
+                        ${timesheetDetails.entriesCount}
+                    </div>
+                </div>
+            </div>
+            
+            <h3>Entries</h3>
+            <div style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
+                ${entriesHtml}
+            </div>
+            
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button onclick="printTimesheet('${timesheetDetails.refNumber}')" class="btn btn-primary" style="flex:1;">
+                    <i class="fas fa-print"></i> Print
+                </button>
+                <button onclick="closeModal()" class="btn" style="flex:1;">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
+        </div>
+    `;
+  
+    showModal(html);
+}
+
+// Print timesheet
+window.printTimesheet = function(refNumber) {
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>Timesheet ${refNumber}</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; }
+                h1 { color: #333; }
+                .summary { background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0; }
+                table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; }
+                .total { font-weight: bold; text-align: right; }
+                @media print {
+                    button { display: none; }
+                }
+            </style>
+        </head>
+        <body>
+            <h1>Timesheet ${refNumber}</h1>
+            <p>Generated on ${formatDate(new Date())}</p>
+            <div style="text-align: center; margin: 20px 0;">
+                <button onclick="window.print()" style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">
+                    Print Timesheet
+                </button>
+            </div>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+};
+
+// ───────────────────────────────────────────────
+//   VIEW TIMESHEETS FUNCTIONALITY
+// ───────────────────────────────────────────────
+
+window.viewTimesheets = async function() {
+    try {
+        const { data: timesheets, error } = await supabase
+            .from('timesheets')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        let timesheetsHtml = '';
+        if (timesheets && timesheets.length > 0) {
+            timesheets.forEach(timesheet => {
+                const emailStatus = timesheet.email_sent 
+                    ? `<span style="color: #28a745;"><i class="fas fa-check-circle"></i> Sent${timesheet.email_address ? ' to ' + timesheet.email_address : ''}</span>`
+                    : '<span style="color: #6c757d;"><i class="fas fa-times-circle"></i> Not sent</span>';
+                
+                timesheetsHtml += `
+                    <div class="timesheet-item" style="padding: 15px; border-bottom: 1px solid #eee;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h4 style="margin: 0 0 5px 0;">${timesheet.ref_number}</h4>
+                                <p style="margin: 0; color: #666; font-size: 0.9rem;">
+                                    ${formatDate(timesheet.start_date)} to ${formatDate(timesheet.end_date)}<br>
+                                    ${timesheet.total_hours} hrs • $${timesheet.total_earnings} • ${emailStatus}
+                                </p>
+                            </div>
+                            <div class="timesheet-actions">
+                                <button class="btn-icon view-timesheet-btn" data-id="${timesheet.id}" title="View Details">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn-icon delete-timesheet-btn" data-id="${timesheet.id}" title="Delete" style="color: #dc3545;">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        } else {
+            timesheetsHtml = '<p style="text-align:center; padding:20px;">No timesheets generated yet.</p>';
+        }
+
+        const html = `
+            <div class="modal-content">
+                <h2>All Timesheets</h2>
+                <div style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;">
+                    ${timesheetsHtml}
+                </div>
+                <div style="margin-top:20px; display:flex; gap:10px;">
+                    <button onclick="closeModal()" class="btn" style="flex:1;">
+                        <i class="fas fa-times"></i> Close
+                    </button>
+                </div>
+            </div>
+        `;
+
+        showModal(html);
+        
+        // Add event listeners for buttons
+        setTimeout(() => {
+            document.querySelectorAll('.view-timesheet-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    viewTimesheetById(id);
+                });
+            });
+            
+            document.querySelectorAll('.delete-timesheet-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    deleteTimesheet(id);
+                });
+            });
+        }, 100);
+    } catch (error) {
+        console.error('❌ Error loading timesheets:', error);
+        showMessage('❌ Error loading timesheets: ' + error.message, 'error');
+    }
+};
+
+// View specific timesheet by ID
+async function viewTimesheetById(id) {
+    try {
+        const { data: timesheet, error: tsError } = await supabase
+            .from('timesheets')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (tsError) throw tsError;
+
+        // Get entries for this timesheet period
+        const { data: entries, error: entriesError } = await supabase
+            .from('entries')
+            .select(`
+                *,
+                locations (name, hourly_rate)
+            `)
+            .gte('work_date', timesheet.start_date)
+            .lte('work_date', timesheet.end_date)
+            .order('work_date', { ascending: true });
+
+        if (entriesError) throw entriesError;
+
+        const timesheetDetails = {
+            refNumber: timesheet.ref_number,
+            startDate: timesheet.start_date,
+            endDate: timesheet.end_date,
+            totalHours: parseFloat(timesheet.total_hours).toFixed(2),
+            totalEarnings: timesheet.total_earnings,
+            entriesCount: entries?.length || 0,
+            entries: entries?.map(entry => ({
+                date: formatDate(entry.work_date),
+                location: entry.locations?.name || 'Unknown',
+                hours: entry.hours,
+                rate: entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE,
+                earnings: (entry.hours * (entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE)).toFixed(2),
+                notes: entry.notes || ''
+            })) || []
+        };
+
+        viewTimesheetDetails(timesheetDetails);
+    } catch (error) {
+        console.error('❌ Error viewing timesheet:', error);
+        showMessage('❌ Error viewing timesheet: ' + error.message, 'error');
+    }
+}
+
+// Delete timesheet
+async function deleteTimesheet(id) {
+    console.log("Delete timesheet clicked for ID:", id);
+
+    const html = `
+        <div class="modal-content" data-timesheet-id="${id}">
+            <h2>Confirm Delete Timesheet</h2>
+            <p style="margin:15px 0;">Are you sure you want to delete this timesheet?</p>
+            <p style="color:#dc3545; font-weight:bold;">
+                Note: This only deletes the timesheet record, not the actual entries.
+            </p>
+            <div style="margin-top:20px; display:flex; gap:10px;">
+                <button class="btn btn-primary confirm-delete-timesheet-btn" style="flex:1; background:#dc3545; border:none;">
+                    <i class="fas fa-trash"></i> Yes, Delete Timesheet
+                </button>
+                <button class="btn cancel-btn" style="flex:1;">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    `;
+
+    showModal(html);
+    
+    // Add event listeners after modal is shown
+    setTimeout(() => {
+        const modalContent = document.querySelector('.modal-content');
+        const timesheetId = modalContent.getAttribute('data-timesheet-id');
+        
+        document.querySelector('.confirm-delete-timesheet-btn').addEventListener('click', async function() {
+            console.log("Confirming delete for timesheet ID:", timesheetId);
+            
+            try {
+                const { error } = await supabase
+                    .from('timesheets')
+                    .delete()
+                    .eq('id', timesheetId);
+
+                if (error) throw error;
+
+                closeModal();
+                showMessage('✅ Timesheet deleted successfully!', 'success');
+                await loadStats();
+                // Refresh the timesheets view if it's open
+                if (document.querySelector('.modal-content h2').textContent === 'All Timesheets') {
+                    closeModal();
+                    viewTimesheets();
+                }
+            } catch (error) {
+                console.error("Delete timesheet error:", error);
+                showMessage('❌ Error deleting timesheet: ' + error.message, 'error');
+            }
+        });
+        
+        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
+    }, 100);
 }
 
 // ───────────────────────────────────────────────
@@ -552,426 +936,4 @@ window.editEntry = async function(id) {
                             <i class="fas fa-save"></i> Save Changes
                         </button>
                         <button type="button" class="btn cancel-btn" style="flex:1; background:#6c757d; color:white;">
-                            <i class="fas fa-times"></i> Cancel
-                        </button>
-                    </div>
-                </form>
-            </div>
-        `;
-
-        showModal(html);
-        
-        // Add event listeners
-        document.getElementById('editEntryForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const newLocName = document.getElementById('editLocationName').value.trim();
-            const newRate = parseFloat(document.getElementById('editRate').value);
-            const newHours = parseFloat(document.getElementById('editHours').value);
-            const newDate = document.getElementById('editDate').value;
-            const newNotes = document.getElementById('editNotes').value.trim();
-
-            // Update entry
-            const { error: entryErr } = await supabase
-                .from('entries')
-                .update({ hours: newHours, work_date: newDate, notes: newNotes })
-                .eq('id', id);
-
-            if (entryErr) throw entryErr;
-
-            // Update location (name + rate)
-            const { error: locErr } = await supabase
-                .from('locations')
-                .update({ name: newLocName, hourly_rate: newRate })
-                .eq('id', entry.locations.id);
-
-            if (locErr) throw locErr;
-
-            closeModal();
-            showMessage('✅ Entry & location updated!', 'success');
-            await loadStats();
-            await loadRecentEntries();
-            await loadLocations(); // refresh dropdown if name changed
-        });
-        
-        // Add cancel button listener
-        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
-        
-    } catch (error) {
-        console.error("Edit entry error:", error);
-        showMessage('❌ Error: ' + error.message, 'error');
-    }
-};
-
-window.deleteEntry = function(id) {
-    console.log("Delete clicked for entry ID:", id);
-
-    // Store the ID in a data attribute on the modal itself
-    const html = `
-        <div class="modal-content" data-entry-id="${id}">
-            <h2>Confirm Delete</h2>
-            <p style="margin:15px 0;">Are you sure you want to delete this entry?</p>
-            <p style="color:#dc3545; font-weight:bold;">This cannot be undone.</p>
-            <div style="margin-top:20px; display:flex; gap:10px;">
-                <button class="btn btn-primary confirm-delete-btn" style="flex:1; background:#dc3545; border:none;">
-                    <i class="fas fa-trash"></i> Yes, Delete
-                </button>
-                <button class="btn cancel-btn" style="flex:1;">
-                    <i class="fas fa-times"></i> Cancel
-                </button>
-            </div>
-        </div>
-    `;
-
-    showModal(html);
-    
-    // Add event listeners after modal is shown
-    setTimeout(() => {
-        const modalContent = document.querySelector('.modal-content');
-        const entryId = modalContent.getAttribute('data-entry-id');
-        
-        document.querySelector('.confirm-delete-btn').addEventListener('click', async function() {
-            console.log("Confirming delete for ID:", entryId);
-            
-            try {
-                const { error } = await supabase
-                    .from('entries')
-                    .delete()
-                    .eq('id', entryId);
-
-                if (error) throw error;
-
-                closeModal();
-                showMessage('✅ Entry deleted successfully!', 'success');
-                await loadStats();
-                await loadRecentEntries();
-            } catch (error) {
-                console.error("Delete error:", error);
-                showMessage('❌ Error deleting entry: ' + error.message, 'error');
-            }
-        });
-        
-        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
-    }, 100);
-};
-
-// Modal Helpers
-function showModal(content) {
-    // Remove any existing modal first
-    closeModal();
-    
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    modal.innerHTML = content;
-    
-    // Add click outside to close
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) {
-            closeModal();
-        }
-    });
-    
-    const modalsContainer = document.getElementById('modalsContainer');
-    if (modalsContainer) {
-        modalsContainer.appendChild(modal);
-    } else {
-        // Fallback: append to body
-        document.body.appendChild(modal);
-    }
-}
-
-window.closeModal = function() {
-    const modal = document.querySelector('.modal');
-    if (modal) {
-        modal.remove();
-    }
-};
-
-// Utility functions
-function showMessage(text, type = 'info') {
-    let messageDiv = document.getElementById('formMessage');
-    if (!messageDiv) {
-        const form = document.getElementById('entryForm');
-        if (form) {
-            messageDiv = document.createElement('div');
-            messageDiv.id = 'formMessage';
-            form.parentNode.insertBefore(messageDiv, form.nextSibling);
-        }
-    }
-    if (messageDiv) {
-        messageDiv.textContent = text;
-        messageDiv.className = `message ${type}`;
-        messageDiv.style.display = 'block';
-        if (type === 'success' || type === 'info') {
-            setTimeout(() => { messageDiv.style.display = 'none'; }, 5000);
-        }
-    }
-}
-
-function updateConnectionStatus(connected) {
-    const statusDiv = document.getElementById('connectionStatus');
-    if (statusDiv) {
-        statusDiv.innerHTML = connected 
-            ? '<i class="fas fa-database"></i><span>Connected</span>'
-            : '<i class="fas fa-database"></i><span>Disconnected</span>';
-        statusDiv.style.color = connected ? '#28a745' : '#dc3545';
-    }
-}
-
-function formatDate(dateString) {
-    try {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
-    } catch {
-        return dateString;
-    }
-}
-
-function showError(message) {
-    const loadingScreen = document.getElementById('loadingScreen');
-    if (loadingScreen) {
-        loadingScreen.innerHTML = `
-            <div style="text-align:center; color:white; padding:40px;">
-                <div style="font-size:4rem;">❌</div>
-                <h2 style="margin:20px 0;">Database Error</h2>
-                <p style="font-size:1.2rem; margin-bottom:20px;">${message}</p>
-                <button onclick="location.reload()" style="padding:10px 20px; background:white; color:#667eea; border:none; border-radius:5px; cursor:pointer;">
-                    Try Again
-                </button>
-            </div>
-        `;
-    }
-}
-
-// Action buttons placeholders
-window.refreshData = async function() {
-    console.log('🔄 Refreshing data...');
-    showMessage('Refreshing data...', 'info');
-    await loadStats();
-    await loadRecentEntries();
-    await loadLocations();
-    showMessage('✅ Data refreshed!', 'success');
-};
-
-window.generateTimesheet = function() {
-    document.getElementById('timesheetForm').scrollIntoView({ behavior: 'smooth' });
-    document.getElementById('startDate').focus();
-};
-
-// Add the missing function for the Manage Locations button
-window.viewLocations = async function() {
-    try {
-        const { data: locations, error } = await supabase
-            .from('locations')
-            .select('*')
-            .order('name');
-
-        if (error) throw error;
-
-        let locationsHtml = '';
-        if (locations && locations.length > 0) {
-            locations.forEach(location => {
-                locationsHtml += `
-                    <div class="location-item">
-                        <div>
-                            <h4>${escapeHtml(location.name)}</h4>
-                            <p>Default: ${location.default_hours} hrs • Rate: $${location.hourly_rate}/hr</p>
-                            <p style="color: ${location.is_active ? '#28a745' : '#dc3545'}; font-size: 0.8rem;">
-                                ${location.is_active ? 'Active' : 'Inactive'}
-                            </p>
-                        </div>
-                        <div class="location-actions">
-                            <button class="btn-icon edit-location" data-id="${location.id}" title="Edit"><i class="fas fa-edit"></i></button>
-                            <button class="btn-icon delete-location" data-id="${location.id}" title="Delete" style="color: #dc3545;"><i class="fas fa-trash"></i></button>
-                        </div>
-                    </div>
-                `;
-            });
-        } else {
-            locationsHtml = '<p style="text-align:center; padding:20px;">No locations found.</p>';
-        }
-
-        const html = `
-            <div class="modal-content">
-                <h2>Manage Locations</h2>
-                <div class="locations-list">
-                    ${locationsHtml}
-                </div>
-                <div style="margin-top:20px; display:flex; gap:10px;">
-                    <button onclick="closeModal()" class="btn" style="flex:1;">
-                        <i class="fas fa-times"></i> Close
-                    </button>
-                </div>
-            </div>
-        `;
-
-        showModal(html);
-        
-        // Add event listeners for buttons
-        setTimeout(() => {
-            document.querySelectorAll('.edit-location').forEach(button => {
-                button.addEventListener('click', function() {
-                    const id = this.getAttribute('data-id');
-                    editLocation(id);
-                });
-            });
-            
-            document.querySelectorAll('.delete-location').forEach(button => {
-                button.addEventListener('click', function() {
-                    const id = this.getAttribute('data-id');
-                    deleteLocation(id);
-                });
-            });
-        }, 100);
-    } catch (error) {
-        console.error('❌ Error loading locations:', error);
-        showMessage('❌ Error loading locations: ' + error.message, 'error');
-    }
-};
-
-// Add edit location function
-window.editLocation = async function(id) {
-    try {
-        const { data: location, error } = await supabase
-            .from('locations')
-            .select('*')
-            .eq('id', id)
-            .single();
-
-        if (error) throw error;
-
-        const html = `
-            <div class="modal-content">
-                <h2>Edit Location</h2>
-                <form id="editLocationForm">
-                    <div class="form-group">
-                        <label for="editLocName">Location Name</label>
-                        <input type="text" id="editLocName" value="${escapeHtml(location.name)}" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="editLocRate">Hourly Rate ($)</label>
-                        <input type="number" id="editLocRate" value="${location.hourly_rate}" step="0.01" min="1" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="editLocHours">Default Hours</label>
-                        <input type="number" id="editLocHours" value="${location.default_hours}" step="0.5" min="0.5" max="24" required>
-                    </div>
-                    <div class="form-group">
-                        <label class="checkbox">
-                            <input type="checkbox" id="editLocActive" ${location.is_active ? 'checked' : ''}>
-                            <span>Active</span>
-                        </label>
-                    </div>
-                    <div style="margin-top:20px; display:flex; gap:10px;">
-                        <button type="submit" class="btn btn-primary" style="flex:1;">
-                            <i class="fas fa-save"></i> Save Changes
-                        </button>
-                        <button type="button" class="btn cancel-btn" style="flex:1; background:#6c757d; color:white;">
-                            <i class="fas fa-times"></i> Cancel
-                        </button>
-                    </div>
-                </form>
-            </div>
-        `;
-
-        showModal(html);
-
-        document.getElementById('editLocationForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const name = document.getElementById('editLocName').value.trim();
-            const rate = parseFloat(document.getElementById('editLocRate').value);
-            const hours = parseFloat(document.getElementById('editLocHours').value);
-            const isActive = document.getElementById('editLocActive').checked;
-
-            const { error: updateError } = await supabase
-                .from('locations')
-                .update({ name, hourly_rate: rate, default_hours: hours, is_active: isActive })
-                .eq('id', id);
-
-            if (updateError) throw updateError;
-
-            closeModal();
-            showMessage('✅ Location updated!', 'success');
-            await loadLocations();
-        });
-        
-        // Add cancel button listener
-        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
-    } catch (error) {
-        console.error('❌ Error editing location:', error);
-        showMessage('❌ Error: ' + error.message, 'error');
-    }
-};
-
-// Add delete location function
-window.deleteLocation = function(id) {
-    console.log("Delete location clicked for ID:", id);
-
-    const html = `
-        <div class="modal-content" data-location-id="${id}">
-            <h2>Confirm Delete Location</h2>
-            <p style="margin:15px 0;">Are you sure you want to delete this location?</p>
-            <p style="color:#dc3545; font-weight:bold;">
-                Warning: This will also delete all entries associated with this location!
-            </p>
-            <div style="margin-top:20px; display:flex; gap:10px;">
-                <button class="btn btn-primary confirm-delete-location-btn" style="flex:1; background:#dc3545; border:none;">
-                    <i class="fas fa-trash"></i> Yes, Delete Location
-                </button>
-                <button class="btn cancel-btn" style="flex:1;">
-                    <i class="fas fa-times"></i> Cancel
-                </button>
-            </div>
-        </div>
-    `;
-
-    showModal(html);
-    
-    // Add event listeners after modal is shown
-    setTimeout(() => {
-        const modalContent = document.querySelector('.modal-content');
-        const locationId = modalContent.getAttribute('data-location-id');
-        
-        document.querySelector('.confirm-delete-location-btn').addEventListener('click', async function() {
-            console.log("Confirming delete for location ID:", locationId);
-            
-            try {
-                // First delete all entries associated with this location
-                const { error: entriesError } = await supabase
-                    .from('entries')
-                    .delete()
-                    .eq('location_id', locationId);
-
-                if (entriesError) throw entriesError;
-
-                // Then delete the location
-                const { error: locationError } = await supabase
-                    .from('locations')
-                    .delete()
-                    .eq('id', locationId);
-
-                if (locationError) throw locationError;
-
-                closeModal();
-                showMessage('✅ Location and associated entries deleted successfully!', 'success');
-                await loadStats();
-                await loadRecentEntries();
-                await loadLocations();
-            } catch (error) {
-                console.error("Delete location error:", error);
-                showMessage('❌ Error deleting location: ' + error.message, 'error');
-            }
-        });
-        
-        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
-    }, 100);
-};
-
-window.viewTimesheets = function() { alert('View Timesheets coming soon!'); };
-window.exportData = function() { alert('Export coming soon!'); };
-window.showSettings = function() { alert('Settings coming soon!'); };
-window.showHelp = function() { alert('Help coming soon!'); };
-
-// Final log
-console.log('🎉 Script loaded successfully');
+                            <i
