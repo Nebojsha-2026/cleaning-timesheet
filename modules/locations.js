@@ -249,4 +249,7 @@ window.deleteLocation = function(id) {
     }, 100);
 };
 
+// Make functions globally accessible
+window.loadLocations = loadLocations;
+
 console.log('✅ Locations module loaded');
