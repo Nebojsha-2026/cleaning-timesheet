@@ -586,7 +586,7 @@ window.deleteEntry = function(id) {
             <p style="margin:15px 0;">Are you sure you want to delete this entry?</p>
             <p style="color:#dc3545; font-weight:bold;">This cannot be undone.</p>
             <div style="margin-top:20px; display:flex; gap:10px;">
-                <button onclick="confirmDelete(${id})" class="btn btn-primary" style="flex:1; background:#dc3545; border:none;">
+                <button class="btn btn-primary confirm-delete-btn" data-id="${id}" style="flex:1; background:#dc3545; border:none;">
                     <i class="fas fa-trash"></i> Yes, Delete
                 </button>
                 <button onclick="closeModal()" class="btn" style="flex:1;">
@@ -597,10 +597,23 @@ window.deleteEntry = function(id) {
     `;
 
     showModal(html);
+    
+    // Add event listener to the delete button after modal is shown
+    setTimeout(() => {
+        const deleteBtn = document.querySelector('.confirm-delete-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', function() {
+                const entryId = this.getAttribute('data-id');
+                confirmDelete(entryId);
+            });
+        }
+    }, 100);
 };
 
 window.confirmDelete = async function(id) {
     try {
+        console.log("Confirming delete for ID:", id);
+        
         const { error } = await supabase
             .from('entries')
             .delete()
