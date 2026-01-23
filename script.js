@@ -8,11 +8,24 @@ const CONFIG = {
 };
 
 // Initialize Supabase client
-console.log('🔌 Supabase client available:', window.supabase);
-const supabase = window.supabase.createClient(
-    CONFIG.SUPABASE_URL,
-    CONFIG.SUPABASE_KEY
-);
+// Debug Supabase object
+console.log('🔌 Supabase object:', window.supabase);
+console.log('🔌 Supabase keys:', Object.keys(window.supabase));
+console.log('🔌 createClient exists?', typeof window.supabase.createClient);
+console.log('🔌 supabase exists?', typeof window.supabase.supabase);
+https://github.com/Nebojsha-2026/cleaning-timesheet/blob/main/script.js
+// Try different ways to get client
+let supabase;
+if (window.supabase && window.supabase.createClient) {
+    supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+    console.log('✅ Created client via createClient');
+} else if (window.supabase && window.supabase.supabase) {
+    supabase = window.supabase.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+    console.log('✅ Created client via supabase.createClient');
+} else {
+    console.error('❌ Cannot find Supabase client creation method');
+    throw new Error('Supabase client not available');
+}
 
 console.log('🚀 Cleaning Timesheet App Starting...');
 console.log('📡 Supabase URL:', CONFIG.SUPABASE_URL);
@@ -549,6 +562,7 @@ window.exportData = function() {
 };
 
 console.log('🎉 Script loaded successfully');
+
 
 
 
