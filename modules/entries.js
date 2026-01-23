@@ -29,6 +29,10 @@ function handleEmailCheckbox(event) {
             emailInput.value = '';
             
             // Make functions globally accessible
+
+        }
+    }
+}
 window.handleAddEntry = handleAddEntry;
 window.handleLocationInput = handleLocationInput;
 window.handleLocationSelection = handleLocationSelection;
@@ -39,6 +43,3 @@ window.loadStats = loadStats;
 window.findOrCreateLocation = findOrCreateLocation;
 
 console.log('✅ Entries module loaded');
-        }
-    }
-}
