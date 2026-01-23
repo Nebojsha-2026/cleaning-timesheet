@@ -8,8 +8,11 @@ const CONFIG = {
 };
 
 // Initialize Supabase client
-console.log('🔌 Supabase client:', window.supabase);
-const supabase = window.supabase;
+console.log('🔌 Supabase client available:', window.supabase);
+const supabase = window.supabase.createClient(
+    CONFIG.SUPABASE_URL,
+    CONFIG.SUPABASE_KEY
+);
 
 console.log('🚀 Cleaning Timesheet App Starting...');
 console.log('📡 Supabase URL:', CONFIG.SUPABASE_URL);
@@ -546,6 +549,7 @@ window.exportData = function() {
 };
 
 console.log('🎉 Script loaded successfully');
+
 
 
 
