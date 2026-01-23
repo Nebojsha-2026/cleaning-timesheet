@@ -51,7 +51,12 @@ async function initializeApp() {
         document.getElementById('location').addEventListener('change', handleLocationSelection);
         
         // Setup email notification checkbox
-        document.getElementById('sendEmail').addEventListener('change', handleEmailCheckbox);
+        const emailCheckbox = document.getElementById('sendEmail');
+        if (emailCheckbox) {
+            emailCheckbox.addEventListener('change', handleEmailCheckbox);
+            // Initialize email field visibility
+            handleEmailCheckbox({ target: emailCheckbox });
+        }
       
         // Test connection
         const connected = await testConnection();
