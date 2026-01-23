@@ -480,12 +480,8 @@ async function handleGenerateTimesheet(event) {
 //   EDIT & DELETE FOR RECENT ENTRIES – FULL FUNCTIONAL
 // ───────────────────────────────────────────────
 
-// Store the current entry ID being processed
-let currentEntryId = null;
-
 window.editEntry = async function(id) {
     console.log("Edit clicked for entry ID:", id);
-    currentEntryId = id;
 
     try {
         const { data: entry, error } = await supabase
@@ -558,7 +554,7 @@ window.editEntry = async function(id) {
             const { error: entryErr } = await supabase
                 .from('entries')
                 .update({ hours: newHours, work_date: newDate, notes: newNotes })
-                .eq('id', currentEntryId);
+                .eq('id', id);
 
             if (entryErr) throw entryErr;
 
@@ -588,9 +584,9 @@ window.editEntry = async function(id) {
 
 window.deleteEntry = function(id) {
     console.log("Delete clicked for entry ID:", id);
-    currentEntryId = id;
 
-    const html = `
+    // Create modal with the ID captured in a closure
+    const deleteModalHtml = `
         <div class="modal-content">
             <h2>Confirm Delete</h2>
             <p style="margin:15px 0;">Are you sure you want to delete this entry?</p>
@@ -606,18 +602,18 @@ window.deleteEntry = function(id) {
         </div>
     `;
 
-    showModal(html);
+    showModal(deleteModalHtml);
     
-    // Add event listeners after modal is shown
+    // Add event listeners after modal is shown - capturing the ID in a closure
     setTimeout(() => {
-        document.querySelector('.confirm-delete-btn').addEventListener('click', async () => {
+        document.querySelector('.confirm-delete-btn').addEventListener('click', async function() {
+            console.log("Confirming delete for ID:", id);
+            
             try {
-                console.log("Confirming delete for ID:", currentEntryId);
-                
                 const { error } = await supabase
                     .from('entries')
                     .delete()
-                    .eq('id', currentEntryId);
+                    .eq('id', id);
 
                 if (error) throw error;
 
@@ -665,7 +661,6 @@ window.closeModal = function() {
     if (modal) {
         modal.remove();
     }
-    currentEntryId = null;
 };
 
 // Utility functions
