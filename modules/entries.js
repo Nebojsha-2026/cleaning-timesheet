@@ -42,4 +42,9 @@ window.loadLocations = loadLocations;
 window.loadStats = loadStats;
 window.findOrCreateLocation = findOrCreateLocation;
 
+// Signal that this module is loaded
+if (typeof checkModulesLoaded !== 'undefined') {
+    checkModulesLoaded();
+}
+
 console.log('✅ Entries module loaded');
