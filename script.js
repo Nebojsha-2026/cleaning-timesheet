@@ -587,15 +587,34 @@ window.confirmDelete = async function(id) {
 
 // Modal Helpers
 function showModal(content) {
+    // Remove any existing modal first
+    closeModal();
+    
     const modal = document.createElement('div');
     modal.className = 'modal';
     modal.innerHTML = content;
-    document.getElementById('modalsContainer').appendChild(modal);
+    
+    // Add click outside to close
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
+    
+    const modalsContainer = document.getElementById('modalsContainer');
+    if (modalsContainer) {
+        modalsContainer.appendChild(modal);
+    } else {
+        // Fallback: append to body
+        document.body.appendChild(modal);
+    }
 }
 
 window.closeModal = function() {
     const modal = document.querySelector('.modal');
-    if (modal) modal.remove();
+    if (modal) {
+        modal.remove();
+    }
 };
 
 // Utility functions
@@ -667,6 +686,126 @@ window.refreshData = async function() {
 window.generateTimesheet = function() {
     document.getElementById('timesheetForm').scrollIntoView({ behavior: 'smooth' });
     document.getElementById('startDate').focus();
+};
+
+// Add the missing function for the Manage Locations button
+window.viewLocations = async function() {
+    try {
+        const { data: locations, error } = await supabase
+            .from('locations')
+            .select('*')
+            .order('name');
+
+        if (error) throw error;
+
+        let locationsHtml = '';
+        if (locations && locations.length > 0) {
+            locations.forEach(location => {
+                locationsHtml += `
+                    <div class="location-item">
+                        <div>
+                            <h4>${location.name}</h4>
+                            <p>Default: ${location.default_hours} hrs • Rate: $${location.hourly_rate}/hr</p>
+                        </div>
+                        <button onclick="editLocation(${location.id})" class="btn-icon" title="Edit"><i class="fas fa-edit"></i></button>
+                    </div>
+                `;
+            });
+        } else {
+            locationsHtml = '<p style="text-align:center; padding:20px;">No locations found.</p>';
+        }
+
+        const html = `
+            <div class="modal-content">
+                <h2>Manage Locations</h2>
+                <div class="locations-list">
+                    ${locationsHtml}
+                </div>
+                <div style="margin-top:20px; display:flex; gap:10px;">
+                    <button onclick="closeModal()" class="btn" style="flex:1;">
+                        <i class="fas fa-times"></i> Close
+                    </button>
+                </div>
+            </div>
+        `;
+
+        showModal(html);
+    } catch (error) {
+        console.error('❌ Error loading locations:', error);
+        showMessage('❌ Error loading locations: ' + error.message, 'error');
+    }
+};
+
+// Add edit location function
+window.editLocation = async function(id) {
+    try {
+        const { data: location, error } = await supabase
+            .from('locations')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+
+        const html = `
+            <div class="modal-content">
+                <h2>Edit Location</h2>
+                <form id="editLocationForm">
+                    <div class="form-group">
+                        <label for="editLocName">Location Name</label>
+                        <input type="text" id="editLocName" value="${location.name}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editLocRate">Hourly Rate ($)</label>
+                        <input type="number" id="editLocRate" value="${location.hourly_rate}" step="0.01" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editLocHours">Default Hours</label>
+                        <input type="number" id="editLocHours" value="${location.default_hours}" step="0.5" min="0.5" max="24" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox">
+                            <input type="checkbox" id="editLocActive" ${location.is_active ? 'checked' : ''}>
+                            <span>Active</span>
+                        </label>
+                    </div>
+                    <div style="margin-top:20px; display:flex; gap:10px;">
+                        <button type="submit" class="btn btn-primary" style="flex:1;">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                        <button type="button" onclick="closeModal()" class="btn" style="flex:1; background:#6c757d; color:white;">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        `;
+
+        showModal(html);
+
+        document.getElementById('editLocationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const name = document.getElementById('editLocName').value.trim();
+            const rate = parseFloat(document.getElementById('editLocRate').value);
+            const hours = parseFloat(document.getElementById('editLocHours').value);
+            const isActive = document.getElementById('editLocActive').checked;
+
+            const { error: updateError } = await supabase
+                .from('locations')
+                .update({ name, hourly_rate: rate, default_hours: hours, is_active: isActive })
+                .eq('id', id);
+
+            if (updateError) throw updateError;
+
+            closeModal();
+            showMessage('✅ Location updated!', 'success');
+            await loadLocations();
+        });
+    } catch (error) {
+        console.error('❌ Error editing location:', error);
+        showMessage('❌ Error: ' + error.message, 'error');
+    }
 };
 
 window.viewTimesheets = function() { alert('View Timesheets coming soon!'); };
