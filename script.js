@@ -585,9 +585,9 @@ window.editEntry = async function(id) {
 window.deleteEntry = function(id) {
     console.log("Delete clicked for entry ID:", id);
 
-    // Create modal with the ID captured in a closure
-    const deleteModalHtml = `
-        <div class="modal-content">
+    // Store the ID in a data attribute on the modal itself
+    const html = `
+        <div class="modal-content" data-entry-id="${id}">
             <h2>Confirm Delete</h2>
             <p style="margin:15px 0;">Are you sure you want to delete this entry?</p>
             <p style="color:#dc3545; font-weight:bold;">This cannot be undone.</p>
@@ -602,18 +602,21 @@ window.deleteEntry = function(id) {
         </div>
     `;
 
-    showModal(deleteModalHtml);
+    showModal(html);
     
-    // Add event listeners after modal is shown - capturing the ID in a closure
+    // Add event listeners after modal is shown
     setTimeout(() => {
+        const modalContent = document.querySelector('.modal-content');
+        const entryId = modalContent.getAttribute('data-entry-id');
+        
         document.querySelector('.confirm-delete-btn').addEventListener('click', async function() {
-            console.log("Confirming delete for ID:", id);
+            console.log("Confirming delete for ID:", entryId);
             
             try {
                 const { error } = await supabase
                     .from('entries')
                     .delete()
-                    .eq('id', id);
+                    .eq('id', entryId);
 
                 if (error) throw error;
 
