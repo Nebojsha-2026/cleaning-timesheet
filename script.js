@@ -46,8 +46,9 @@ async function initializeApp() {
         document.getElementById('entryForm').addEventListener('submit', handleAddEntry);
         document.getElementById('timesheetForm').addEventListener('submit', handleGenerateTimesheet);
       
-        // Setup location input listener for rate field
+        // Setup location input listener for auto-fill and rate field
         document.getElementById('location').addEventListener('input', handleLocationInput);
+        document.getElementById('location').addEventListener('change', handleLocationSelection);
       
         // Test connection
         const connected = await testConnection();
@@ -105,6 +106,26 @@ async function handleLocationInput(event) {
     } else {
         rateGroup.style.display = 'block';
         rateInput.value = ''; // Clear for new
+    }
+}
+
+// Handle location selection from dropdown to auto-fill hours
+async function handleLocationSelection(event) {
+    const locationName = event.target.value.trim();
+    
+    if (!locationName) return;
+    
+    // Try to find the location in our loaded locations
+    if (window.appLocations) {
+        const location = window.appLocations.find(loc => loc.name === locationName);
+        
+        if (location) {
+            // Auto-fill the hours field with the location's default hours
+            document.getElementById('hours').value = location.default_hours;
+            
+            // Also hide the rate group since this is an existing location
+            document.getElementById('rateGroup').style.display = 'none';
+        }
     }
 }
 
@@ -755,8 +776,14 @@ window.viewLocations = async function() {
                         <div>
                             <h4>${escapeHtml(location.name)}</h4>
                             <p>Default: ${location.default_hours} hrs • Rate: $${location.hourly_rate}/hr</p>
+                            <p style="color: ${location.is_active ? '#28a745' : '#dc3545'}; font-size: 0.8rem;">
+                                ${location.is_active ? 'Active' : 'Inactive'}
+                            </p>
                         </div>
-                        <button class="btn-icon edit-location" data-id="${location.id}" title="Edit"><i class="fas fa-edit"></i></button>
+                        <div class="location-actions">
+                            <button class="btn-icon edit-location" data-id="${location.id}" title="Edit"><i class="fas fa-edit"></i></button>
+                            <button class="btn-icon delete-location" data-id="${location.id}" title="Delete" style="color: #dc3545;"><i class="fas fa-trash"></i></button>
+                        </div>
                     </div>
                 `;
             });
@@ -771,7 +798,7 @@ window.viewLocations = async function() {
                     ${locationsHtml}
                 </div>
                 <div style="margin-top:20px; display:flex; gap:10px;">
-                    <button class="btn close-locations-btn" style="flex:1;">
+                    <button onclick="closeModal()" class="btn" style="flex:1;">
                         <i class="fas fa-times"></i> Close
                     </button>
                 </div>
@@ -789,7 +816,12 @@ window.viewLocations = async function() {
                 });
             });
             
-            document.querySelector('.close-locations-btn').addEventListener('click', closeModal);
+            document.querySelectorAll('.delete-location').forEach(button => {
+                button.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    deleteLocation(id);
+                });
+            });
         }, 100);
     } catch (error) {
         console.error('❌ Error loading locations:', error);
@@ -870,6 +902,70 @@ window.editLocation = async function(id) {
         console.error('❌ Error editing location:', error);
         showMessage('❌ Error: ' + error.message, 'error');
     }
+};
+
+// Add delete location function
+window.deleteLocation = function(id) {
+    console.log("Delete location clicked for ID:", id);
+
+    const html = `
+        <div class="modal-content" data-location-id="${id}">
+            <h2>Confirm Delete Location</h2>
+            <p style="margin:15px 0;">Are you sure you want to delete this location?</p>
+            <p style="color:#dc3545; font-weight:bold;">
+                Warning: This will also delete all entries associated with this location!
+            </p>
+            <div style="margin-top:20px; display:flex; gap:10px;">
+                <button class="btn btn-primary confirm-delete-location-btn" style="flex:1; background:#dc3545; border:none;">
+                    <i class="fas fa-trash"></i> Yes, Delete Location
+                </button>
+                <button class="btn cancel-btn" style="flex:1;">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    `;
+
+    showModal(html);
+    
+    // Add event listeners after modal is shown
+    setTimeout(() => {
+        const modalContent = document.querySelector('.modal-content');
+        const locationId = modalContent.getAttribute('data-location-id');
+        
+        document.querySelector('.confirm-delete-location-btn').addEventListener('click', async function() {
+            console.log("Confirming delete for location ID:", locationId);
+            
+            try {
+                // First delete all entries associated with this location
+                const { error: entriesError } = await supabase
+                    .from('entries')
+                    .delete()
+                    .eq('location_id', locationId);
+
+                if (entriesError) throw entriesError;
+
+                // Then delete the location
+                const { error: locationError } = await supabase
+                    .from('locations')
+                    .delete()
+                    .eq('id', locationId);
+
+                if (locationError) throw locationError;
+
+                closeModal();
+                showMessage('✅ Location and associated entries deleted successfully!', 'success');
+                await loadStats();
+                await loadRecentEntries();
+                await loadLocations();
+            } catch (error) {
+                console.error("Delete location error:", error);
+                showMessage('❌ Error deleting location: ' + error.message, 'error');
+            }
+        });
+        
+        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
+    }, 100);
 };
 
 window.viewTimesheets = function() { alert('View Timesheets coming soon!'); };
