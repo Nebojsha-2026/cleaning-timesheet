@@ -63,10 +63,11 @@ async function initializeApp() {
             console.log('✨ Dashboard ready');
             
             // Load data in background
-            setTimeout(async () => {
+                setTimeout(async () => {
                 await loadStats();
+                await loadLocations();  // ADD THIS LINE
                 await loadRecentEntries();
-            }, 500);
+                }, 500);
             
         } else {
             console.error('❌ Database connection failed');
@@ -557,6 +558,7 @@ window.exportData = function() {
 };
 
 console.log('🎉 Script loaded successfully');
+
 
 
 
