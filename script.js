@@ -293,26 +293,52 @@ function updateEntriesDisplay(entries) {
         const locationName = entry.locations?.name || 'Unknown Location';
         const rate = entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE;
         const earnings = (entry.hours * rate).toFixed(2);
+        const notes = entry.notes ? entry.notes.replace(/'/g, "\\'") : '';
       
         html += `
             <div class="entry-item" data-entry-id="${entry.id}">
                 <div class="entry-info">
-                    <h4>${locationName}</h4>
-                    <p>${formatDate(entry.work_date)} • ${entry.notes || ''}</p>
+                    <h4>${escapeHtml(locationName)}</h4>
+                    <p>${formatDate(entry.work_date)} • ${escapeHtml(notes)}</p>
                 </div>
                 <div class="entry-stats">
                     <div class="entry-hours">${entry.hours} hrs @ $${rate}</div>
                     <div class="entry-earnings">$${earnings}</div>
                 </div>
                 <div class="entry-actions">
-                    <button onclick="editEntry(${entry.id})" class="btn-icon" title="Edit"><i class="fas fa-edit"></i></button>
-                    <button onclick="deleteEntry(${entry.id})" class="btn-icon" title="Delete"><i class="fas fa-trash"></i></button>
+                    <button class="btn-icon edit-entry" data-id="${entry.id}" title="Edit"><i class="fas fa-edit"></i></button>
+                    <button class="btn-icon delete-entry" data-id="${entry.id}" title="Delete"><i class="fas fa-trash"></i></button>
                 </div>
             </div>
         `;
     });
   
     entriesList.innerHTML = html;
+    
+    // Add event listeners to the buttons
+    setTimeout(() => {
+        document.querySelectorAll('.edit-entry').forEach(button => {
+            button.addEventListener('click', function() {
+                const id = this.getAttribute('data-id');
+                editEntry(id);
+            });
+        });
+        
+        document.querySelectorAll('.delete-entry').forEach(button => {
+            button.addEventListener('click', function() {
+                const id = this.getAttribute('data-id');
+                deleteEntry(id);
+            });
+        });
+    }, 100);
+}
+
+// Helper function to escape HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // Form Handlers (add entry)
@@ -469,29 +495,36 @@ window.editEntry = async function(id) {
 
         if (error) throw error;
 
+        // Escape values for HTML
+        const locationName = escapeHtml(entry.locations.name);
+        const hourlyRate = entry.locations.hourly_rate;
+        const hours = entry.hours;
+        const workDate = entry.work_date;
+        const notes = entry.notes ? escapeHtml(entry.notes) : '';
+
         const html = `
             <div class="modal-content">
                 <h2>Edit Entry</h2>
                 <form id="editEntryForm">
                     <div class="form-group">
                         <label for="editLocationName">Location Name</label>
-                        <input type="text" id="editLocationName" value="${entry.locations.name}" required>
+                        <input type="text" id="editLocationName" value="${locationName}" required>
                     </div>
                     <div class="form-group">
                         <label for="editRate">Hourly Rate ($)</label>
-                        <input type="number" id="editRate" value="${entry.locations.hourly_rate}" step="0.01" min="1" required>
+                        <input type="number" id="editRate" value="${hourlyRate}" step="0.01" min="1" required>
                     </div>
                     <div class="form-group">
                         <label for="editHours">Hours</label>
-                        <input type="number" id="editHours" value="${entry.hours}" step="0.5" min="0.5" max="24" required>
+                        <input type="number" id="editHours" value="${hours}" step="0.5" min="0.5" max="24" required>
                     </div>
                     <div class="form-group">
                         <label for="editDate">Date</label>
-                        <input type="date" id="editDate" value="${entry.work_date}" required>
+                        <input type="date" id="editDate" value="${workDate}" required>
                     </div>
                     <div class="form-group">
                         <label for="editNotes">Notes (optional)</label>
-                        <textarea id="editNotes" rows="2">${entry.notes || ''}</textarea>
+                        <textarea id="editNotes" rows="2">${notes}</textarea>
                     </div>
                     <div style="margin-top:20px; display:flex; gap:10px;">
                         <button type="submit" class="btn btn-primary" style="flex:1;">
@@ -704,10 +737,10 @@ window.viewLocations = async function() {
                 locationsHtml += `
                     <div class="location-item">
                         <div>
-                            <h4>${location.name}</h4>
+                            <h4>${escapeHtml(location.name)}</h4>
                             <p>Default: ${location.default_hours} hrs • Rate: $${location.hourly_rate}/hr</p>
                         </div>
-                        <button onclick="editLocation(${location.id})" class="btn-icon" title="Edit"><i class="fas fa-edit"></i></button>
+                        <button class="btn-icon edit-location" data-id="${location.id}" title="Edit"><i class="fas fa-edit"></i></button>
                     </div>
                 `;
             });
@@ -730,6 +763,16 @@ window.viewLocations = async function() {
         `;
 
         showModal(html);
+        
+        // Add event listeners for location edit buttons
+        setTimeout(() => {
+            document.querySelectorAll('.edit-location').forEach(button => {
+                button.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    editLocation(id);
+                });
+            });
+        }, 100);
     } catch (error) {
         console.error('❌ Error loading locations:', error);
         showMessage('❌ Error loading locations: ' + error.message, 'error');
@@ -753,7 +796,7 @@ window.editLocation = async function(id) {
                 <form id="editLocationForm">
                     <div class="form-group">
                         <label for="editLocName">Location Name</label>
-                        <input type="text" id="editLocName" value="${location.name}" required>
+                        <input type="text" id="editLocName" value="${escapeHtml(location.name)}" required>
                     </div>
                     <div class="form-group">
                         <label for="editLocRate">Hourly Rate ($)</label>
