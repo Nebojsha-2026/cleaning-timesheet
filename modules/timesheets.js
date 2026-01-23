@@ -768,4 +768,11 @@ async function deleteTimesheet(id) {
     }, 100);
 };
 
+// Make functions globally accessible
+window.handleGenerateTimesheet = handleGenerateTimesheet;
+window.sendTimesheetEmail = sendTimesheetEmail;
+window.viewTimesheetDetails = viewTimesheetDetails;
+window.viewTimesheetById = viewTimesheetById;
+window.deleteTimesheet = deleteTimesheet;
+
 console.log('✅ Timesheets module loaded');
