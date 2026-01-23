@@ -598,7 +598,7 @@ window.closeModal = function() {
     if (modal) modal.remove();
 };
 
-// Utility functions (keep your originals)
+// Utility functions
 function showMessage(text, type = 'info') {
     let messageDiv = document.getElementById('formMessage');
     if (!messageDiv) {
@@ -654,7 +654,7 @@ function showError(message) {
     }
 }
 
-// Action buttons placeholders (keep yours)
+// Action buttons placeholders
 window.refreshData = async function() {
     console.log('🔄 Refreshing data...');
     showMessage('Refreshing data...', 'info');
