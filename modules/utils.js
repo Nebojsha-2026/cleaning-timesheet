@@ -101,4 +101,9 @@ function validateEmail(email) {
     return re.test(email);
 }
 
+// Signal that this module is loaded
+if (typeof checkModulesLoaded !== 'undefined') {
+    checkModulesLoaded();
+}
+
 console.log('✅ Utils module loaded');
