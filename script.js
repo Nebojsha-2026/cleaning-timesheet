@@ -480,8 +480,12 @@ async function handleGenerateTimesheet(event) {
 //   EDIT & DELETE FOR RECENT ENTRIES – FULL FUNCTIONAL
 // ───────────────────────────────────────────────
 
+// Store the current entry ID being processed
+let currentEntryId = null;
+
 window.editEntry = async function(id) {
     console.log("Edit clicked for entry ID:", id);
+    currentEntryId = id;
 
     try {
         const { data: entry, error } = await supabase
@@ -530,7 +534,7 @@ window.editEntry = async function(id) {
                         <button type="submit" class="btn btn-primary" style="flex:1;">
                             <i class="fas fa-save"></i> Save Changes
                         </button>
-                        <button type="button" onclick="closeModal()" class="btn" style="flex:1; background:#6c757d; color:white;">
+                        <button type="button" class="btn cancel-btn" style="flex:1; background:#6c757d; color:white;">
                             <i class="fas fa-times"></i> Cancel
                         </button>
                     </div>
@@ -539,7 +543,8 @@ window.editEntry = async function(id) {
         `;
 
         showModal(html);
-
+        
+        // Add event listeners
         document.getElementById('editEntryForm').addEventListener('submit', async (e) => {
             e.preventDefault();
 
@@ -553,7 +558,7 @@ window.editEntry = async function(id) {
             const { error: entryErr } = await supabase
                 .from('entries')
                 .update({ hours: newHours, work_date: newDate, notes: newNotes })
-                .eq('id', id);
+                .eq('id', currentEntryId);
 
             if (entryErr) throw entryErr;
 
@@ -571,6 +576,10 @@ window.editEntry = async function(id) {
             await loadRecentEntries();
             await loadLocations(); // refresh dropdown if name changed
         });
+        
+        // Add cancel button listener
+        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
+        
     } catch (error) {
         console.error("Edit entry error:", error);
         showMessage('❌ Error: ' + error.message, 'error');
@@ -579,6 +588,7 @@ window.editEntry = async function(id) {
 
 window.deleteEntry = function(id) {
     console.log("Delete clicked for entry ID:", id);
+    currentEntryId = id;
 
     const html = `
         <div class="modal-content">
@@ -586,10 +596,10 @@ window.deleteEntry = function(id) {
             <p style="margin:15px 0;">Are you sure you want to delete this entry?</p>
             <p style="color:#dc3545; font-weight:bold;">This cannot be undone.</p>
             <div style="margin-top:20px; display:flex; gap:10px;">
-                <button class="btn btn-primary confirm-delete-btn" data-id="${id}" style="flex:1; background:#dc3545; border:none;">
+                <button class="btn btn-primary confirm-delete-btn" style="flex:1; background:#dc3545; border:none;">
                     <i class="fas fa-trash"></i> Yes, Delete
                 </button>
-                <button onclick="closeModal()" class="btn" style="flex:1;">
+                <button class="btn cancel-btn" style="flex:1;">
                     <i class="fas fa-times"></i> Cancel
                 </button>
             </div>
@@ -598,37 +608,31 @@ window.deleteEntry = function(id) {
 
     showModal(html);
     
-    // Add event listener to the delete button after modal is shown
+    // Add event listeners after modal is shown
     setTimeout(() => {
-        const deleteBtn = document.querySelector('.confirm-delete-btn');
-        if (deleteBtn) {
-            deleteBtn.addEventListener('click', function() {
-                const entryId = this.getAttribute('data-id');
-                confirmDelete(entryId);
-            });
-        }
-    }, 100);
-};
+        document.querySelector('.confirm-delete-btn').addEventListener('click', async () => {
+            try {
+                console.log("Confirming delete for ID:", currentEntryId);
+                
+                const { error } = await supabase
+                    .from('entries')
+                    .delete()
+                    .eq('id', currentEntryId);
 
-window.confirmDelete = async function(id) {
-    try {
-        console.log("Confirming delete for ID:", id);
+                if (error) throw error;
+
+                closeModal();
+                showMessage('✅ Entry deleted successfully!', 'success');
+                await loadStats();
+                await loadRecentEntries();
+            } catch (error) {
+                console.error("Delete error:", error);
+                showMessage('❌ Error deleting entry: ' + error.message, 'error');
+            }
+        });
         
-        const { error } = await supabase
-            .from('entries')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
-
-        closeModal();
-        showMessage('✅ Entry deleted successfully!', 'success');
-        await loadStats();
-        await loadRecentEntries();
-    } catch (error) {
-        console.error("Delete error:", error);
-        showMessage('❌ Error deleting entry: ' + error.message, 'error');
-    }
+        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
+    }, 100);
 };
 
 // Modal Helpers
@@ -661,6 +665,7 @@ window.closeModal = function() {
     if (modal) {
         modal.remove();
     }
+    currentEntryId = null;
 };
 
 // Utility functions
@@ -768,7 +773,7 @@ window.viewLocations = async function() {
                     ${locationsHtml}
                 </div>
                 <div style="margin-top:20px; display:flex; gap:10px;">
-                    <button onclick="closeModal()" class="btn" style="flex:1;">
+                    <button class="btn close-locations-btn" style="flex:1;">
                         <i class="fas fa-times"></i> Close
                     </button>
                 </div>
@@ -777,7 +782,7 @@ window.viewLocations = async function() {
 
         showModal(html);
         
-        // Add event listeners for location edit buttons
+        // Add event listeners for buttons
         setTimeout(() => {
             document.querySelectorAll('.edit-location').forEach(button => {
                 button.addEventListener('click', function() {
@@ -785,6 +790,8 @@ window.viewLocations = async function() {
                     editLocation(id);
                 });
             });
+            
+            document.querySelector('.close-locations-btn').addEventListener('click', closeModal);
         }, 100);
     } catch (error) {
         console.error('❌ Error loading locations:', error);
@@ -829,7 +836,7 @@ window.editLocation = async function(id) {
                         <button type="submit" class="btn btn-primary" style="flex:1;">
                             <i class="fas fa-save"></i> Save Changes
                         </button>
-                        <button type="button" onclick="closeModal()" class="btn" style="flex:1; background:#6c757d; color:white;">
+                        <button type="button" class="btn cancel-btn" style="flex:1; background:#6c757d; color:white;">
                             <i class="fas fa-times"></i> Cancel
                         </button>
                     </div>
@@ -858,6 +865,9 @@ window.editLocation = async function(id) {
             showMessage('✅ Location updated!', 'success');
             await loadLocations();
         });
+        
+        // Add cancel button listener
+        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
     } catch (error) {
         console.error('❌ Error editing location:', error);
         showMessage('❌ Error: ' + error.message, 'error');
