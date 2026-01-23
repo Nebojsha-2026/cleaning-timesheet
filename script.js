@@ -164,7 +164,7 @@ async function loadLocations() {
         
         if (locations && locations.length > 0) {
             datalist.innerHTML = locations.map(location => 
-                `<option value="${location.name}">${location.name} (${location.default_hours} hrs)</option>`
+                `<option value="${location.name}">${location.name} (${location.default_hours} hrs - $${location.hourly_rate}/hr)</option>`
             ).join('');
             
             // Store locations globally for quick access
@@ -557,6 +557,7 @@ window.exportData = function() {
 };
 
 console.log('🎉 Script loaded successfully');
+
 
 
 
