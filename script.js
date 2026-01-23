@@ -798,5 +798,29 @@ window.showHelp = function() {
     alert('Help coming soon!');
 };
 console.log("Script loaded and reached the end! Ready for action.");
+// Manage Locations button - shows a simple modal
+window.viewLocations = async function() {
+    console.log("Manage Locations clicked!");  // This will appear in console when you click
+
+    // Create simple modal with your 6 locations (hardcoded for test)
+    const html = `
+        <div class="modal">
+            <div class="modal-content">
+                <h2>Manage Locations</h2>
+                <p>You have 6 active locations loaded from Supabase.</p>
+                <p>(Real list coming soon - this is just a test modal)</p>
+                <button onclick="closeModal()" class="btn btn-primary btn-block">Close</button>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('modalsContainer').innerHTML = html;
+};
+
+window.closeModal = function() {
+    document.getElementById('modalsContainer').innerHTML = '';
+    console.log("Modal closed");
+};
 console.log('🎉 Script loaded successfully');
+
 
