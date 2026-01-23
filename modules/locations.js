@@ -252,4 +252,9 @@ window.deleteLocation = function(id) {
 // Make functions globally accessible
 window.loadLocations = loadLocations;
 
+// Signal that this module is loaded
+if (typeof checkModulesLoaded !== 'undefined') {
+    checkModulesLoaded();
+}
+
 console.log('✅ Locations module loaded');
