@@ -520,3 +520,125 @@ body {
     color: #666;
     font-size: 0.9rem;
 }
+/* ─────────────────────────────────────────────── */
+/*   NEW ADDITIONS BELOW – DO NOT REMOVE THE ABOVE  */
+/* ─────────────────────────────────────────────── */
+
+/* Entry Actions (edit/delete buttons in recent entries) */
+.entry-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.entry-actions button {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 4px;
+    transition: color 0.2s;
+    color: #667eea;
+}
+
+.entry-actions button:hover {
+    color: #764ba2;
+}
+
+/* Modals (for Manage Locations, Edit Entry, etc.) */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: 20px;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    animation: modalFadeIn 0.3s ease;
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-content h2 {
+    margin: 0 0 20px;
+    color: #333;
+    font-size: 1.5rem;
+}
+
+.locations-list {
+    margin-bottom: 20px;
+}
+
+.location-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.location-item:last-child {
+    border-bottom: none;
+}
+
+.location-item h4 {
+    margin: 0 0 4px;
+    font-size: 1.1rem;
+}
+
+.location-item p {
+    margin: 0;
+    color: #666;
+    font-size: 0.9rem;
+}
+
+/* Modal form styling */
+.modal-content .form-group {
+    margin-bottom: 15px;
+}
+
+.modal-content .form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: #333;
+}
+
+.modal-content .form-group input,
+.modal-content .form-group textarea {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 1rem;
+}
+
+.modal-content .form-group input:focus,
+.modal-content .form-group textarea:focus {
+    outline: none;
+    border-color: #667eea;
+}
