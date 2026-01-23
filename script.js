@@ -797,4 +797,6 @@ window.showSettings = function() {
 window.showHelp = function() {
     alert('Help coming soon!');
 };
+console.log("Script loaded and reached the end! Ready for action.");
 console.log('🎉 Script loaded successfully');
+
