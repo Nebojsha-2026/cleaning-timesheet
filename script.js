@@ -21,25 +21,10 @@ console.log('✅ Supabase client initialized (modern way)');
 console.log('🚀 Cleaning Timesheet App Starting...');
 console.log('📡 Supabase URL:', CONFIG.SUPABASE_URL);
 
-// Wait for all modules to load
-let modulesLoaded = 0;
-const totalModules = 4; // utils, entries, locations, timesheets
-
-function checkModulesLoaded() {
-    modulesLoaded++;
-    if (modulesLoaded === totalModules) {
-        console.log('✅ All modules loaded, initializing app...');
-        initializeApp();
-    }
-}
-
 // Initialize App
 document.addEventListener('DOMContentLoaded', function() {
     console.log('✅ DOM Ready');
-    // Check if modules are already loaded (they might load before DOM)
-    if (modulesLoaded === totalModules) {
-        initializeApp();
-    }
+    initializeApp();
 });
 
 async function initializeApp() {
@@ -57,28 +42,17 @@ async function initializeApp() {
         document.getElementById('startDate').value = lastWeek.toISOString().split('T')[0];
         document.getElementById('endDate').value = today.toISOString().split('T')[0];
       
-        // Setup form handlers - check if functions exist
-        if (typeof handleAddEntry !== 'undefined') {
-            document.getElementById('entryForm').addEventListener('submit', handleAddEntry);
-        } else {
-            console.error('❌ handleAddEntry not defined');
-        }
-        
-        if (typeof handleGenerateTimesheet !== 'undefined') {
-            document.getElementById('timesheetForm').addEventListener('submit', handleGenerateTimesheet);
-        } else {
-            console.error('❌ handleGenerateTimesheet not defined');
-        }
+        // Setup form handlers
+        document.getElementById('entryForm').addEventListener('submit', handleAddEntry);
+        document.getElementById('timesheetForm').addEventListener('submit', handleGenerateTimesheet);
       
         // Setup location input listener for auto-fill and rate field
-        if (typeof handleLocationInput !== 'undefined') {
-            document.getElementById('location').addEventListener('input', handleLocationInput);
-            document.getElementById('location').addEventListener('change', handleLocationSelection);
-        }
+        document.getElementById('location').addEventListener('input', handleLocationInput);
+        document.getElementById('location').addEventListener('change', handleLocationSelection);
         
         // Setup email notification checkbox
         const emailCheckbox = document.getElementById('sendEmail');
-        if (emailCheckbox && typeof handleEmailCheckbox !== 'undefined') {
+        if (emailCheckbox) {
             emailCheckbox.addEventListener('change', handleEmailCheckbox);
             // Initialize email field visibility
             handleEmailCheckbox({ target: emailCheckbox });
@@ -98,9 +72,9 @@ async function initializeApp() {
           
             // Load data in background
             setTimeout(async () => {
-                if (typeof loadStats !== 'undefined') await loadStats();
-                if (typeof loadLocations !== 'undefined') await loadLocations();
-                if (typeof loadRecentEntries !== 'undefined') await loadRecentEntries();
+                await loadStats();
+                await loadLocations();
+                await loadRecentEntries();
             }, 500);
           
         } else {
@@ -114,7 +88,115 @@ async function initializeApp() {
     }
 }
 
-// Test database connection
+// ───────────────────────────────────────────────
+//   UTILITY FUNCTIONS
+// ───────────────────────────────────────────────
+
+// Helper function to escape HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatDate(dateString) {
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch {
+        return dateString;
+    }
+}
+
+function showMessage(text, type = 'info') {
+    let messageDiv = document.getElementById('formMessage');
+    if (!messageDiv) {
+        const form = document.getElementById('entryForm');
+        if (form) {
+            messageDiv = document.createElement('div');
+            messageDiv.id = 'formMessage';
+            form.parentNode.insertBefore(messageDiv, form.nextSibling);
+        }
+    }
+    if (messageDiv) {
+        messageDiv.textContent = text;
+        messageDiv.className = `message ${type}`;
+        messageDiv.style.display = 'block';
+        if (type === 'success' || type === 'info') {
+            setTimeout(() => { messageDiv.style.display = 'none'; }, 5000);
+        }
+    }
+}
+
+function updateConnectionStatus(connected) {
+    const statusDiv = document.getElementById('connectionStatus');
+    if (statusDiv) {
+        statusDiv.innerHTML = connected 
+            ? '<i class="fas fa-database"></i><span>Connected</span>'
+            : '<i class="fas fa-database"></i><span>Disconnected</span>';
+        statusDiv.style.color = connected ? '#28a745' : '#dc3545';
+    }
+}
+
+function showError(message) {
+    const loadingScreen = document.getElementById('loadingScreen');
+    if (loadingScreen) {
+        loadingScreen.innerHTML = `
+            <div style="text-align:center; color:white; padding:40px;">
+                <div style="font-size:4rem;">❌</div>
+                <h2 style="margin:20px 0;">Database Error</h2>
+                <p style="font-size:1.2rem; margin-bottom:20px;">${message}</p>
+                <button onclick="location.reload()" style="padding:10px 20px; background:white; color:#667eea; border:none; border-radius:5px; cursor:pointer;">
+                    Try Again
+                </button>
+            </div>
+        `;
+    }
+}
+
+// Modal Helpers
+function showModal(content) {
+    // Remove any existing modal first
+    closeModal();
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = content;
+    
+    // Add click outside to close
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
+    
+    const modalsContainer = document.getElementById('modalsContainer');
+    if (modalsContainer) {
+        modalsContainer.appendChild(modal);
+    } else {
+        // Fallback: append to body
+        document.body.appendChild(modal);
+    }
+}
+
+window.closeModal = function() {
+    const modal = document.querySelector('.modal');
+    if (modal) {
+        modal.remove();
+    }
+};
+
+// Email validation helper
+function validateEmail(email) {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email);
+}
+
+// ───────────────────────────────────────────────
+//   TEST CONNECTION
+// ───────────────────────────────────────────────
+
 async function testConnection() {
     try {
         console.log('🔌 Testing Supabase connection...');
@@ -130,7 +212,10 @@ async function testConnection() {
     }
 }
 
-// Load statistics - this should be in entries.js, but keep fallback here
+// ───────────────────────────────────────────────
+//   STATISTICS
+// ───────────────────────────────────────────────
+
 async function loadStats() {
     try {
         console.log('📊 Loading statistics...');
@@ -181,7 +266,6 @@ async function loadStats() {
     }
 }
 
-// Update UI functions
 function updateStatsDisplay(stats) {
     document.querySelectorAll('.stat-card')[0].innerHTML = `
         <div class="stat-icon"><i class="fas fa-list"></i></div>
@@ -218,13 +302,1450 @@ function updateStatsDisplay(stats) {
     document.querySelectorAll('.stat-card').forEach(card => card.classList.remove('loading'));
 }
 
-// Action buttons placeholders
+// ───────────────────────────────────────────────
+//   LOCATIONS
+// ───────────────────────────────────────────────
+
+// Load locations for dropdown
+async function loadLocations() {
+    try {
+        console.log('📍 Loading locations...');
+      
+        const { data: locations, error } = await supabase
+            .from('locations')
+            .select('*')
+            .eq('is_active', true)
+            .order('name');
+      
+        if (error) throw error;
+      
+        const datalist = document.getElementById('locationList') || createLocationDatalist();
+      
+        if (locations && locations.length > 0) {
+            datalist.innerHTML = locations.map(location =>
+                `<option value="${location.name}">${location.name} (${location.default_hours} hrs - $${location.hourly_rate}/hr)</option>`
+            ).join('');
+          
+            window.appLocations = locations;
+        }
+      
+        console.log('✅ Locations loaded:', locations?.length || 0);
+      
+    } catch (error) {
+        console.error('❌ Error loading locations:', error);
+    }
+}
+
+function createLocationDatalist() {
+    const input = document.getElementById('location');
+    const datalist = document.createElement('datalist');
+    datalist.id = 'locationList';
+    input.setAttribute('list', 'locationList');
+    document.body.appendChild(datalist);
+    return datalist;
+}
+
+// Handle location input to show/hide rate field
+async function handleLocationInput(event) {
+    const locationName = event.target.value.trim();
+    const rateGroup = document.getElementById('rateGroup');
+    const rateInput = document.getElementById('rate');
+  
+    if (!locationName) {
+        rateGroup.style.display = 'none';
+        return;
+    }
+  
+    // Check if location exists
+    const { data: existing, error } = await supabase
+        .from('locations')
+        .select('id, hourly_rate')
+        .eq('name', locationName)
+        .eq('is_active', true)
+        .single();
+  
+    if (error && error.code !== 'PGRST116') console.error(error);
+  
+    if (existing) {
+        rateGroup.style.display = 'none';
+    } else {
+        rateGroup.style.display = 'block';
+        rateInput.value = ''; // Clear for new
+    }
+}
+
+// Handle location selection from dropdown to auto-fill hours
+async function handleLocationSelection(event) {
+    const locationName = event.target.value.trim();
+    
+    if (!locationName) return;
+    
+    // Try to find the location in our loaded locations
+    if (window.appLocations) {
+        const location = window.appLocations.find(loc => loc.name === locationName);
+        
+        if (location) {
+            // Auto-fill the hours field with the location's default hours
+            document.getElementById('hours').value = location.default_hours;
+            
+            // Also hide the rate group since this is an existing location
+            document.getElementById('rateGroup').style.display = 'none';
+        }
+    }
+}
+
+// Handle email checkbox change
+function handleEmailCheckbox(event) {
+    // First check if emailGroup already exists
+    let emailGroup = document.getElementById('emailGroup');
+    
+    if (!emailGroup) {
+        // Create email group if it doesn't exist
+        const checkbox = event.target;
+        const formGroup = checkbox.closest('.form-group');
+        
+        const emailHtml = `
+            <div class="form-group" id="emailGroup" style="display: none;">
+                <label for="emailAddress"><i class="fas fa-envelope"></i> Email Address</label>
+                <input type="email" id="emailAddress" placeholder="your@email.com">
+            </div>
+        `;
+        
+        formGroup.insertAdjacentHTML('afterend', emailHtml);
+        emailGroup = document.getElementById('emailGroup');
+    }
+    
+    // Show/hide based on checkbox state
+    emailGroup.style.display = event.target.checked ? 'block' : 'none';
+    
+    // Clear email field when unchecked
+    if (!event.target.checked) {
+        const emailInput = document.getElementById('emailAddress');
+        if (emailInput) {
+            emailInput.value = '';
+        }
+    }
+}
+
+async function findOrCreateLocation(name, defaultHours = 2.0, hourlyRate = CONFIG.DEFAULT_HOURLY_RATE) {
+    try {
+        const { data: existing, error: findError } = await supabase
+            .from('locations')
+            .select('id')
+            .eq('name', name)
+            .eq('is_active', true)
+            .limit(1);
+      
+        if (findError) throw findError;
+        if (existing?.length > 0) return existing[0].id;
+      
+        const { data: newLoc, error: createError } = await supabase
+            .from('locations')
+            .insert([{ name, default_hours: defaultHours, hourly_rate: hourlyRate, is_active: true }])
+            .select()
+            .single();
+      
+        if (createError) throw createError;
+      
+        await loadLocations();
+        return newLoc.id;
+      
+    } catch (error) {
+        console.error('❌ Location error:', error);
+        throw new Error('Could not find or create location');
+    }
+}
+
+// ───────────────────────────────────────────────
+//   ENTRIES
+// ───────────────────────────────────────────────
+
+// Load recent entries
+async function loadRecentEntries() {
+    try {
+        console.log('📋 Loading recent entries...');
+      
+        const { data: entries, error } = await supabase
+            .from('entries')
+            .select(`
+                *,
+                locations (name, hourly_rate)
+            `)
+            .order('created_at', { ascending: false })
+            .limit(10);
+      
+        if (error) throw error;
+      
+        updateEntriesDisplay(entries);
+        console.log('✅ Entries loaded:', entries?.length || 0);
+      
+    } catch (error) {
+        console.error('❌ Error loading entries:', error);
+    }
+}
+
+function updateEntriesDisplay(entries) {
+    const entriesList = document.getElementById('entriesList');
+  
+    if (!entries || entries.length === 0) {
+        entriesList.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #666;">
+                <i class="fas fa-inbox" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
+                <p>No entries yet. Add your first entry above!</p>
+            </div>
+        `;
+        return;
+    }
+  
+    let html = '';
+    entries.forEach(entry => {
+        const locationName = entry.locations?.name || 'Unknown Location';
+        const rate = entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE;
+        const earnings = (entry.hours * rate).toFixed(2);
+        const notes = entry.notes ? entry.notes.replace(/'/g, "\\'") : '';
+      
+        html += `
+            <div class="entry-item" data-entry-id="${entry.id}">
+                <div class="entry-info">
+                    <h4>${escapeHtml(locationName)}</h4>
+                    <p>${formatDate(entry.work_date)} • ${escapeHtml(notes)}</p>
+                </div>
+                <div class="entry-stats">
+                    <div class="entry-hours">${entry.hours} hrs @ $${rate}</div>
+                    <div class="entry-earnings">$${earnings}</div>
+                </div>
+                <div class="entry-actions">
+                    <button class="btn-icon edit-entry" data-id="${entry.id}" title="Edit"><i class="fas fa-edit"></i></button>
+                    <button class="btn-icon delete-entry" data-id="${entry.id}" title="Delete"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>
+        `;
+    });
+  
+    entriesList.innerHTML = html;
+    
+    // Add event listeners to the buttons
+    setTimeout(() => {
+        document.querySelectorAll('.edit-entry').forEach(button => {
+            button.addEventListener('click', function() {
+                const id = this.getAttribute('data-id');
+                editEntry(id);
+            });
+        });
+        
+        document.querySelectorAll('.delete-entry').forEach(button => {
+            button.addEventListener('click', function() {
+                const id = this.getAttribute('data-id');
+                deleteEntry(id);
+            });
+        });
+    }, 100);
+}
+
+// Form Handlers (add entry)
+async function handleAddEntry(event) {
+    event.preventDefault();
+  
+    const button = event.target.querySelector('button[type="submit"]');
+    const originalText = button.innerHTML;
+  
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
+    button.disabled = true;
+  
+    try {
+        const locationName = document.getElementById('location').value.trim();
+        const hours = parseFloat(document.getElementById('hours').value);
+        const date = document.getElementById('date').value;
+        const notes = document.getElementById('notes').value.trim();
+        const rate = parseFloat(document.getElementById('rate').value) || CONFIG.DEFAULT_HOURLY_RATE;
+      
+        if (!locationName || !hours || !date) throw new Error('Please fill in all required fields');
+        if (hours <= 0 || hours > 24) throw new Error('Hours must be between 0.5 and 24');
+      
+        console.log('📝 Adding entry:', { locationName, hours, date, notes, rate });
+      
+        let locationId = await findOrCreateLocation(locationName, hours, rate);
+      
+        const { data, error } = await supabase
+            .from('entries')
+            .insert([{ location_id: locationId, hours, work_date: date, notes }])
+            .select();
+      
+        if (error) throw error;
+      
+        showMessage('✅ Entry added successfully!', 'success');
+      
+        document.getElementById('location').value = '';
+        document.getElementById('notes').value = '';
+        document.getElementById('hours').value = '2.0';
+        document.getElementById('rateGroup').style.display = 'none';
+      
+        await loadStats();
+        await loadRecentEntries();
+        await loadLocations();
+      
+    } catch (error) {
+        console.error('❌ Add entry error:', error);
+        showMessage('❌ Error: ' + error.message, 'error');
+    } finally {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+}
+
+// ───────────────────────────────────────────────
+//   EDIT & DELETE ENTRIES
+// ───────────────────────────────────────────────
+
+window.editEntry = async function(id) {
+    console.log("Edit clicked for entry ID:", id);
+
+    try {
+        const { data: entry, error } = await supabase
+            .from('entries')
+            .select(`
+                *,
+                locations (id, name, hourly_rate)
+            `)
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+
+        // Escape values for HTML
+        const locationName = escapeHtml(entry.locations.name);
+        const hourlyRate = entry.locations.hourly_rate;
+        const hours = entry.hours;
+        const workDate = entry.work_date;
+        const notes = entry.notes ? escapeHtml(entry.notes) : '';
+
+        const html = `
+            <div class="modal-content">
+                <h2>Edit Entry</h2>
+                <form id="editEntryForm">
+                    <div class="form-group">
+                        <label for="editLocationName">Location Name</label>
+                        <input type="text" id="editLocationName" value="${locationName}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editRate">Hourly Rate ($)</label>
+                        <input type="number" id="editRate" value="${hourlyRate}" step="0.01" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editHours">Hours</label>
+                        <input type="number" id="editHours" value="${hours}" step="0.5" min="0.5" max="24" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editDate">Date</label>
+                        <input type="date" id="editDate" value="${workDate}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editNotes">Notes (optional)</label>
+                        <textarea id="editNotes" rows="2">${notes}</textarea>
+                    </div>
+                    <div style="margin-top:20px; display:flex; gap:10px;">
+                        <button type="submit" class="btn btn-primary" style="flex:1;">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                        <button type="button" class="btn cancel-btn" style="flex:1; background:#6c757d; color:white;">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        `;
+
+        showModal(html);
+        
+        // Add event listeners
+        document.getElementById('editEntryForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const newLocName = document.getElementById('editLocationName').value.trim();
+            const newRate = parseFloat(document.getElementById('editRate').value);
+            const newHours = parseFloat(document.getElementById('editHours').value);
+            const newDate = document.getElementById('editDate').value;
+            const newNotes = document.getElementById('editNotes').value.trim();
+
+            // Update entry
+            const { error: entryErr } = await supabase
+                .from('entries')
+                .update({ hours: newHours, work_date: newDate, notes: newNotes })
+                .eq('id', id);
+
+            if (entryErr) throw entryErr;
+
+            // Update location (name + rate)
+            const { error: locErr } = await supabase
+                .from('locations')
+                .update({ name: newLocName, hourly_rate: newRate })
+                .eq('id', entry.locations.id);
+
+            if (locErr) throw locErr;
+
+            closeModal();
+            showMessage('✅ Entry & location updated!', 'success');
+            await loadStats();
+            await loadRecentEntries();
+            await loadLocations(); // refresh dropdown if name changed
+        });
+        
+        // Add cancel button listener
+        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
+        
+    } catch (error) {
+        console.error("Edit entry error:", error);
+        showMessage('❌ Error: ' + error.message, 'error');
+    }
+};
+
+window.deleteEntry = function(id) {
+    console.log("Delete clicked for entry ID:", id);
+
+    // Store the ID in a data attribute on the modal itself
+    const html = `
+        <div class="modal-content" data-entry-id="${id}">
+            <h2>Confirm Delete</h2>
+            <p style="margin:15px 0;">Are you sure you want to delete this entry?</p>
+            <p style="color:#dc3545; font-weight:bold;">This cannot be undone.</p>
+            <div style="margin-top:20px; display:flex; gap:10px;">
+                <button class="btn btn-primary confirm-delete-btn" style="flex:1; background:#dc3545; border:none;">
+                    <i class="fas fa-trash"></i> Yes, Delete
+                </button>
+                <button class="btn cancel-btn" style="flex:1;">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    `;
+
+    showModal(html);
+    
+    // Add event listeners after modal is shown
+    setTimeout(() => {
+        const modalContent = document.querySelector('.modal-content');
+        const entryId = modalContent.getAttribute('data-entry-id');
+        
+        document.querySelector('.confirm-delete-btn').addEventListener('click', async function() {
+            console.log("Confirming delete for ID:", entryId);
+            
+            try {
+                const { error } = await supabase
+                    .from('entries')
+                    .delete()
+                    .eq('id', entryId);
+
+                if (error) throw error;
+
+                closeModal();
+                showMessage('✅ Entry deleted successfully!', 'success');
+                await loadStats();
+                await loadRecentEntries();
+            } catch (error) {
+                console.error("Delete error:", error);
+                showMessage('❌ Error deleting entry: ' + error.message, 'error');
+            }
+        });
+        
+        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
+    }, 100);
+};
+
+// ───────────────────────────────────────────────
+//   LOCATION MANAGEMENT
+// ───────────────────────────────────────────────
+
+window.viewLocations = async function() {
+    try {
+        const { data: locations, error } = await supabase
+            .from('locations')
+            .select('*')
+            .order('name');
+
+        if (error) throw error;
+
+        let locationsHtml = '';
+        if (locations && locations.length > 0) {
+            locations.forEach(location => {
+                locationsHtml += `
+                    <div class="location-item">
+                        <div>
+                            <h4>${escapeHtml(location.name)}</h4>
+                            <p>Default: ${location.default_hours} hrs • Rate: $${location.hourly_rate}/hr</p>
+                            <p style="color: ${location.is_active ? '#28a745' : '#dc3545'}; font-size: 0.8rem;">
+                                ${location.is_active ? 'Active' : 'Inactive'}
+                            </p>
+                        </div>
+                        <div class="location-actions">
+                            <button class="btn-icon edit-location" data-id="${location.id}" title="Edit"><i class="fas fa-edit"></i></button>
+                            <button class="btn-icon delete-location" data-id="${location.id}" title="Delete" style="color: #dc3545;"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                `;
+            });
+        } else {
+            locationsHtml = '<p style="text-align:center; padding:20px;">No locations found.</p>';
+        }
+
+        const html = `
+            <div class="modal-content">
+                <h2>Manage Locations</h2>
+                <div class="locations-list">
+                    ${locationsHtml}
+                </div>
+                <div style="margin-top:20px; display:flex; gap:10px;">
+                    <button onclick="closeModal()" class="btn" style="flex:1;">
+                        <i class="fas fa-times"></i> Close
+                    </button>
+                </div>
+            </div>
+        `;
+
+        showModal(html);
+        
+        // Add event listeners for buttons
+        setTimeout(() => {
+            document.querySelectorAll('.edit-location').forEach(button => {
+                button.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    editLocation(id);
+                });
+            });
+            
+            document.querySelectorAll('.delete-location').forEach(button => {
+                button.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    deleteLocation(id);
+                });
+            });
+        }, 100);
+    } catch (error) {
+        console.error('❌ Error loading locations:', error);
+        showMessage('❌ Error loading locations: ' + error.message, 'error');
+    }
+};
+
+// Add edit location function
+window.editLocation = async function(id) {
+    try {
+        const { data: location, error } = await supabase
+            .from('locations')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+
+        const html = `
+            <div class="modal-content">
+                <h2>Edit Location</h2>
+                <form id="editLocationForm">
+                    <div class="form-group">
+                        <label for="editLocName">Location Name</label>
+                        <input type="text" id="editLocName" value="${escapeHtml(location.name)}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editLocRate">Hourly Rate ($)</label>
+                        <input type="number" id="editLocRate" value="${location.hourly_rate}" step="0.01" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editLocHours">Default Hours</label>
+                        <input type="number" id="editLocHours" value="${location.default_hours}" step="0.5" min="0.5" max="24" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox">
+                            <input type="checkbox" id="editLocActive" ${location.is_active ? 'checked' : ''}>
+                            <span>Active</span>
+                        </label>
+                    </div>
+                    <div style="margin-top:20px; display:flex; gap:10px;">
+                        <button type="submit" class="btn btn-primary" style="flex:1;">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                        <button type="button" class="btn cancel-btn" style="flex:1; background:#6c757d; color:white;">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        `;
+
+        showModal(html);
+
+        document.getElementById('editLocationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const name = document.getElementById('editLocName').value.trim();
+            const rate = parseFloat(document.getElementById('editLocRate').value);
+            const hours = parseFloat(document.getElementById('editLocHours').value);
+            const isActive = document.getElementById('editLocActive').checked;
+
+            const { error: updateError } = await supabase
+                .from('locations')
+                .update({ name, hourly_rate: rate, default_hours: hours, is_active: isActive })
+                .eq('id', id);
+
+            if (updateError) throw updateError;
+
+            closeModal();
+            showMessage('✅ Location updated!', 'success');
+            await loadLocations();
+        });
+        
+        // Add cancel button listener
+        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
+    } catch (error) {
+        console.error('❌ Error editing location:', error);
+        showMessage('❌ Error: ' + error.message, 'error');
+    }
+};
+
+// Add delete location function
+window.deleteLocation = function(id) {
+    console.log("Delete location clicked for ID:", id);
+
+    const html = `
+        <div class="modal-content" data-location-id="${id}">
+            <h2>Confirm Delete Location</h2>
+            <p style="margin:15px 0;">Are you sure you want to delete this location?</p>
+            <p style="color:#dc3545; font-weight:bold;">
+                Warning: This will also delete all entries associated with this location!
+            </p>
+            <div style="margin-top:20px; display:flex; gap:10px;">
+                <button class="btn btn-primary confirm-delete-location-btn" style="flex:1; background:#dc3545; border:none;">
+                    <i class="fas fa-trash"></i> Yes, Delete Location
+                </button>
+                <button class="btn cancel-btn" style="flex:1;">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    `;
+
+    showModal(html);
+    
+    // Add event listeners after modal is shown
+    setTimeout(() => {
+        const modalContent = document.querySelector('.modal-content');
+        const locationId = modalContent.getAttribute('data-location-id');
+        
+        document.querySelector('.confirm-delete-location-btn').addEventListener('click', async function() {
+            console.log("Confirming delete for location ID:", locationId);
+            
+            try {
+                // First delete all entries associated with this location
+                const { error: entriesError } = await supabase
+                    .from('entries')
+                    .delete()
+                    .eq('location_id', locationId);
+
+                if (entriesError) throw entriesError;
+
+                // Then delete the location
+                const { error: locationError } = await supabase
+                    .from('locations')
+                    .delete()
+                    .eq('id', locationId);
+
+                if (locationError) throw locationError;
+
+                closeModal();
+                showMessage('✅ Location and associated entries deleted successfully!', 'success');
+                await loadStats();
+                await loadRecentEntries();
+                await loadLocations();
+            } catch (error) {
+                console.error("Delete location error:", error);
+                showMessage('❌ Error deleting location: ' + error.message, 'error');
+            }
+        });
+        
+        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
+    }, 100);
+};
+
+// ───────────────────────────────────────────────
+//   TIMESHEETS
+// ───────────────────────────────────────────────
+
+// Generate Timesheet
+async function handleGenerateTimesheet(event) {
+    event.preventDefault();
+  
+    const button = event.target.querySelector('button[type="submit"]');
+    const originalText = button.innerHTML;
+  
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    button.disabled = true;
+  
+    try {
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+        const sendEmail = document.getElementById('sendEmail').checked;
+        const emailAddress = sendEmail ? document.getElementById('emailAddress')?.value.trim() : null;
+      
+        if (!startDate || !endDate) throw new Error('Please select start and end dates');
+        if (sendEmail && (!emailAddress || !validateEmail(emailAddress))) {
+            throw new Error('Please enter a valid email address');
+        }
+      
+        const { data: entries, error: entriesError } = await supabase
+            .from('entries')
+            .select(`
+                *,
+                locations (name, hourly_rate)
+            `)
+            .gte('work_date', startDate)
+            .lte('work_date', endDate)
+            .order('work_date', { ascending: true });
+      
+        if (entriesError) throw entriesError;
+        if (!entries?.length) throw new Error('No entries found for selected period');
+      
+        const totalHours = entries.reduce((sum, e) => sum + parseFloat(e.hours), 0);
+        const totalEarnings = entries.reduce((sum, e) => {
+            const rate = e.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE;
+            return sum + (parseFloat(e.hours) * rate);
+        }, 0).toFixed(2);
+      
+        const refNumber = 'TS' + new Date().getTime().toString().slice(-6);
+      
+        // Prepare insert data - only include email fields if sending email
+        const insertData = {
+            ref_number: refNumber, 
+            start_date: startDate, 
+            end_date: endDate, 
+            total_hours: totalHours, 
+            total_earnings: totalEarnings
+        };
+        
+        if (sendEmail) {
+            insertData.email_sent = true;
+            insertData.email_address = emailAddress;
+        }
+      
+        const { data: timesheet, error: tsError } = await supabase
+            .from('timesheets')
+            .insert([insertData])
+            .select()
+            .single();
+      
+        if (tsError) throw tsError;
+      
+        // Prepare timesheet details for display/email
+        const timesheetDetails = {
+            refNumber,
+            startDate,
+            endDate,
+            totalHours: totalHours.toFixed(2),
+            totalEarnings,
+            entriesCount: entries.length,
+            entries: entries.map(entry => ({
+                date: formatDate(entry.work_date),
+                location: entry.locations?.name || 'Unknown',
+                hours: entry.hours,
+                rate: entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE,
+                earnings: (entry.hours * (entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE)).toFixed(2),
+                notes: entry.notes || ''
+            }))
+        };
+      
+        showMessage(`✅ Timesheet ${refNumber} generated!`, 'success');
+        await loadStats();
+      
+        // Show timesheet details
+        viewTimesheetDetails(timesheetDetails);
+      
+        // Send email if requested
+        if (sendEmail && emailAddress) {
+            await sendTimesheetEmail(timesheetDetails, emailAddress);
+        }
+      
+    } catch (error) {
+        console.error('❌ Timesheet error:', error);
+        showMessage('❌ Error: ' + error.message, 'error');
+    } finally {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+}
+
+// Send timesheet email
+async function sendTimesheetEmail(timesheetDetails, emailAddress) {
+    try {
+        // For now, we'll show a message that email would be sent
+        // In a real app, you would integrate with an email service like SendGrid, etc.
+        console.log('📧 Would send timesheet to:', emailAddress);
+        console.log('Timesheet details:', timesheetDetails);
+        
+        // Show a message that email functionality is coming soon
+        setTimeout(() => {
+            showMessage(`📧 Timesheet summary would be sent to ${emailAddress} (Email integration coming soon!)`, 'info');
+        }, 1000);
+        
+        return true;
+    } catch (error) {
+        console.error('❌ Email error:', error);
+        showMessage('⚠️ Could not send email (feature in development)', 'info');
+        return false;
+    }
+}
+
+// View timesheet details
+function viewTimesheetDetails(timesheetDetails) {
+    let entriesHtml = '';
+    timesheetDetails.entries.forEach(entry => {
+        entriesHtml += `
+            <div style="padding: 10px 0; border-bottom: 1px solid #eee;">
+                <div style="display: flex; justify-content: space-between;">
+                    <div>
+                        <strong>${entry.date}</strong> • ${entry.location}
+                        ${entry.notes ? `<br><small>${escapeHtml(entry.notes)}</small>` : ''}
+                    </div>
+                    <div style="text-align: right;">
+                        ${entry.hours} hrs @ $${entry.rate}/hr<br>
+                        <strong>$${entry.earnings}</strong>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+  
+    const html = `
+        <div class="modal-content">
+            <h2>Timesheet ${timesheetDetails.refNumber}</h2>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <div>
+                        <strong>Period:</strong><br>
+                        ${formatDate(timesheetDetails.startDate)} to ${formatDate(timesheetDetails.endDate)}
+                    </div>
+                    <div style="text-align: right;">
+                        <strong>Total Hours:</strong><br>
+                        ${timesheetDetails.totalHours} hrs
+                    </div>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <div>
+                        <strong>Total Earnings:</strong><br>
+                        $${timesheetDetails.totalEarnings}
+                    </div>
+                    <div style="text-align: right;">
+                        <strong>Entries:</strong><br>
+                        ${timesheetDetails.entriesCount}
+                    </div>
+                </div>
+            </div>
+            
+            <h3>Entries</h3>
+            <div style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
+                ${entriesHtml}
+            </div>
+            
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button onclick="printTimesheet('${timesheetDetails.refNumber}', ${JSON.stringify(timesheetDetails).replace(/'/g, "\\'")})" class="btn btn-primary" style="flex:1;">
+                    <i class="fas fa-print"></i> Print/Export
+                </button>
+                <button onclick="closeModal()" class="btn" style="flex:1;">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
+        </div>
+    `;
+  
+    showModal(html);
+}
+
+// Print timesheet
+window.printTimesheet = function(refNumber, timesheetDetails) {
+    // Parse the timesheetDetails if it's a string
+    if (typeof timesheetDetails === 'string') {
+        timesheetDetails = JSON.parse(timesheetDetails);
+    }
+    
+    const printWindow = window.open('', '_blank');
+    
+    // Calculate subtotals by location
+    const locationTotals = {};
+    timesheetDetails.entries.forEach(entry => {
+        if (!locationTotals[entry.location]) {
+            locationTotals[entry.location] = {
+                hours: 0,
+                earnings: 0
+            };
+        }
+        locationTotals[entry.location].hours += parseFloat(entry.hours);
+        locationTotals[entry.location].earnings += parseFloat(entry.earnings);
+    });
+    
+    // Create location summary HTML
+    let locationSummaryHtml = '';
+    Object.keys(locationTotals).forEach(location => {
+        locationSummaryHtml += `
+            <tr>
+                <td>${location}</td>
+                <td>${locationTotals[location].hours.toFixed(2)}</td>
+                <td>$${locationTotals[location].earnings.toFixed(2)}</td>
+            </tr>
+        `;
+    });
+    
+    // Create entries table HTML
+    let entriesTableHtml = '';
+    timesheetDetails.entries.forEach(entry => {
+        entriesTableHtml += `
+            <tr>
+                <td>${entry.date}</td>
+                <td>${entry.location}</td>
+                <td>${entry.hours}</td>
+                <td>$${entry.rate}/hr</td>
+                <td>$${entry.earnings}</td>
+                <td>${entry.notes || ''}</td>
+            </tr>
+        `;
+    });
+    
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Timesheet ${refNumber} - Cleaning Services</title>
+            <style>
+                /* Reset and base styles */
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { 
+                    font-family: 'Arial', 'Helvetica', sans-serif; 
+                    line-height: 1.6; 
+                    color: #333;
+                    background: #fff;
+                    padding: 20px;
+                    max-width: 1000px;
+                    margin: 0 auto;
+                }
+                
+                /* Header */
+                .header { 
+                    border-bottom: 3px solid #667eea;
+                    padding-bottom: 20px;
+                    margin-bottom: 30px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-start;
+                }
+                
+                .company-info h1 { 
+                    color: #667eea; 
+                    font-size: 28px;
+                    margin-bottom: 5px;
+                }
+                
+                .company-info p { 
+                    color: #666; 
+                    font-size: 14px;
+                    margin-bottom: 3px;
+                }
+                
+                .timesheet-info {
+                    text-align: right;
+                }
+                
+                .timesheet-info h2 {
+                    font-size: 24px;
+                    color: #333;
+                    margin-bottom: 10px;
+                }
+                
+                .timesheet-meta {
+                    font-size: 14px;
+                    color: #666;
+                }
+                
+                /* Summary Section */
+                .summary-section {
+                    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                    padding: 25px;
+                    border-radius: 10px;
+                    margin-bottom: 30px;
+                    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+                }
+                
+                .summary-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 20px;
+                    margin-top: 15px;
+                }
+                
+                .summary-item {
+                    text-align: center;
+                    padding: 15px;
+                    background: white;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+                }
+                
+                .summary-item h3 {
+                    font-size: 14px;
+                    color: #666;
+                    margin-bottom: 8px;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                }
+                
+                .summary-item .value {
+                    font-size: 24px;
+                    font-weight: bold;
+                    color: #667eea;
+                }
+                
+                .summary-item .value.earnings {
+                    color: #28a745;
+                }
+                
+                /* Tables */
+                .section-title {
+                    font-size: 18px;
+                    color: #333;
+                    margin: 25px 0 15px 0;
+                    padding-bottom: 8px;
+                    border-bottom: 2px solid #667eea;
+                }
+                
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 15px 0 30px 0;
+                    font-size: 14px;
+                }
+                
+                table th {
+                    background: #667eea;
+                    color: white;
+                    padding: 12px 15px;
+                    text-align: left;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+                
+                table td {
+                    padding: 12px 15px;
+                    border-bottom: 1px solid #e0e0e0;
+                }
+                
+                table tr:hover {
+                    background-color: #f8f9fa;
+                }
+                
+                table tr:last-child td {
+                    border-bottom: 2px solid #667eea;
+                }
+                
+                /* Total row */
+                .total-row {
+                    font-weight: bold;
+                    background-color: #f8f9fa;
+                }
+                
+                .total-row td {
+                    border-top: 2px solid #667eea;
+                }
+                
+                /* Footer */
+                .footer {
+                    margin-top: 40px;
+                    padding-top: 20px;
+                    border-top: 1px solid #ddd;
+                    text-align: center;
+                    color: #666;
+                    font-size: 12px;
+                }
+                
+                /* Print-specific styles */
+                @media print {
+                    body { padding: 0; }
+                    .no-print { display: none !important; }
+                    .header { border-bottom: 2px solid #000; }
+                    .summary-section { 
+                        box-shadow: none; 
+                        border: 1px solid #ddd;
+                    }
+                    table th { 
+                        background: #f0f0f0 !important; 
+                        color: #000 !important;
+                        -webkit-print-color-adjust: exact;
+                    }
+                    .summary-item { 
+                        box-shadow: none; 
+                        border: 1px solid #ddd;
+                    }
+                }
+                
+                /* Notes section */
+                .notes {
+                    margin-top: 30px;
+                    padding: 15px;
+                    background: #fff8e1;
+                    border-radius: 8px;
+                    border-left: 4px solid #ffc107;
+                }
+                
+                .notes h4 {
+                    color: #333;
+                    margin-bottom: 10px;
+                }
+                
+                .notes ul {
+                    margin-left: 20px;
+                }
+                
+                .notes li {
+                    margin-bottom: 5px;
+                }
+            </style>
+        </head>
+        <body>
+            <!-- Header -->
+            <div class="header">
+                <div class="company-info">
+                    <h1>Cleaning Timesheet</h1>
+                    <p>Professional Cleaning Services</p>
+                    <p>Timesheet ID: ${refNumber}</p>
+                    <p>Generated: ${formatDate(new Date())}</p>
+                </div>
+                <div class="timesheet-info">
+                    <h2>INVOICE</h2>
+                    <div class="timesheet-meta">
+                        <p><strong>Period:</strong> ${formatDate(timesheetDetails.startDate)} to ${formatDate(timesheetDetails.endDate)}</p>
+                        <p><strong>Status:</strong> Generated</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Summary Section -->
+            <div class="summary-section">
+                <h2 style="color: #333; margin-bottom: 15px;">Summary</h2>
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <h3>Total Hours</h3>
+                        <div class="value">${timesheetDetails.totalHours} hrs</div>
+                    </div>
+                    <div class="summary-item">
+                        <h3>Total Earnings</h3>
+                        <div class="value earnings">$${timesheetDetails.totalEarnings}</div>
+                    </div>
+                    <div class="summary-item">
+                        <h3>Number of Entries</h3>
+                        <div class="value">${timesheetDetails.entriesCount}</div>
+                    </div>
+                    <div class="summary-item">
+                        <h3>Average per Entry</h3>
+                        <div class="value">$${(parseFloat(timesheetDetails.totalEarnings) / timesheetDetails.entriesCount).toFixed(2)}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Location Summary -->
+            <h3 class="section-title">Summary by Location</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Location</th>
+                        <th>Total Hours</th>
+                        <th>Total Earnings</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${locationSummaryHtml}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td><strong>GRAND TOTAL</strong></td>
+                        <td><strong>${timesheetDetails.totalHours} hrs</strong></td>
+                        <td><strong>$${timesheetDetails.totalEarnings}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+            
+            <!-- Detailed Entries -->
+            <h3 class="section-title">Detailed Entries</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Location</th>
+                        <th>Hours</th>
+                        <th>Rate</th>
+                        <th>Earnings</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${entriesTableHtml}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="2"><strong>TOTALS</strong></td>
+                        <td><strong>${timesheetDetails.totalHours}</strong></td>
+                        <td></td>
+                        <td><strong>$${timesheetDetails.totalEarnings}</strong></td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+            
+            <!-- Notes -->
+            <div class="notes">
+                <h4>Notes & Terms</h4>
+                <ul>
+                    <li>This timesheet covers work completed during the specified period</li>
+                    <li>All amounts are in ${CONFIG.CURRENCY}</li>
+                    <li>Hourly rate: $${CONFIG.DEFAULT_HOURLY_RATE}/hr (standard)</li>
+                    <li>Please contact for any discrepancies within 7 days</li>
+                    <li>Payment due within 14 days of receipt</li>
+                </ul>
+            </div>
+            
+            <!-- Footer -->
+            <div class="footer">
+                <p>Generated by Cleaning Timesheet Manager • ${formatDate(new Date())}</p>
+                <p>Thank you for your business!</p>
+                <div class="no-print" style="margin-top: 20px; text-align: center;">
+                    <button onclick="window.print()" style="padding: 12px 30px; background: #667eea; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin: 10px;">
+                        <i class="fas fa-print"></i> Print Timesheet
+                    </button>
+                    <button onclick="window.close()" style="padding: 12px 30px; background: #6c757d; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin: 10px;">
+                        <i class="fas fa-times"></i> Close Window
+                    </button>
+                </div>
+            </div>
+            
+            <script>
+                // Auto-print option (commented out by default)
+                // window.onload = function() {
+                //     setTimeout(function() {
+                //         window.print();
+                //     }, 1000);
+                // };
+                
+                // Add page break for printing
+                const style = document.createElement('style');
+                style.innerHTML = \`
+                    @media print {
+                        .summary-section, table { break-inside: avoid; }
+                        h3.section-title { margin-top: 20px; }
+                    }
+                \`;
+                document.head.appendChild(style);
+            </script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+};
+
+// VIEW TIMESHEETS FUNCTIONALITY
+window.viewTimesheets = async function() {
+    try {
+        const { data: timesheets, error } = await supabase
+            .from('timesheets')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        let timesheetsHtml = '';
+        if (timesheets && timesheets.length > 0) {
+            timesheets.forEach(timesheet => {
+                const emailStatus = timesheet.email_sent 
+                    ? `<span style="color: #28a745;"><i class="fas fa-check-circle"></i> Sent${timesheet.email_address ? ' to ' + timesheet.email_address : ''}</span>`
+                    : '<span style="color: #6c757d;"><i class="fas fa-times-circle"></i> Not sent</span>';
+                
+                timesheetsHtml += `
+                    <div class="timesheet-item" style="padding: 15px; border-bottom: 1px solid #eee;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h4 style="margin: 0 0 5px 0;">${timesheet.ref_number}</h4>
+                                <p style="margin: 0; color: #666; font-size: 0.9rem;">
+                                    ${formatDate(timesheet.start_date)} to ${formatDate(timesheet.end_date)}<br>
+                                    ${timesheet.total_hours} hrs • $${timesheet.total_earnings} • ${emailStatus}
+                                </p>
+                            </div>
+                            <div class="timesheet-actions">
+                                <button class="btn-icon view-timesheet-btn" data-id="${timesheet.id}" title="View Details">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn-icon delete-timesheet-btn" data-id="${timesheet.id}" title="Delete" style="color: #dc3545;">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        } else {
+            timesheetsHtml = '<p style="text-align:center; padding:20px;">No timesheets generated yet.</p>';
+        }
+
+        const html = `
+            <div class="modal-content">
+                <h2>All Timesheets</h2>
+                <div style="max-height: 400px; overflow-y: auto; margin-bottom: 20px;">
+                    ${timesheetsHtml}
+                </div>
+                <div style="margin-top:20px; display:flex; gap:10px;">
+                    <button onclick="closeModal()" class="btn" style="flex:1;">
+                        <i class="fas fa-times"></i> Close
+                    </button>
+                </div>
+            </div>
+        `;
+
+        showModal(html);
+        
+        // Add event listeners for buttons
+        setTimeout(() => {
+            document.querySelectorAll('.view-timesheet-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    viewTimesheetById(id);
+                });
+            });
+            
+            document.querySelectorAll('.delete-timesheet-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    deleteTimesheet(id);
+                });
+            });
+        }, 100);
+    } catch (error) {
+        console.error('❌ Error loading timesheets:', error);
+        showMessage('❌ Error loading timesheets: ' + error.message, 'error');
+    }
+};
+
+// View specific timesheet by ID
+async function viewTimesheetById(id) {
+    try {
+        const { data: timesheet, error: tsError } = await supabase
+            .from('timesheets')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (tsError) throw tsError;
+
+        // Get entries for this timesheet period
+        const { data: entries, error: entriesError } = await supabase
+            .from('entries')
+            .select(`
+                *,
+                locations (name, hourly_rate)
+            `)
+            .gte('work_date', timesheet.start_date)
+            .lte('work_date', timesheet.end_date)
+            .order('work_date', { ascending: true });
+
+        if (entriesError) throw entriesError;
+
+        const timesheetDetails = {
+            refNumber: timesheet.ref_number,
+            startDate: timesheet.start_date,
+            endDate: timesheet.end_date,
+            totalHours: parseFloat(timesheet.total_hours).toFixed(2),
+            totalEarnings: timesheet.total_earnings,
+            entriesCount: entries?.length || 0,
+            entries: entries?.map(entry => ({
+                date: formatDate(entry.work_date),
+                location: entry.locations?.name || 'Unknown',
+                hours: entry.hours,
+                rate: entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE,
+                earnings: (entry.hours * (entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE)).toFixed(2),
+                notes: entry.notes || ''
+            })) || []
+        };
+
+        viewTimesheetDetails(timesheetDetails);
+    } catch (error) {
+        console.error('❌ Error viewing timesheet:', error);
+        showMessage('❌ Error viewing timesheet: ' + error.message, 'error');
+    }
+}
+
+// Delete timesheet - Fixed null reference error
+async function deleteTimesheet(id) {
+    console.log("Delete timesheet clicked for ID:", id);
+
+    const html = `
+        <div class="modal-content" data-timesheet-id="${id}">
+            <h2>Confirm Delete Timesheet</h2>
+            <p style="margin:15px 0;">Are you sure you want to delete this timesheet?</p>
+            <p style="color:#dc3545; font-weight:bold;">
+                Note: This only deletes the timesheet record, not the actual entries.
+            </p>
+            <div style="margin-top:20px; display:flex; gap:10px;">
+                <button class="btn btn-primary confirm-delete-timesheet-btn" style="flex:1; background:#dc3545; border:none;">
+                    <i class="fas fa-trash"></i> Yes, Delete Timesheet
+                </button>
+                <button class="btn cancel-btn" style="flex:1;">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    `;
+
+    showModal(html);
+    
+    // Add event listeners after modal is shown
+    setTimeout(() => {
+        const modalContent = document.querySelector('.modal-content');
+        const timesheetId = modalContent.getAttribute('data-timesheet-id');
+        
+        document.querySelector('.confirm-delete-timesheet-btn').addEventListener('click', async function() {
+            console.log("Confirming delete for timesheet ID:", timesheetId);
+            
+            try {
+                const { error } = await supabase
+                    .from('timesheets')
+                    .delete()
+                    .eq('id', timesheetId);
+
+                if (error) throw error;
+
+                closeModal();
+                showMessage('✅ Timesheet deleted successfully!', 'success');
+                await loadStats();
+                
+                // Check if the "All Timesheets" modal is still open before trying to refresh it
+                const allTimesheetsModal = document.querySelector('.modal-content h2');
+                if (allTimesheetsModal && allTimesheetsModal.textContent === 'All Timesheets') {
+                    closeModal();
+                    // Re-open the timesheets view
+                    setTimeout(() => {
+                        viewTimesheets();
+                    }, 300);
+                }
+            } catch (error) {
+                console.error("Delete timesheet error:", error);
+                showMessage('❌ Error deleting timesheet: ' + error.message, 'error');
+            }
+        });
+        
+        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
+    }, 100);
+};
+
+// ───────────────────────────────────────────────
+//   ACTION BUTTONS
+// ───────────────────────────────────────────────
+
 window.refreshData = async function() {
     console.log('🔄 Refreshing data...');
     showMessage('Refreshing data...', 'info');
-    if (typeof loadStats !== 'undefined') await loadStats();
-    if (typeof loadRecentEntries !== 'undefined') await loadRecentEntries();
-    if (typeof loadLocations !== 'undefined') await loadLocations();
+    await loadStats();
+    await loadRecentEntries();
+    await loadLocations();
     showMessage('✅ Data refreshed!', 'success');
 };
 
@@ -238,9 +1759,4 @@ window.showSettings = function() { alert('Settings coming soon!'); };
 window.showHelp = function() { alert('Help coming soon!'); };
 
 // Final log
-console.log('🎉 Main script loaded successfully');
-
-// Signal that this module is loaded
-if (typeof checkModulesLoaded !== 'undefined') {
-    checkModulesLoaded();
-}
+console.log('🎉 Script loaded successfully');
