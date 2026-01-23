@@ -21,10 +21,25 @@ console.log('✅ Supabase client initialized (modern way)');
 console.log('🚀 Cleaning Timesheet App Starting...');
 console.log('📡 Supabase URL:', CONFIG.SUPABASE_URL);
 
+// Wait for all modules to load
+let modulesLoaded = 0;
+const totalModules = 4; // utils, entries, locations, timesheets
+
+function checkModulesLoaded() {
+    modulesLoaded++;
+    if (modulesLoaded === totalModules) {
+        console.log('✅ All modules loaded, initializing app...');
+        initializeApp();
+    }
+}
+
 // Initialize App
 document.addEventListener('DOMContentLoaded', function() {
     console.log('✅ DOM Ready');
-    initializeApp();
+    // Check if modules are already loaded (they might load before DOM)
+    if (modulesLoaded === totalModules) {
+        initializeApp();
+    }
 });
 
 async function initializeApp() {
@@ -42,17 +57,28 @@ async function initializeApp() {
         document.getElementById('startDate').value = lastWeek.toISOString().split('T')[0];
         document.getElementById('endDate').value = today.toISOString().split('T')[0];
       
-        // Setup form handlers
-        document.getElementById('entryForm').addEventListener('submit', handleAddEntry);
-        document.getElementById('timesheetForm').addEventListener('submit', handleGenerateTimesheet);
+        // Setup form handlers - check if functions exist
+        if (typeof handleAddEntry !== 'undefined') {
+            document.getElementById('entryForm').addEventListener('submit', handleAddEntry);
+        } else {
+            console.error('❌ handleAddEntry not defined');
+        }
+        
+        if (typeof handleGenerateTimesheet !== 'undefined') {
+            document.getElementById('timesheetForm').addEventListener('submit', handleGenerateTimesheet);
+        } else {
+            console.error('❌ handleGenerateTimesheet not defined');
+        }
       
         // Setup location input listener for auto-fill and rate field
-        document.getElementById('location').addEventListener('input', handleLocationInput);
-        document.getElementById('location').addEventListener('change', handleLocationSelection);
+        if (typeof handleLocationInput !== 'undefined') {
+            document.getElementById('location').addEventListener('input', handleLocationInput);
+            document.getElementById('location').addEventListener('change', handleLocationSelection);
+        }
         
         // Setup email notification checkbox
         const emailCheckbox = document.getElementById('sendEmail');
-        if (emailCheckbox) {
+        if (emailCheckbox && typeof handleEmailCheckbox !== 'undefined') {
             emailCheckbox.addEventListener('change', handleEmailCheckbox);
             // Initialize email field visibility
             handleEmailCheckbox({ target: emailCheckbox });
@@ -72,9 +98,9 @@ async function initializeApp() {
           
             // Load data in background
             setTimeout(async () => {
-                await loadStats();
-                await loadLocations();
-                await loadRecentEntries();
+                if (typeof loadStats !== 'undefined') await loadStats();
+                if (typeof loadLocations !== 'undefined') await loadLocations();
+                if (typeof loadRecentEntries !== 'undefined') await loadRecentEntries();
             }, 500);
           
         } else {
@@ -104,7 +130,7 @@ async function testConnection() {
     }
 }
 
-// Load statistics
+// Load statistics - this should be in entries.js, but keep fallback here
 async function loadStats() {
     try {
         console.log('📊 Loading statistics...');
@@ -196,9 +222,9 @@ function updateStatsDisplay(stats) {
 window.refreshData = async function() {
     console.log('🔄 Refreshing data...');
     showMessage('Refreshing data...', 'info');
-    await loadStats();
-    await loadRecentEntries();
-    await loadLocations();
+    if (typeof loadStats !== 'undefined') await loadStats();
+    if (typeof loadRecentEntries !== 'undefined') await loadRecentEntries();
+    if (typeof loadLocations !== 'undefined') await loadLocations();
     showMessage('✅ Data refreshed!', 'success');
 };
 
@@ -213,3 +239,8 @@ window.showHelp = function() { alert('Help coming soon!'); };
 
 // Final log
 console.log('🎉 Main script loaded successfully');
+
+// Signal that this module is loaded
+if (typeof checkModulesLoaded !== 'undefined') {
+    checkModulesLoaded();
+}
