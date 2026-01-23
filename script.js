@@ -797,30 +797,231 @@ window.showSettings = function() {
 window.showHelp = function() {
     alert('Help coming soon!');
 };
-console.log("Script loaded and reached the end! Ready for action.");
-// Manage Locations button - shows a simple modal
-window.viewLocations = async function() {
-    console.log("Manage Locations clicked!");  // This will appear in console when you click
-
-    // Create simple modal with your 6 locations (hardcoded for test)
-    const html = `
-        <div class="modal">
-            <div class="modal-content">
-                <h2>Manage Locations</h2>
-                <p>You have 6 active locations loaded from Supabase.</p>
-                <p>(Real list coming soon - this is just a test modal)</p>
-                <button onclick="closeModal()" class="btn btn-primary btn-block">Close</button>
-            </div>
-        </div>
-    `;
-
-    document.getElementById('modalsContainer').innerHTML = html;
-};
+// Modal Helpers (used by all modals)
+function showModal(content) {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = content;
+    document.getElementById('modalsContainer').appendChild(modal);
+}
 
 window.closeModal = function() {
-    document.getElementById('modalsContainer').innerHTML = '';
-    console.log("Modal closed");
+    const modal = document.querySelector('.modal');
+    if (modal) modal.remove();
 };
+
+// Manage Locations – FULL version with real data + edit/delete buttons
+window.viewLocations = async function() {
+    console.log("Manage Locations clicked!");
+
+    try {
+        const { data: locations, error } = await supabase
+            .from('locations')
+            .select('*')
+            .eq('is_active', true)
+            .order('name');
+
+        if (error) throw error;
+
+        let html = '<div class="modal-content"><h2>Manage Locations</h2><div class="locations-list">';
+        
+        if (locations.length === 0) {
+            html += '<p>No active locations yet.</p>';
+        } else {
+            locations.forEach(loc => {
+                html += `
+                    <div class="location-item">
+                        <div>
+                            <h4>${loc.name}</h4>
+                            <p>Default: ${loc.default_hours} hrs @ $${loc.hourly_rate}/hr</p>
+                        </div>
+                        <div>
+                            <button onclick="editLocation(${loc.id})" class="btn-icon"><i class="fas fa-edit"></i></button>
+                            <button onclick="deleteLocation(${loc.id})" class="btn-icon"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        html += '</div><button onclick="closeModal()" class="btn btn-primary btn-block">Close</button></div>';
+
+        showModal(html);
+    } catch (error) {
+        console.error("Locations load error:", error);
+        showMessage('❌ Error loading locations: ' + error.message, 'error');
+    }
+};
+
+// Edit Location
+async function editLocation(id) {
+    try {
+        const { data: loc, error } = await supabase
+            .from('locations')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+
+        let html = `
+            <div class="modal-content">
+                <h2>Edit Location</h2>
+                <form id="editLocationForm">
+                    <div class="form-group">
+                        <label for="editName">Name</label>
+                        <input type="text" id="editName" value="${loc.name}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editDefaultHours">Default Hours</label>
+                        <input type="number" id="editDefaultHours" value="${loc.default_hours}" step="0.5" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editRate">Hourly Rate</label>
+                        <input type="number" id="editRate" value="${loc.hourly_rate}" step="0.01" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Save Changes</button>
+                    <button type="button" onclick="closeModal()" class="btn btn-block" style="margin-top:10px;">Cancel</button>
+                </form>
+            </div>
+        `;
+
+        showModal(html);
+
+        document.getElementById('editLocationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('editName').value.trim();
+            const defaultHours = parseFloat(document.getElementById('editDefaultHours').value);
+            const rate = parseFloat(document.getElementById('editRate').value);
+
+            const { error } = await supabase
+                .from('locations')
+                .update({ name, default_hours: defaultHours, hourly_rate: rate })
+                .eq('id', id);
+
+            if (error) throw error;
+
+            closeModal();
+            showMessage('✅ Location updated!', 'success');
+            await loadLocations(); // refresh dropdown
+            await loadStats();
+            await loadRecentEntries(); // refresh list if needed
+        });
+    } catch (error) {
+        showMessage('❌ Error editing location: ' + error.message, 'error');
+    }
+}
+
+// Delete Location (soft delete)
+async function deleteLocation(id) {
+    if (!confirm('Make this location inactive? Entries will stay but you won\'t be able to select it anymore.')) return;
+
+    try {
+        const { error } = await supabase
+            .from('locations')
+            .update({ is_active: false })
+            .eq('id', id);
+
+        if (error) throw error;
+
+        closeModal();
+        showMessage('✅ Location deactivated.', 'success');
+        await loadLocations();
+        await loadStats();
+        await loadRecentEntries();
+    } catch (error) {
+        showMessage('❌ Error deactivating location: ' + error.message, 'error');
+    }
+}
+
+// Edit Entry
+window.editEntry = async function(id) {
+    console.log("Editing entry:", id);
+
+    try {
+        const { data: entry, error } = await supabase
+            .from('entries')
+            .select('*, locations(name)')
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+
+        let html = `
+            <div class="modal-content">
+                <h2>Edit Entry</h2>
+                <form id="editEntryForm">
+                    <div class="form-group">
+                        <label>Location</label>
+                        <input type="text" value="${entry.locations.name}" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label for="editHours">Hours</label>
+                        <input type="number" id="editHours" value="${entry.hours}" step="0.5" min="0.5" max="24" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editDate">Date</label>
+                        <input type="date" id="editDate" value="${entry.work_date}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editNotes">Notes</label>
+                        <textarea id="editNotes" rows="2">${entry.notes || ''}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Save Changes</button>
+                    <button type="button" onclick="closeModal()" class="btn btn-block" style="margin-top:10px;">Cancel</button>
+                </form>
+            </div>
+        `;
+
+        showModal(html);
+
+        document.getElementById('editEntryForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const hours = parseFloat(document.getElementById('editHours').value);
+            const date = document.getElementById('editDate').value;
+            const notes = document.getElementById('editNotes').value.trim();
+
+            const { error } = await supabase
+                .from('entries')
+                .update({ hours, work_date: date, notes })
+                .eq('id', id);
+
+            if (error) throw error;
+
+            closeModal();
+            showMessage('✅ Entry updated!', 'success');
+            await loadStats();
+            await loadRecentEntries();
+        });
+    } catch (error) {
+        showMessage('❌ Error loading entry: ' + error.message, 'error');
+    }
+};
+
+// Delete Entry
+window.deleteEntry = async function(id) {
+    console.log("Deleting entry:", id);
+
+    if (!confirm('Delete this entry permanently?')) return;
+
+    try {
+        const { error } = await supabase
+            .from('entries')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+
+        showMessage('✅ Entry deleted!', 'success');
+        await loadStats();
+        await loadRecentEntries();
+    } catch (error) {
+        showMessage('❌ Error deleting entry: ' + error.message, 'error');
+    }
+};
+
+// Final log
 console.log('🎉 Script loaded successfully');
+
 
 
