@@ -14,7 +14,7 @@ async function handleGenerateTimesheet(event) {
         const startDate = document.getElementById('startDate').value;
         const endDate = document.getElementById('endDate').value;
         const sendEmail = document.getElementById('sendEmail').checked;
-        const emailAddress = sendEmail ? document.getElementById('emailAddress').value.trim() : null;
+        const emailAddress = sendEmail ? document.getElementById('emailAddress')?.value.trim() : null;
       
         if (!startDate || !endDate) throw new Error('Please select start and end dates');
         if (sendEmail && (!emailAddress || !validateEmail(emailAddress))) {
@@ -42,17 +42,23 @@ async function handleGenerateTimesheet(event) {
       
         const refNumber = 'TS' + new Date().getTime().toString().slice(-6);
       
+        // Prepare insert data - only include email fields if sending email
+        const insertData = {
+            ref_number: refNumber, 
+            start_date: startDate, 
+            end_date: endDate, 
+            total_hours: totalHours, 
+            total_earnings: totalEarnings
+        };
+        
+        if (sendEmail) {
+            insertData.email_sent = true;
+            insertData.email_address = emailAddress;
+        }
+      
         const { data: timesheet, error: tsError } = await supabase
             .from('timesheets')
-            .insert([{ 
-                ref_number: refNumber, 
-                start_date: startDate, 
-                end_date: endDate, 
-                total_hours: totalHours, 
-                total_earnings: totalEarnings,
-                email_sent: sendEmail,
-                email_address: emailAddress
-            }])
+            .insert([insertData])
             .select()
             .single();
       
@@ -169,8 +175,8 @@ function viewTimesheetDetails(timesheetDetails) {
             </div>
             
             <div style="margin-top: 20px; display: flex; gap: 10px;">
-                <button onclick="printTimesheet('${timesheetDetails.refNumber}')" class="btn btn-primary" style="flex:1;">
-                    <i class="fas fa-print"></i> Print
+                <button onclick="printTimesheet('${timesheetDetails.refNumber}', ${JSON.stringify(timesheetDetails).replace(/'/g, "\\'")})" class="btn btn-primary" style="flex:1;">
+                    <i class="fas fa-print"></i> Print/Export
                 </button>
                 <button onclick="closeModal()" class="btn" style="flex:1;">
                     <i class="fas fa-times"></i> Close
@@ -182,34 +188,388 @@ function viewTimesheetDetails(timesheetDetails) {
     showModal(html);
 }
 
-// Print timesheet
-window.printTimesheet = function(refNumber) {
+// Print timesheet - Updated with beautiful formatting
+window.printTimesheet = function(refNumber, timesheetDetails) {
+    // Parse the timesheetDetails if it's a string
+    if (typeof timesheetDetails === 'string') {
+        timesheetDetails = JSON.parse(timesheetDetails);
+    }
+    
     const printWindow = window.open('', '_blank');
+    
+    // Calculate subtotals by location
+    const locationTotals = {};
+    timesheetDetails.entries.forEach(entry => {
+        if (!locationTotals[entry.location]) {
+            locationTotals[entry.location] = {
+                hours: 0,
+                earnings: 0
+            };
+        }
+        locationTotals[entry.location].hours += parseFloat(entry.hours);
+        locationTotals[entry.location].earnings += parseFloat(entry.earnings);
+    });
+    
+    // Create location summary HTML
+    let locationSummaryHtml = '';
+    Object.keys(locationTotals).forEach(location => {
+        locationSummaryHtml += `
+            <tr>
+                <td>${location}</td>
+                <td>${locationTotals[location].hours.toFixed(2)}</td>
+                <td>$${locationTotals[location].earnings.toFixed(2)}</td>
+            </tr>
+        `;
+    });
+    
+    // Create entries table HTML
+    let entriesTableHtml = '';
+    timesheetDetails.entries.forEach(entry => {
+        entriesTableHtml += `
+            <tr>
+                <td>${entry.date}</td>
+                <td>${entry.location}</td>
+                <td>${entry.hours}</td>
+                <td>$${entry.rate}/hr</td>
+                <td>$${entry.earnings}</td>
+                <td>${entry.notes || ''}</td>
+            </tr>
+        `;
+    });
+    
     printWindow.document.write(`
+        <!DOCTYPE html>
         <html>
         <head>
-            <title>Timesheet ${refNumber}</title>
+            <title>Timesheet ${refNumber} - Cleaning Services</title>
             <style>
-                body { font-family: Arial, sans-serif; padding: 20px; }
-                h1 { color: #333; }
-                .summary { background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0; }
-                table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                th { background-color: #f2f2f2; }
-                .total { font-weight: bold; text-align: right; }
+                /* Reset and base styles */
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { 
+                    font-family: 'Arial', 'Helvetica', sans-serif; 
+                    line-height: 1.6; 
+                    color: #333;
+                    background: #fff;
+                    padding: 20px;
+                    max-width: 1000px;
+                    margin: 0 auto;
+                }
+                
+                /* Header */
+                .header { 
+                    border-bottom: 3px solid #667eea;
+                    padding-bottom: 20px;
+                    margin-bottom: 30px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-start;
+                }
+                
+                .company-info h1 { 
+                    color: #667eea; 
+                    font-size: 28px;
+                    margin-bottom: 5px;
+                }
+                
+                .company-info p { 
+                    color: #666; 
+                    font-size: 14px;
+                    margin-bottom: 3px;
+                }
+                
+                .timesheet-info {
+                    text-align: right;
+                }
+                
+                .timesheet-info h2 {
+                    font-size: 24px;
+                    color: #333;
+                    margin-bottom: 10px;
+                }
+                
+                .timesheet-meta {
+                    font-size: 14px;
+                    color: #666;
+                }
+                
+                /* Summary Section */
+                .summary-section {
+                    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                    padding: 25px;
+                    border-radius: 10px;
+                    margin-bottom: 30px;
+                    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+                }
+                
+                .summary-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 20px;
+                    margin-top: 15px;
+                }
+                
+                .summary-item {
+                    text-align: center;
+                    padding: 15px;
+                    background: white;
+                    border-radius: 8px;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+                }
+                
+                .summary-item h3 {
+                    font-size: 14px;
+                    color: #666;
+                    margin-bottom: 8px;
+                    text-transform: uppercase;
+                    letter-spacing: 1px;
+                }
+                
+                .summary-item .value {
+                    font-size: 24px;
+                    font-weight: bold;
+                    color: #667eea;
+                }
+                
+                .summary-item .value.earnings {
+                    color: #28a745;
+                }
+                
+                /* Tables */
+                .section-title {
+                    font-size: 18px;
+                    color: #333;
+                    margin: 25px 0 15px 0;
+                    padding-bottom: 8px;
+                    border-bottom: 2px solid #667eea;
+                }
+                
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 15px 0 30px 0;
+                    font-size: 14px;
+                }
+                
+                table th {
+                    background: #667eea;
+                    color: white;
+                    padding: 12px 15px;
+                    text-align: left;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+                
+                table td {
+                    padding: 12px 15px;
+                    border-bottom: 1px solid #e0e0e0;
+                }
+                
+                table tr:hover {
+                    background-color: #f8f9fa;
+                }
+                
+                table tr:last-child td {
+                    border-bottom: 2px solid #667eea;
+                }
+                
+                /* Total row */
+                .total-row {
+                    font-weight: bold;
+                    background-color: #f8f9fa;
+                }
+                
+                .total-row td {
+                    border-top: 2px solid #667eea;
+                }
+                
+                /* Footer */
+                .footer {
+                    margin-top: 40px;
+                    padding-top: 20px;
+                    border-top: 1px solid #ddd;
+                    text-align: center;
+                    color: #666;
+                    font-size: 12px;
+                }
+                
+                /* Print-specific styles */
                 @media print {
-                    button { display: none; }
+                    body { padding: 0; }
+                    .no-print { display: none !important; }
+                    .header { border-bottom: 2px solid #000; }
+                    .summary-section { 
+                        box-shadow: none; 
+                        border: 1px solid #ddd;
+                    }
+                    table th { 
+                        background: #f0f0f0 !important; 
+                        color: #000 !important;
+                        -webkit-print-color-adjust: exact;
+                    }
+                    .summary-item { 
+                        box-shadow: none; 
+                        border: 1px solid #ddd;
+                    }
+                }
+                
+                /* Notes section */
+                .notes {
+                    margin-top: 30px;
+                    padding: 15px;
+                    background: #fff8e1;
+                    border-radius: 8px;
+                    border-left: 4px solid #ffc107;
+                }
+                
+                .notes h4 {
+                    color: #333;
+                    margin-bottom: 10px;
+                }
+                
+                .notes ul {
+                    margin-left: 20px;
+                }
+                
+                .notes li {
+                    margin-bottom: 5px;
                 }
             </style>
         </head>
         <body>
-            <h1>Timesheet ${refNumber}</h1>
-            <p>Generated on ${formatDate(new Date())}</p>
-            <div style="text-align: center; margin: 20px 0;">
-                <button onclick="window.print()" style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                    Print Timesheet
-                </button>
+            <!-- Header -->
+            <div class="header">
+                <div class="company-info">
+                    <h1>Cleaning Timesheet</h1>
+                    <p>Professional Cleaning Services</p>
+                    <p>Timesheet ID: ${refNumber}</p>
+                    <p>Generated: ${formatDate(new Date())}</p>
+                </div>
+                <div class="timesheet-info">
+                    <h2>INVOICE</h2>
+                    <div class="timesheet-meta">
+                        <p><strong>Period:</strong> ${formatDate(timesheetDetails.startDate)} to ${formatDate(timesheetDetails.endDate)}</p>
+                        <p><strong>Status:</strong> Generated</p>
+                    </div>
+                </div>
             </div>
+            
+            <!-- Summary Section -->
+            <div class="summary-section">
+                <h2 style="color: #333; margin-bottom: 15px;">Summary</h2>
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <h3>Total Hours</h3>
+                        <div class="value">${timesheetDetails.totalHours} hrs</div>
+                    </div>
+                    <div class="summary-item">
+                        <h3>Total Earnings</h3>
+                        <div class="value earnings">$${timesheetDetails.totalEarnings}</div>
+                    </div>
+                    <div class="summary-item">
+                        <h3>Number of Entries</h3>
+                        <div class="value">${timesheetDetails.entriesCount}</div>
+                    </div>
+                    <div class="summary-item">
+                        <h3>Average per Entry</h3>
+                        <div class="value">$${(parseFloat(timesheetDetails.totalEarnings) / timesheetDetails.entriesCount).toFixed(2)}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Location Summary -->
+            <h3 class="section-title">Summary by Location</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Location</th>
+                        <th>Total Hours</th>
+                        <th>Total Earnings</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${locationSummaryHtml}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td><strong>GRAND TOTAL</strong></td>
+                        <td><strong>${timesheetDetails.totalHours} hrs</strong></td>
+                        <td><strong>$${timesheetDetails.totalEarnings}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+            
+            <!-- Detailed Entries -->
+            <h3 class="section-title">Detailed Entries</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Location</th>
+                        <th>Hours</th>
+                        <th>Rate</th>
+                        <th>Earnings</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${entriesTableHtml}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="2"><strong>TOTALS</strong></td>
+                        <td><strong>${timesheetDetails.totalHours}</strong></td>
+                        <td></td>
+                        <td><strong>$${timesheetDetails.totalEarnings}</strong></td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+            
+            <!-- Notes -->
+            <div class="notes">
+                <h4>Notes & Terms</h4>
+                <ul>
+                    <li>This timesheet covers work completed during the specified period</li>
+                    <li>All amounts are in ${CONFIG.CURRENCY}</li>
+                    <li>Hourly rate: $${CONFIG.DEFAULT_HOURLY_RATE}/hr (standard)</li>
+                    <li>Please contact for any discrepancies within 7 days</li>
+                    <li>Payment due within 14 days of receipt</li>
+                </ul>
+            </div>
+            
+            <!-- Footer -->
+            <div class="footer">
+                <p>Generated by Cleaning Timesheet Manager • ${formatDate(new Date())}</p>
+                <p>Thank you for your business!</p>
+                <div class="no-print" style="margin-top: 20px; text-align: center;">
+                    <button onclick="window.print()" style="padding: 12px 30px; background: #667eea; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin: 10px;">
+                        <i class="fas fa-print"></i> Print Timesheet
+                    </button>
+                    <button onclick="window.close()" style="padding: 12px 30px; background: #6c757d; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin: 10px;">
+                        <i class="fas fa-times"></i> Close Window
+                    </button>
+                </div>
+            </div>
+            
+            <script>
+                // Auto-print option (commented out by default)
+                // window.onload = function() {
+                //     setTimeout(function() {
+                //         window.print();
+                //     }, 1000);
+                // };
+                
+                // Add page break for printing
+                const style = document.createElement('style');
+                style.innerHTML = \`
+                    @media print {
+                        .summary-section, table { break-inside: avoid; }
+                        h3.section-title { margin-top: 20px; }
+                    }
+                \`;
+                document.head.appendChild(style);
+            </script>
         </body>
         </html>
     `);
@@ -345,7 +705,7 @@ async function viewTimesheetById(id) {
     }
 }
 
-// Delete timesheet
+// Delete timesheet - Fixed null reference error
 async function deleteTimesheet(id) {
     console.log("Delete timesheet clicked for ID:", id);
 
@@ -388,10 +748,15 @@ async function deleteTimesheet(id) {
                 closeModal();
                 showMessage('✅ Timesheet deleted successfully!', 'success');
                 await loadStats();
-                // Refresh the timesheets view if it's open
-                if (document.querySelector('.modal-content h2').textContent === 'All Timesheets') {
+                
+                // Check if the "All Timesheets" modal is still open before trying to refresh it
+                const allTimesheetsModal = document.querySelector('.modal-content h2');
+                if (allTimesheetsModal && allTimesheetsModal.textContent === 'All Timesheets') {
                     closeModal();
-                    viewTimesheets();
+                    // Re-open the timesheets view
+                    setTimeout(() => {
+                        viewTimesheets();
+                    }, 300);
                 }
             } catch (error) {
                 console.error("Delete timesheet error:", error);
