@@ -775,4 +775,9 @@ window.viewTimesheetDetails = viewTimesheetDetails;
 window.viewTimesheetById = viewTimesheetById;
 window.deleteTimesheet = deleteTimesheet;
 
+// Signal that this module is loaded
+if (typeof checkModulesLoaded !== 'undefined') {
+    checkModulesLoaded();
+}
+
 console.log('✅ Timesheets module loaded');
