@@ -1070,18 +1070,96 @@ async function handleGenerateTimesheet(event) {
     }
 }
 
-// Send timesheet email
+// Send timesheet email - IMPROVED VERSION
 async function sendTimesheetEmail(timesheetDetails, emailAddress) {
     try {
-        // For now, we'll show a message that email would be sent
-        // In a real app, you would integrate with an email service like SendGrid, etc.
-        console.log('📧 Would send timesheet to:', emailAddress);
-        console.log('Timesheet details:', timesheetDetails);
+        console.log('📧 Sending timesheet to:', emailAddress);
         
-        // Show a message that email functionality is coming soon
+        // Create a beautiful email template
+        const emailContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px 10px 0 0; }
+                    .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 10px 10px; }
+                    .summary { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+                    .footer { margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; color: #666; font-size: 12px; }
+                    table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+                    th { background: #667eea; color: white; padding: 10px; text-align: left; }
+                    td { padding: 8px 10px; border-bottom: 1px solid #ddd; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>Cleaning Timesheet</h1>
+                        <p>Reference: ${timesheetDetails.refNumber}</p>
+                    </div>
+                    <div class="content">
+                        <h2>Timesheet Summary</h2>
+                        <div class="summary">
+                            <p><strong>Period:</strong> ${formatDate(timesheetDetails.startDate)} to ${formatDate(timesheetDetails.endDate)}</p>
+                            <p><strong>Total Hours:</strong> ${timesheetDetails.totalHours} hrs</p>
+                            <p><strong>Total Earnings:</strong> $${timesheetDetails.totalEarnings} AUD</p>
+                            <p><strong>Number of Entries:</strong> ${timesheetDetails.entriesCount}</p>
+                        </div>
+                        
+                        <h3>Detailed Entries</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Location</th>
+                                    <th>Hours</th>
+                                    <th>Rate</th>
+                                    <th>Earnings</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${timesheetDetails.entries.map(entry => `
+                                    <tr>
+                                        <td>${entry.date}</td>
+                                        <td>${entry.location}</td>
+                                        <td>${entry.hours}</td>
+                                        <td>$${entry.rate}/hr</td>
+                                        <td>$${entry.earnings}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                            <tfoot>
+                                <tr style="font-weight: bold; background: #f0f0f0;">
+                                    <td colspan="2">TOTALS</td>
+                                    <td>${timesheetDetails.totalHours}</td>
+                                    <td></td>
+                                    <td>$${timesheetDetails.totalEarnings}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                        
+                        <p>You can also view and print this timesheet directly from the Cleaning Timesheet Manager app.</p>
+                        
+                        <div class="footer">
+                            <p>This timesheet was generated automatically by Cleaning Timesheet Manager.</p>
+                            <p>If you have any questions, please contact us.</p>
+                        </div>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `;
+        
+        // For now, we'll simulate email sending and show a preview
+        const emailWindow = window.open('', '_blank');
+        emailWindow.document.write(emailContent);
+        emailWindow.document.close();
+        
+        // Show success message
         setTimeout(() => {
-            showMessage(`📧 Timesheet summary would be sent to ${emailAddress} (Email integration coming soon!)`, 'info');
-        }, 1000);
+            showMessage(`📧 Timesheet email preview opened in new tab. In production, this would be sent to ${emailAddress}`, 'success');
+        }, 500);
         
         return true;
     } catch (error) {
@@ -1091,7 +1169,7 @@ async function sendTimesheetEmail(timesheetDetails, emailAddress) {
     }
 }
 
-// View timesheet details
+// View timesheet details - FIXED VERSION
 function viewTimesheetDetails(timesheetDetails) {
     let entriesHtml = '';
     timesheetDetails.entries.forEach(entry => {
@@ -1111,6 +1189,9 @@ function viewTimesheetDetails(timesheetDetails) {
         `;
     });
   
+    // Create a unique ID for the print button to avoid issues
+    const printBtnId = 'printBtn_' + Date.now();
+    
     const html = `
         <div class="modal-content">
             <h2>Timesheet ${timesheetDetails.refNumber}</h2>
@@ -1143,7 +1224,7 @@ function viewTimesheetDetails(timesheetDetails) {
             </div>
             
             <div style="margin-top: 20px; display: flex; gap: 10px;">
-                <button onclick="printTimesheet('${timesheetDetails.refNumber}', ${JSON.stringify(timesheetDetails).replace(/'/g, "\\'")})" class="btn btn-primary" style="flex:1;">
+                <button id="${printBtnId}" class="btn btn-primary" style="flex:1;">
                     <i class="fas fa-print"></i> Print/Export
                 </button>
                 <button onclick="closeModal()" class="btn" style="flex:1;">
@@ -1154,16 +1235,36 @@ function viewTimesheetDetails(timesheetDetails) {
     `;
   
     showModal(html);
+    
+    // Add event listener after modal is shown
+    setTimeout(() => {
+        document.getElementById(printBtnId).addEventListener('click', function() {
+            printTimesheet(timesheetDetails.refNumber, timesheetDetails);
+        });
+    }, 100);
 }
 
-// Print timesheet
+// Print timesheet - FIXED VERSION
 window.printTimesheet = function(refNumber, timesheetDetails) {
+    console.log("Printing timesheet:", refNumber);
+    
     // Parse the timesheetDetails if it's a string
     if (typeof timesheetDetails === 'string') {
-        timesheetDetails = JSON.parse(timesheetDetails);
+        try {
+            timesheetDetails = JSON.parse(timesheetDetails);
+        } catch (e) {
+            console.error("Failed to parse timesheetDetails:", e);
+            showMessage('❌ Error: Could not parse timesheet data', 'error');
+            return;
+        }
     }
     
     const printWindow = window.open('', '_blank');
+    
+    if (!printWindow) {
+        showMessage('❌ Please allow pop-ups to print the timesheet', 'error');
+        return;
+    }
     
     // Calculate subtotals by location
     const locationTotals = {};
@@ -1183,7 +1284,7 @@ window.printTimesheet = function(refNumber, timesheetDetails) {
     Object.keys(locationTotals).forEach(location => {
         locationSummaryHtml += `
             <tr>
-                <td>${location}</td>
+                <td>${escapeHtml(location)}</td>
                 <td>${locationTotals[location].hours.toFixed(2)}</td>
                 <td>$${locationTotals[location].earnings.toFixed(2)}</td>
             </tr>
@@ -1196,11 +1297,11 @@ window.printTimesheet = function(refNumber, timesheetDetails) {
         entriesTableHtml += `
             <tr>
                 <td>${entry.date}</td>
-                <td>${entry.location}</td>
+                <td>${escapeHtml(entry.location)}</td>
                 <td>${entry.hours}</td>
                 <td>$${entry.rate}/hr</td>
                 <td>$${entry.earnings}</td>
-                <td>${entry.notes || ''}</td>
+                <td>${escapeHtml(entry.notes || '')}</td>
             </tr>
         `;
     });
@@ -1402,6 +1503,15 @@ window.printTimesheet = function(refNumber, timesheetDetails) {
                 .notes li {
                     margin-bottom: 5px;
                 }
+                
+                /* Print buttons */
+                .print-buttons {
+                    text-align: center;
+                    margin: 20px 0;
+                    padding: 20px;
+                    background: #f8f9fa;
+                    border-radius: 8px;
+                }
             </style>
         </head>
         <body>
@@ -1506,27 +1616,29 @@ window.printTimesheet = function(refNumber, timesheetDetails) {
                 </ul>
             </div>
             
+            <!-- Print Buttons -->
+            <div class="print-buttons no-print">
+                <button onclick="window.print()" style="padding: 12px 30px; background: #667eea; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin: 10px;">
+                    <i class="fas fa-print"></i> Print Timesheet
+                </button>
+                <button onclick="window.close()" style="padding: 12px 30px; background: #6c757d; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin: 10px;">
+                    <i class="fas fa-times"></i> Close Window
+                </button>
+                <button onclick="saveAsPDF()" style="padding: 12px 30px; background: #28a745; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin: 10px;">
+                    <i class="fas fa-download"></i> Save as PDF
+                </button>
+            </div>
+            
             <!-- Footer -->
             <div class="footer">
                 <p>Generated by Cleaning Timesheet Manager • ${formatDate(new Date())}</p>
                 <p>Thank you for your business!</p>
-                <div class="no-print" style="margin-top: 20px; text-align: center;">
-                    <button onclick="window.print()" style="padding: 12px 30px; background: #667eea; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin: 10px;">
-                        <i class="fas fa-print"></i> Print Timesheet
-                    </button>
-                    <button onclick="window.close()" style="padding: 12px 30px; background: #6c757d; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin: 10px;">
-                        <i class="fas fa-times"></i> Close Window
-                    </button>
-                </div>
             </div>
             
             <script>
-                // Auto-print option (commented out by default)
-                // window.onload = function() {
-                //     setTimeout(function() {
-                //         window.print();
-                //     }, 1000);
-                // };
+                function saveAsPDF() {
+                    alert('To save as PDF, use the "Print" option and choose "Save as PDF" as your printer.');
+                }
                 
                 // Add page break for printing
                 const style = document.createElement('style');
@@ -1534,9 +1646,13 @@ window.printTimesheet = function(refNumber, timesheetDetails) {
                     @media print {
                         .summary-section, table { break-inside: avoid; }
                         h3.section-title { margin-top: 20px; }
+                        .print-buttons { display: none !important; }
                     }
                 \`;
                 document.head.appendChild(style);
+                
+                // Focus the window for better UX
+                window.focus();
             </script>
         </body>
         </html>
