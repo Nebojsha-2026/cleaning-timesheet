@@ -5,7 +5,7 @@ async function loadLocations() {
     try {
         console.log('📍 Loading locations...');
       
-        const { data: locations, error } = await supabase
+        const { data: locations, error } = await window.supabaseClient
             .from('locations')
             .select('*')
             .eq('is_active', true)
@@ -30,6 +30,7 @@ async function loadLocations() {
     }
 }
 
+// Create location datalist
 function createLocationDatalist() {
     const input = document.getElementById('location');
     const datalist = document.createElement('datalist');
@@ -39,10 +40,40 @@ function createLocationDatalist() {
     return datalist;
 }
 
-// Add the missing function for the Manage Locations button
+// Find or create location
+async function findOrCreateLocation(name, defaultHours = 2.0, hourlyRate = window.CONFIG.DEFAULT_HOURLY_RATE) {
+    try {
+        const { data: existing, error: findError } = await window.supabaseClient
+            .from('locations')
+            .select('id')
+            .eq('name', name)
+            .eq('is_active', true)
+            .limit(1);
+      
+        if (findError) throw findError;
+        if (existing?.length > 0) return existing[0].id;
+      
+        const { data: newLoc, error: createError } = await window.supabaseClient
+            .from('locations')
+            .insert([{ name, default_hours: defaultHours, hourly_rate: hourlyRate, is_active: true }])
+            .select()
+            .single();
+      
+        if (createError) throw createError;
+      
+        await loadLocations();
+        return newLoc.id;
+      
+    } catch (error) {
+        console.error('❌ Location error:', error);
+        throw new Error('Could not find or create location');
+    }
+}
+
+// View all locations
 window.viewLocations = async function() {
     try {
-        const { data: locations, error } = await supabase
+        const { data: locations, error } = await window.supabaseClient
             .from('locations')
             .select('*')
             .order('name');
@@ -88,7 +119,6 @@ window.viewLocations = async function() {
 
         showModal(html);
         
-        // Add event listeners for buttons
         setTimeout(() => {
             document.querySelectorAll('.edit-location').forEach(button => {
                 button.addEventListener('click', function() {
@@ -110,10 +140,10 @@ window.viewLocations = async function() {
     }
 };
 
-// Add edit location function
+// Edit location
 window.editLocation = async function(id) {
     try {
-        const { data: location, error } = await supabase
+        const { data: location, error } = await window.supabaseClient
             .from('locations')
             .select('*')
             .eq('id', id)
@@ -165,7 +195,7 @@ window.editLocation = async function(id) {
             const hours = parseFloat(document.getElementById('editLocHours').value);
             const isActive = document.getElementById('editLocActive').checked;
 
-            const { error: updateError } = await supabase
+            const { error: updateError } = await window.supabaseClient
                 .from('locations')
                 .update({ name, hourly_rate: rate, default_hours: hours, is_active: isActive })
                 .eq('id', id);
@@ -177,7 +207,6 @@ window.editLocation = async function(id) {
             await loadLocations();
         });
         
-        // Add cancel button listener
         document.querySelector('.cancel-btn').addEventListener('click', closeModal);
     } catch (error) {
         console.error('❌ Error editing location:', error);
@@ -185,7 +214,7 @@ window.editLocation = async function(id) {
     }
 };
 
-// Add delete location function
+// Delete location
 window.deleteLocation = function(id) {
     console.log("Delete location clicked for ID:", id);
 
@@ -209,7 +238,6 @@ window.deleteLocation = function(id) {
 
     showModal(html);
     
-    // Add event listeners after modal is shown
     setTimeout(() => {
         const modalContent = document.querySelector('.modal-content');
         const locationId = modalContent.getAttribute('data-location-id');
@@ -218,16 +246,14 @@ window.deleteLocation = function(id) {
             console.log("Confirming delete for location ID:", locationId);
             
             try {
-                // First delete all entries associated with this location
-                const { error: entriesError } = await supabase
+                const { error: entriesError } = await window.supabaseClient
                     .from('entries')
                     .delete()
                     .eq('location_id', locationId);
 
                 if (entriesError) throw entriesError;
 
-                // Then delete the location
-                const { error: locationError } = await supabase
+                const { error: locationError } = await window.supabaseClient
                     .from('locations')
                     .delete()
                     .eq('id', locationId);
@@ -248,13 +274,5 @@ window.deleteLocation = function(id) {
         document.querySelector('.cancel-btn').addEventListener('click', closeModal);
     }, 100);
 };
-
-// Make functions globally accessible
-window.loadLocations = loadLocations;
-
-// Signal that this module is loaded
-if (typeof checkModulesLoaded !== 'undefined') {
-    checkModulesLoaded();
-}
 
 console.log('✅ Locations module loaded');
