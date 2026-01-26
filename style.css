@@ -901,3 +901,109 @@ input[type="hidden"] {
         font-size: 0.8rem;
     }
 }
+/* Shift Scheduler Styles */
+.shift-view-selector .btn {
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+.shift-view-selector .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Time inputs */
+input[type="time"] {
+    font-family: inherit;
+}
+
+/* Shift status indicators */
+.shift-status {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-left: 10px;
+}
+
+.shift-status.confirmed {
+    background: #d4edda;
+    color: #155724;
+}
+
+.shift-status.pending {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.shift-status.cancelled {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+/* Shift items in list */
+.shift-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid #e9ecef;
+    transition: background-color 0.3s;
+}
+
+.shift-item:hover {
+    background-color: #f8f9fa;
+}
+
+.shift-item:last-child {
+    border-bottom: none;
+}
+
+.shift-info h4 {
+    font-weight: 600;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+}
+
+.shift-time {
+    color: #667eea;
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.shift-duration {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.shift-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+/* Recurring shift indicator */
+.recurring-indicator {
+    color: #28a745;
+    margin-left: 8px;
+    font-size: 0.8rem;
+}
+
+/* Shift filters */
+.shifts-filter {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.shifts-filter .form-control {
+    width: auto;
+    min-width: 150px;
+}
