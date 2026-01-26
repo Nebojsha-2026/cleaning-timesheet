@@ -39,16 +39,19 @@ async function initializeApp() {
     console.log('📱 Initializing app...');
   
     try {
-        // Set today's date
-        const today = new Date();
-        document.getElementById('date').value = today.toISOString().split('T')[0];
-        document.getElementById('currentDate').textContent = formatDate(today);
-      
-        // Set timesheet dates (last week)
-        const lastWeek = new Date(today);
-        lastWeek.setDate(today.getDate() - 7);
-        document.getElementById('startDate').value = lastWeek.toISOString().split('T')[0];
-        document.getElementById('endDate').value = today.toISOString().split('T')[0];
+        // Set today's date for shift scheduling
+const today = new Date();
+document.getElementById('currentDate').textContent = formatDate(today);
+
+// Set default dates for shift scheduler
+document.getElementById('shiftDate').value = today.toISOString().split('T')[0];
+document.getElementById('recurringStartDate').value = today.toISOString().split('T')[0];
+
+// Set timesheet dates (last week)
+const lastWeek = new Date(today);
+lastWeek.setDate(today.getDate() - 7);
+document.getElementById('startDate').value = lastWeek.toISOString().split('T')[0];
+document.getElementById('endDate').value = today.toISOString().split('T')[0];
       
         // Setup form handlers
         document.getElementById('entryForm').addEventListener('submit', handleAddEntry);
@@ -109,3 +112,4 @@ async function initializeApp() {
 
 // Final log
 console.log('🎉 Main script loaded');
+
