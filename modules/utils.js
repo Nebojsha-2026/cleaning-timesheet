@@ -8,6 +8,7 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Format date for display
 function formatDate(dateString) {
     try {
         const date = new Date(dateString);
@@ -17,6 +18,46 @@ function formatDate(dateString) {
     }
 }
 
+// Get start of week (Monday)
+function getStartOfWeek(date = new Date()) {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff));
+}
+
+// Get end of week (Sunday)
+function getEndOfWeek(date = new Date()) {
+    const start = getStartOfWeek(date);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return end;
+}
+
+// Get start of month
+function getStartOfMonth(date = new Date()) {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+// Get end of month
+function getEndOfMonth(date = new Date()) {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
+// Get start of fortnight (2 weeks from Monday)
+function getStartOfFortnight(date = new Date()) {
+    return getStartOfWeek(date);
+}
+
+// Get end of fortnight (2 weeks from Sunday)
+function getEndOfFortnight(date = new Date()) {
+    const start = getStartOfFortnight(date);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 13);
+    return end;
+}
+
+// Show message to user
 function showMessage(text, type = 'info') {
     let messageDiv = document.getElementById('formMessage');
     if (!messageDiv) {
@@ -37,6 +78,7 @@ function showMessage(text, type = 'info') {
     }
 }
 
+// Update connection status display
 function updateConnectionStatus(connected) {
     const statusDiv = document.getElementById('connectionStatus');
     if (statusDiv) {
@@ -47,6 +89,7 @@ function updateConnectionStatus(connected) {
     }
 }
 
+// Show error screen
 function showError(message) {
     const loadingScreen = document.getElementById('loadingScreen');
     if (loadingScreen) {
@@ -65,14 +108,12 @@ function showError(message) {
 
 // Modal Helpers
 function showModal(content) {
-    // Remove any existing modal first
     closeModal();
     
     const modal = document.createElement('div');
     modal.className = 'modal';
     modal.innerHTML = content;
     
-    // Add click outside to close
     modal.addEventListener('click', function(e) {
         if (e.target === modal) {
             closeModal();
@@ -83,7 +124,6 @@ function showModal(content) {
     if (modalsContainer) {
         modalsContainer.appendChild(modal);
     } else {
-        // Fallback: append to body
         document.body.appendChild(modal);
     }
 }
@@ -101,9 +141,20 @@ function validateEmail(email) {
     return re.test(email);
 }
 
-// Signal that this module is loaded
-if (typeof checkModulesLoaded !== 'undefined') {
-    checkModulesLoaded();
+// Test database connection
+async function testConnection() {
+    try {
+        console.log('🔌 Testing Supabase connection...');
+        const { data, error } = await window.supabaseClient.from('locations').select('count', { count: 'exact', head: true });
+      
+        if (error) throw error;
+      
+        console.log('✅ Database connection successful');
+        return true;
+    } catch (error) {
+        console.error('❌ Database connection failed:', error);
+        return false;
+    }
 }
 
 console.log('✅ Utils module loaded');
