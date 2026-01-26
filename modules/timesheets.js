@@ -1,5 +1,93 @@
 // Timesheets module - handles all timesheet-related operations
 
+// Load statistics
+async function loadStats() {
+    try {
+        console.log('📊 Loading statistics...');
+      
+        const { count: totalEntries, error: entriesError } = await window.supabaseClient
+            .from('entries')
+            .select('*', { count: 'exact', head: true });
+      
+        if (entriesError) throw entriesError;
+      
+        const { count: totalLocations, error: locationsError } = await window.supabaseClient
+            .from('locations')
+            .select('*', { count: 'exact', head: true });
+      
+        if (locationsError) throw locationsError;
+      
+        const { count: totalTimesheets, error: timesheetsError } = await window.supabaseClient
+            .from('timesheets')
+            .select('*', { count: 'exact', head: true });
+      
+        if (timesheetsError) throw timesheetsError;
+      
+        const { data: earningsData, error: earningsError } = await window.supabaseClient
+            .from('entries')
+            .select(`
+                hours,
+                locations (hourly_rate)
+            `);
+      
+        if (earningsError) throw earningsError;
+      
+        const totalEarnings = earningsData.reduce((sum, entry) => {
+            const rate = entry.locations?.hourly_rate || window.CONFIG.DEFAULT_HOURLY_RATE;
+            return sum + (parseFloat(entry.hours) * rate);
+        }, 0).toFixed(2);
+      
+        updateStatsDisplay({
+            totalEntries: totalEntries || 0,
+            totalLocations: totalLocations || 0,
+            totalTimesheets: totalTimesheets || 0,
+            totalEarnings: totalEarnings
+        });
+      
+        console.log('✅ Statistics loaded');
+      
+    } catch (error) {
+        console.error('❌ Error loading statistics:', error);
+    }
+}
+
+// Update stats display
+function updateStatsDisplay(stats) {
+    document.querySelectorAll('.stat-card')[0].innerHTML = `
+        <div class="stat-icon"><i class="fas fa-list"></i></div>
+        <div class="stat-info">
+            <h3>Total Entries</h3>
+            <div class="stat-value">${stats.totalEntries}</div>
+        </div>
+    `;
+  
+    document.querySelectorAll('.stat-card')[1].innerHTML = `
+        <div class="stat-icon"><i class="fas fa-map-marker-alt"></i></div>
+        <div class="stat-info">
+            <h3>Locations</h3>
+            <div class="stat-value">${stats.totalLocations}</div>
+        </div>
+    `;
+  
+    document.querySelectorAll('.stat-card')[2].innerHTML = `
+        <div class="stat-icon"><i class="fas fa-file-invoice-dollar"></i></div>
+        <div class="stat-info">
+            <h3>Timesheets</h3>
+            <div class="stat-value">${stats.totalTimesheets}</div>
+        </div>
+    `;
+  
+    document.querySelectorAll('.stat-card')[3].innerHTML = `
+        <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
+        <div class="stat-info">
+            <h3>Total Earned</h3>
+            <div class="stat-value">$${stats.totalEarnings}</div>
+        </div>
+    `;
+  
+    document.querySelectorAll('.stat-card').forEach(card => card.classList.remove('loading'));
+}
+
 // Generate Timesheet
 async function handleGenerateTimesheet(event) {
     event.preventDefault();
@@ -21,7 +109,7 @@ async function handleGenerateTimesheet(event) {
             throw new Error('Please enter a valid email address');
         }
       
-        const { data: entries, error: entriesError } = await supabase
+        const { data: entries, error: entriesError } = await window.supabaseClient
             .from('entries')
             .select(`
                 *,
@@ -36,13 +124,12 @@ async function handleGenerateTimesheet(event) {
       
         const totalHours = entries.reduce((sum, e) => sum + parseFloat(e.hours), 0);
         const totalEarnings = entries.reduce((sum, e) => {
-            const rate = e.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE;
+            const rate = e.locations?.hourly_rate || window.CONFIG.DEFAULT_HOURLY_RATE;
             return sum + (parseFloat(e.hours) * rate);
         }, 0).toFixed(2);
       
         const refNumber = 'TS' + new Date().getTime().toString().slice(-6);
       
-        // Prepare insert data - only include email fields if sending email
         const insertData = {
             ref_number: refNumber, 
             start_date: startDate, 
@@ -56,7 +143,7 @@ async function handleGenerateTimesheet(event) {
             insertData.email_address = emailAddress;
         }
       
-        const { data: timesheet, error: tsError } = await supabase
+        const { data: timesheet, error: tsError } = await window.supabaseClient
             .from('timesheets')
             .insert([insertData])
             .select()
@@ -64,7 +151,6 @@ async function handleGenerateTimesheet(event) {
       
         if (tsError) throw tsError;
       
-        // Prepare timesheet details for display/email
         const timesheetDetails = {
             refNumber,
             startDate,
@@ -76,8 +162,8 @@ async function handleGenerateTimesheet(event) {
                 date: formatDate(entry.work_date),
                 location: entry.locations?.name || 'Unknown',
                 hours: entry.hours,
-                rate: entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE,
-                earnings: (entry.hours * (entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE)).toFixed(2),
+                rate: entry.locations?.hourly_rate || window.CONFIG.DEFAULT_HOURLY_RATE,
+                earnings: (entry.hours * (entry.locations?.hourly_rate || window.CONFIG.DEFAULT_HOURLY_RATE)).toFixed(2),
                 notes: entry.notes || ''
             }))
         };
@@ -85,10 +171,8 @@ async function handleGenerateTimesheet(event) {
         showMessage(`✅ Timesheet ${refNumber} generated!`, 'success');
         await loadStats();
       
-        // Show timesheet details
         viewTimesheetDetails(timesheetDetails);
       
-        // Send email if requested
         if (sendEmail && emailAddress) {
             await sendTimesheetEmail(timesheetDetails, emailAddress);
         }
@@ -105,15 +189,90 @@ async function handleGenerateTimesheet(event) {
 // Send timesheet email
 async function sendTimesheetEmail(timesheetDetails, emailAddress) {
     try {
-        // For now, we'll show a message that email would be sent
-        // In a real app, you would integrate with an email service like SendGrid, etc.
-        console.log('📧 Would send timesheet to:', emailAddress);
-        console.log('Timesheet details:', timesheetDetails);
+        console.log('📧 Sending timesheet to:', emailAddress);
         
-        // Show a message that email functionality is coming soon
+        const emailContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px 10px 0 0; }
+                    .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 10px 10px; }
+                    .summary { background: white; padding: 15px; border-radius: 8px; margin: 15px 0; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+                    .footer { margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; color: #666; font-size: 12px; }
+                    table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+                    th { background: #667eea; color: white; padding: 10px; text-align: left; }
+                    td { padding: 8px 10px; border-bottom: 1px solid #ddd; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>Cleaning Timesheet</h1>
+                        <p>Reference: ${timesheetDetails.refNumber}</p>
+                    </div>
+                    <div class="content">
+                        <h2>Timesheet Summary</h2>
+                        <div class="summary">
+                            <p><strong>Period:</strong> ${formatDate(timesheetDetails.startDate)} to ${formatDate(timesheetDetails.endDate)}</p>
+                            <p><strong>Total Hours:</strong> ${timesheetDetails.totalHours} hrs</p>
+                            <p><strong>Total Earnings:</strong> $${timesheetDetails.totalEarnings} AUD</p>
+                            <p><strong>Number of Entries:</strong> ${timesheetDetails.entriesCount}</p>
+                        </div>
+                        
+                        <h3>Detailed Entries</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Location</th>
+                                    <th>Hours</th>
+                                    <th>Rate</th>
+                                    <th>Earnings</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${timesheetDetails.entries.map(entry => `
+                                    <tr>
+                                        <td>${entry.date}</td>
+                                        <td>${entry.location}</td>
+                                        <td>${entry.hours}</td>
+                                        <td>$${entry.rate}/hr</td>
+                                        <td>$${entry.earnings}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                            <tfoot>
+                                <tr style="font-weight: bold; background: #f0f0f0;">
+                                    <td colspan="2">TOTALS</td>
+                                    <td>${timesheetDetails.totalHours}</td>
+                                    <td></td>
+                                    <td>$${timesheetDetails.totalEarnings}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                        
+                        <p>You can also view and print this timesheet directly from the Cleaning Timesheet Manager app.</p>
+                        
+                        <div class="footer">
+                            <p>This timesheet was generated automatically by Cleaning Timesheet Manager.</p>
+                            <p>If you have any questions, please contact us.</p>
+                        </div>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `;
+        
+        const emailWindow = window.open('', '_blank');
+        emailWindow.document.write(emailContent);
+        emailWindow.document.close();
+        
         setTimeout(() => {
-            showMessage(`📧 Timesheet summary would be sent to ${emailAddress} (Email integration coming soon!)`, 'info');
-        }, 1000);
+            showMessage(`📧 Timesheet email preview opened in new tab. In production, this would be sent to ${emailAddress}`, 'success');
+        }, 500);
         
         return true;
     } catch (error) {
@@ -143,6 +302,8 @@ function viewTimesheetDetails(timesheetDetails) {
         `;
     });
   
+    const printBtnId = 'printBtn_' + Date.now();
+    
     const html = `
         <div class="modal-content">
             <h2>Timesheet ${timesheetDetails.refNumber}</h2>
@@ -175,7 +336,7 @@ function viewTimesheetDetails(timesheetDetails) {
             </div>
             
             <div style="margin-top: 20px; display: flex; gap: 10px;">
-                <button onclick="printTimesheet('${timesheetDetails.refNumber}', ${JSON.stringify(timesheetDetails).replace(/'/g, "\\'")})" class="btn btn-primary" style="flex:1;">
+                <button id="${printBtnId}" class="btn btn-primary" style="flex:1;">
                     <i class="fas fa-print"></i> Print/Export
                 </button>
                 <button onclick="closeModal()" class="btn" style="flex:1;">
@@ -186,18 +347,35 @@ function viewTimesheetDetails(timesheetDetails) {
     `;
   
     showModal(html);
+    
+    setTimeout(() => {
+        document.getElementById(printBtnId).addEventListener('click', function() {
+            printTimesheet(timesheetDetails.refNumber, timesheetDetails);
+        });
+    }, 100);
 }
 
-// Print timesheet - Updated with beautiful formatting
+// Print timesheet
 window.printTimesheet = function(refNumber, timesheetDetails) {
-    // Parse the timesheetDetails if it's a string
+    console.log("Printing timesheet:", refNumber);
+    
     if (typeof timesheetDetails === 'string') {
-        timesheetDetails = JSON.parse(timesheetDetails);
+        try {
+            timesheetDetails = JSON.parse(timesheetDetails);
+        } catch (e) {
+            console.error("Failed to parse timesheetDetails:", e);
+            showMessage('❌ Error: Could not parse timesheet data', 'error');
+            return;
+        }
     }
     
     const printWindow = window.open('', '_blank');
     
-    // Calculate subtotals by location
+    if (!printWindow) {
+        showMessage('❌ Please allow pop-ups to print the timesheet', 'error');
+        return;
+    }
+    
     const locationTotals = {};
     timesheetDetails.entries.forEach(entry => {
         if (!locationTotals[entry.location]) {
@@ -210,29 +388,27 @@ window.printTimesheet = function(refNumber, timesheetDetails) {
         locationTotals[entry.location].earnings += parseFloat(entry.earnings);
     });
     
-    // Create location summary HTML
     let locationSummaryHtml = '';
     Object.keys(locationTotals).forEach(location => {
         locationSummaryHtml += `
             <tr>
-                <td>${location}</td>
+                <td>${escapeHtml(location)}</td>
                 <td>${locationTotals[location].hours.toFixed(2)}</td>
                 <td>$${locationTotals[location].earnings.toFixed(2)}</td>
             </tr>
         `;
     });
     
-    // Create entries table HTML
     let entriesTableHtml = '';
     timesheetDetails.entries.forEach(entry => {
         entriesTableHtml += `
             <tr>
                 <td>${entry.date}</td>
-                <td>${entry.location}</td>
+                <td>${escapeHtml(entry.location)}</td>
                 <td>${entry.hours}</td>
                 <td>$${entry.rate}/hr</td>
                 <td>$${entry.earnings}</td>
-                <td>${entry.notes || ''}</td>
+                <td>${escapeHtml(entry.notes || '')}</td>
             </tr>
         `;
     });
@@ -434,6 +610,15 @@ window.printTimesheet = function(refNumber, timesheetDetails) {
                 .notes li {
                     margin-bottom: 5px;
                 }
+                
+                /* Print buttons */
+                .print-buttons {
+                    text-align: center;
+                    margin: 20px 0;
+                    padding: 20px;
+                    background: #f8f9fa;
+                    border-radius: 8px;
+                }
             </style>
         </head>
         <body>
@@ -531,44 +716,48 @@ window.printTimesheet = function(refNumber, timesheetDetails) {
                 <h4>Notes & Terms</h4>
                 <ul>
                     <li>This timesheet covers work completed during the specified period</li>
-                    <li>All amounts are in ${CONFIG.CURRENCY}</li>
-                    <li>Hourly rate: $${CONFIG.DEFAULT_HOURLY_RATE}/hr (standard)</li>
+                    <li>All amounts are in ${window.CONFIG.CURRENCY}</li>
+                    <li>Hourly rate: $${window.CONFIG.DEFAULT_HOURLY_RATE}/hr (standard)</li>
                     <li>Please contact for any discrepancies within 7 days</li>
                     <li>Payment due within 14 days of receipt</li>
                 </ul>
+            </div>
+            
+            <!-- Print Buttons -->
+            <div class="print-buttons no-print">
+                <button onclick="window.print()" style="padding: 12px 30px; background: #667eea; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin: 10px;">
+                    <i class="fas fa-print"></i> Print Timesheet
+                </button>
+                <button onclick="window.close()" style="padding: 12px 30px; background: #6c757d; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin: 10px;">
+                    <i class="fas fa-times"></i> Close Window
+                </button>
+                <button onclick="saveAsPDF()" style="padding: 12px 30px; background: #28a745; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin: 10px;">
+                    <i class="fas fa-download"></i> Save as PDF
+                </button>
             </div>
             
             <!-- Footer -->
             <div class="footer">
                 <p>Generated by Cleaning Timesheet Manager • ${formatDate(new Date())}</p>
                 <p>Thank you for your business!</p>
-                <div class="no-print" style="margin-top: 20px; text-align: center;">
-                    <button onclick="window.print()" style="padding: 12px 30px; background: #667eea; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin: 10px;">
-                        <i class="fas fa-print"></i> Print Timesheet
-                    </button>
-                    <button onclick="window.close()" style="padding: 12px 30px; background: #6c757d; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin: 10px;">
-                        <i class="fas fa-times"></i> Close Window
-                    </button>
-                </div>
             </div>
             
             <script>
-                // Auto-print option (commented out by default)
-                // window.onload = function() {
-                //     setTimeout(function() {
-                //         window.print();
-                //     }, 1000);
-                // };
+                function saveAsPDF() {
+                    alert('To save as PDF, use the "Print" option and choose "Save as PDF" as your printer.');
+                }
                 
-                // Add page break for printing
                 const style = document.createElement('style');
                 style.innerHTML = \`
                     @media print {
                         .summary-section, table { break-inside: avoid; }
                         h3.section-title { margin-top: 20px; }
+                        .print-buttons { display: none !important; }
                     }
                 \`;
                 document.head.appendChild(style);
+                
+                window.focus();
             </script>
         </body>
         </html>
@@ -576,10 +765,10 @@ window.printTimesheet = function(refNumber, timesheetDetails) {
     printWindow.document.close();
 };
 
-// VIEW TIMESHEETS FUNCTIONALITY
+// View all timesheets
 window.viewTimesheets = async function() {
     try {
-        const { data: timesheets, error } = await supabase
+        const { data: timesheets, error } = await window.supabaseClient
             .from('timesheets')
             .select('*')
             .order('created_at', { ascending: false });
@@ -635,7 +824,6 @@ window.viewTimesheets = async function() {
 
         showModal(html);
         
-        // Add event listeners for buttons
         setTimeout(() => {
             document.querySelectorAll('.view-timesheet-btn').forEach(button => {
                 button.addEventListener('click', function() {
@@ -660,7 +848,7 @@ window.viewTimesheets = async function() {
 // View specific timesheet by ID
 async function viewTimesheetById(id) {
     try {
-        const { data: timesheet, error: tsError } = await supabase
+        const { data: timesheet, error: tsError } = await window.supabaseClient
             .from('timesheets')
             .select('*')
             .eq('id', id)
@@ -668,8 +856,7 @@ async function viewTimesheetById(id) {
 
         if (tsError) throw tsError;
 
-        // Get entries for this timesheet period
-        const { data: entries, error: entriesError } = await supabase
+        const { data: entries, error: entriesError } = await window.supabaseClient
             .from('entries')
             .select(`
                 *,
@@ -692,8 +879,8 @@ async function viewTimesheetById(id) {
                 date: formatDate(entry.work_date),
                 location: entry.locations?.name || 'Unknown',
                 hours: entry.hours,
-                rate: entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE,
-                earnings: (entry.hours * (entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE)).toFixed(2),
+                rate: entry.locations?.hourly_rate || window.CONFIG.DEFAULT_HOURLY_RATE,
+                earnings: (entry.hours * (entry.locations?.hourly_rate || window.CONFIG.DEFAULT_HOURLY_RATE)).toFixed(2),
                 notes: entry.notes || ''
             })) || []
         };
@@ -705,7 +892,7 @@ async function viewTimesheetById(id) {
     }
 }
 
-// Delete timesheet - Fixed null reference error
+// Delete timesheet
 async function deleteTimesheet(id) {
     console.log("Delete timesheet clicked for ID:", id);
 
@@ -729,7 +916,6 @@ async function deleteTimesheet(id) {
 
     showModal(html);
     
-    // Add event listeners after modal is shown
     setTimeout(() => {
         const modalContent = document.querySelector('.modal-content');
         const timesheetId = modalContent.getAttribute('data-timesheet-id');
@@ -738,7 +924,7 @@ async function deleteTimesheet(id) {
             console.log("Confirming delete for timesheet ID:", timesheetId);
             
             try {
-                const { error } = await supabase
+                const { error } = await window.supabaseClient
                     .from('timesheets')
                     .delete()
                     .eq('id', timesheetId);
@@ -749,11 +935,9 @@ async function deleteTimesheet(id) {
                 showMessage('✅ Timesheet deleted successfully!', 'success');
                 await loadStats();
                 
-                // Check if the "All Timesheets" modal is still open before trying to refresh it
                 const allTimesheetsModal = document.querySelector('.modal-content h2');
                 if (allTimesheetsModal && allTimesheetsModal.textContent === 'All Timesheets') {
                     closeModal();
-                    // Re-open the timesheets view
                     setTimeout(() => {
                         viewTimesheets();
                     }, 300);
@@ -768,16 +952,171 @@ async function deleteTimesheet(id) {
     }, 100);
 };
 
-// Make functions globally accessible
-window.handleGenerateTimesheet = handleGenerateTimesheet;
-window.sendTimesheetEmail = sendTimesheetEmail;
-window.viewTimesheetDetails = viewTimesheetDetails;
-window.viewTimesheetById = viewTimesheetById;
-window.deleteTimesheet = deleteTimesheet;
+// Edit entry
+window.editEntry = async function(id) {
+    console.log("Edit clicked for entry ID:", id);
 
-// Signal that this module is loaded
-if (typeof checkModulesLoaded !== 'undefined') {
-    checkModulesLoaded();
-}
+    try {
+        const { data: entry, error } = await window.supabaseClient
+            .from('entries')
+            .select(`
+                *,
+                locations (id, name, hourly_rate)
+            `)
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+
+        const locationName = escapeHtml(entry.locations.name);
+        const hourlyRate = entry.locations.hourly_rate;
+        const hours = entry.hours;
+        const workDate = entry.work_date;
+        const notes = entry.notes ? escapeHtml(entry.notes) : '';
+
+        const html = `
+            <div class="modal-content">
+                <h2>Edit Entry</h2>
+                <form id="editEntryForm">
+                    <div class="form-group">
+                        <label for="editLocationName">Location Name</label>
+                        <input type="text" id="editLocationName" value="${locationName}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editRate">Hourly Rate ($)</label>
+                        <input type="number" id="editRate" value="${hourlyRate}" step="0.01" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editHours">Hours</label>
+                        <input type="number" id="editHours" value="${hours}" step="0.5" min="0.5" max="24" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editDate">Date</label>
+                        <input type="date" id="editDate" value="${workDate}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editNotes">Notes (optional)</label>
+                        <textarea id="editNotes" rows="2">${notes}</textarea>
+                    </div>
+                    <div style="margin-top:20px; display:flex; gap:10px;">
+                        <button type="submit" class="btn btn-primary" style="flex:1;">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                        <button type="button" class="btn cancel-btn" style="flex:1; background:#6c757d; color:white;">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        `;
+
+        showModal(html);
+        
+        document.getElementById('editEntryForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const newLocName = document.getElementById('editLocationName').value.trim();
+            const newRate = parseFloat(document.getElementById('editRate').value);
+            const newHours = parseFloat(document.getElementById('editHours').value);
+            const newDate = document.getElementById('editDate').value;
+            const newNotes = document.getElementById('editNotes').value.trim();
+
+            const { error: entryErr } = await window.supabaseClient
+                .from('entries')
+                .update({ hours: newHours, work_date: newDate, notes: newNotes })
+                .eq('id', id);
+
+            if (entryErr) throw entryErr;
+
+            const { error: locErr } = await window.supabaseClient
+                .from('locations')
+                .update({ name: newLocName, hourly_rate: newRate })
+                .eq('id', entry.locations.id);
+
+            if (locErr) throw locErr;
+
+            closeModal();
+            showMessage('✅ Entry & location updated!', 'success');
+            await loadStats();
+            await loadRecentEntries();
+            await loadLocations();
+        });
+        
+        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
+        
+    } catch (error) {
+        console.error("Edit entry error:", error);
+        showMessage('❌ Error: ' + error.message, 'error');
+    }
+};
+
+// Delete entry
+window.deleteEntry = function(id) {
+    console.log("Delete clicked for entry ID:", id);
+
+    const html = `
+        <div class="modal-content" data-entry-id="${id}">
+            <h2>Confirm Delete</h2>
+            <p style="margin:15px 0;">Are you sure you want to delete this entry?</p>
+            <p style="color:#dc3545; font-weight:bold;">This cannot be undone.</p>
+            <div style="margin-top:20px; display:flex; gap:10px;">
+                <button class="btn btn-primary confirm-delete-btn" style="flex:1; background:#dc3545; border:none;">
+                    <i class="fas fa-trash"></i> Yes, Delete
+                </button>
+                <button class="btn cancel-btn" style="flex:1;">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    `;
+
+    showModal(html);
+    
+    setTimeout(() => {
+        const modalContent = document.querySelector('.modal-content');
+        const entryId = modalContent.getAttribute('data-entry-id');
+        
+        document.querySelector('.confirm-delete-btn').addEventListener('click', async function() {
+            console.log("Confirming delete for ID:", entryId);
+            
+            try {
+                const { error } = await window.supabaseClient
+                    .from('entries')
+                    .delete()
+                    .eq('id', entryId);
+
+                if (error) throw error;
+
+                closeModal();
+                showMessage('✅ Entry deleted successfully!', 'success');
+                await loadStats();
+                await loadRecentEntries();
+            } catch (error) {
+                console.error("Delete error:", error);
+                showMessage('❌ Error deleting entry: ' + error.message, 'error');
+            }
+        });
+        
+        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
+    }, 100);
+};
+
+// Action buttons
+window.refreshData = async function() {
+    console.log('🔄 Refreshing data...');
+    showMessage('Refreshing data...', 'info');
+    await loadStats();
+    await loadRecentEntries();
+    await loadLocations();
+    showMessage('✅ Data refreshed!', 'success');
+};
+
+window.generateTimesheet = function() {
+    document.getElementById('timesheetForm').scrollIntoView({ behavior: 'smooth' });
+};
+
+window.exportData = function() { alert('Export coming soon!'); };
+window.showSettings = function() { alert('Settings coming soon!'); };
+window.showHelp = function() { alert('Help coming soon!'); };
 
 console.log('✅ Timesheets module loaded');
