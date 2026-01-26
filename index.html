@@ -76,87 +76,166 @@
             <div class="two-column">
                 <!-- Left Column -->
                 <div class="column">
-                    <!-- Add Entry Form -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h2><i class="fas fa-plus-circle"></i> Add New Entry</h2>
-                        </div>
-                        <div class="card-body">
-                            <form id="entryForm">
-                                <div class="form-group">
-                                    <label for="entryMode"><i class="fas fa-calendar"></i> Entry Mode</label>
-                                    <select id="entryMode" class="form-control">
-                                        <option value="daily">Daily Entry</option>
-                                        <option value="weekly">Weekly Entry</option>
-                                        <option value="monthly">Monthly Entry</option>
-                                    </select>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="location"><i class="fas fa-map-marker-alt"></i> Location</label>
-                                    <input type="text" id="location" placeholder="e.g., Main Office, Private House" required list="locationList">
-                                    <datalist id="locationList"></datalist>
-                                </div>
-                                
-                                <div class="form-group" id="rateGroup" style="display: none;">
-                                    <label for="rate"><i class="fas fa-dollar-sign"></i> Hourly Rate (Optional, default $23)</label>
-                                    <input type="number" id="rate" min="1" step="0.01" placeholder="e.g., 25.00">
-                                </div>
-                                
-                                <!-- Daily Entry Section -->
-                                <div id="dailyEntrySection">
-                                    <div class="form-row">
-                                        <div class="form-group">
-                                            <label for="hours"><i class="fas fa-clock"></i> Hours</label>
-                                            <input type="number" id="hours" min="0.5" max="24" step="0.5" value="2.0" required>
-                                        </div>
-                                        <div class="form-group">
-                                            <label for="date"><i class="fas fa-calendar"></i> Date</label>
-                                            <input type="date" id="date" required>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Weekly Entry Section (initially hidden) -->
-                                <div id="weeklyEntrySection" style="display: none;">
-                                    <div class="form-group">
-                                        <label for="weekDate"><i class="fas fa-calendar"></i> Week Starting (Monday)</label>
-                                        <input type="date" id="weekDate" required>
-                                    </div>
-                                    
-                                    <div class="form-group">
-                                        <label><i class="fas fa-calendar-days"></i> Select Days Worked This Week</label>
-                                        <div id="weekDaysContainer" class="days-container"></div>
-                                    </div>
-                                    
-                                    <div id="weeklyHoursContainer" class="hours-container">
-                                        <p style="color: #666; text-align: center; padding: 20px;">Select days above to enter hours</p>
-                                    </div>
-                                </div>
-                                
-                                <!-- Monthly Entry Section (initially hidden) -->
-                                <div id="monthlyEntrySection" style="display: none;">
-                                    <div id="monthSelectionContainer" class="month-selection"></div>
-                                    
-                                    <div id="monthDaysContainer" class="month-days-container"></div>
-                                    
-                                    <div id="monthlyHoursContainer" class="hours-container">
-                                        <p style="color: #666; text-align: center; padding: 20px;">Select days above to enter hours</p>
-                                    </div>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="notes"><i class="fas fa-sticky-note"></i> Notes (Optional)</label>
-                                    <textarea id="notes" rows="2" placeholder="Any additional notes..."></textarea>
-                                </div>
-                                
-                                <button type="submit" class="btn btn-primary btn-block">
-                                    <i class="fas fa-check"></i> Add Entry
-                                </button>
-                            </form>
-                            <div id="formMessage" class="message"></div>
-                        </div>
+                    <!-- Shift Scheduler -->
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-calendar-plus"></i> Schedule Shift</h2>
+        <button onclick="toggleShiftView()" class="btn-icon" title="Switch View">
+            <i class="fas fa-exchange-alt"></i>
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="shift-view-selector" style="margin-bottom: 20px;">
+            <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                <button id="singleShiftBtn" class="btn" style="flex: 1; background: #667eea; color: white;">
+                    <i class="fas fa-calendar-day"></i> Single Shift
+                </button>
+                <button id="recurringShiftBtn" class="btn" style="flex: 1; background: #f8f9fa; color: #333;">
+                    <i class="fas fa-calendar-week"></i> Recurring Shift
+                </button>
+            </div>
+        </div>
+
+        <!-- Single Shift Form -->
+        <form id="singleShiftForm" style="display: block;">
+            <div class="form-group">
+                <label for="shiftLocation"><i class="fas fa-map-marker-alt"></i> Location</label>
+                <input type="text" id="shiftLocation" placeholder="e.g., Main Office, Private House" required list="locationList">
+                <datalist id="locationList"></datalist>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="shiftDate"><i class="fas fa-calendar"></i> Date</label>
+                    <input type="date" id="shiftDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="shiftStartTime"><i class="fas fa-clock"></i> Start Time</label>
+                    <input type="time" id="shiftStartTime" required value="09:00">
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="shiftDuration"><i class="fas fa-hourglass-half"></i> Duration (hours)</label>
+                    <input type="number" id="shiftDuration" min="0.5" max="12" step="0.5" value="2.0" required>
+                </div>
+                <div class="form-group">
+                    <label for="shiftRate"><i class="fas fa-dollar-sign"></i> Rate ($/hr)</label>
+                    <input type="number" id="shiftRate" min="1" step="0.01" value="23.00" required>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="shiftNotes"><i class="fas fa-sticky-note"></i> Notes/Instructions</label>
+                <textarea id="shiftNotes" rows="2" placeholder="Special instructions, requirements, access details..."></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label class="checkbox">
+                    <input type="checkbox" id="shiftConfirmed">
+                    <span>Confirmed with client/manager</span>
+                </label>
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-block">
+                <i class="fas fa-calendar-plus"></i> Schedule Shift
+            </button>
+        </form>
+
+        <!-- Recurring Shift Form (initially hidden) -->
+        <form id="recurringShiftForm" style="display: none;">
+            <div class="form-group">
+                <label for="recurringLocation"><i class="fas fa-map-marker-alt"></i> Location</label>
+                <input type="text" id="recurringLocation" placeholder="e.g., Main Office, Private House" required list="locationList">
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="recurringStartDate"><i class="fas fa-calendar"></i> Start Date</label>
+                    <input type="date" id="recurringStartDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="recurringEndDate"><i class="fas fa-calendar"></i> End Date (optional)</label>
+                    <input type="date" id="recurringEndDate">
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label><i class="fas fa-calendar-days"></i> Recurrence Pattern</label>
+                <select id="recurrencePattern" class="form-control">
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="weekdays">Weekdays (Mon-Fri)</option>
+                    <option value="weekends">Weekends (Sat-Sun)</option>
+                    <option value="custom">Custom Days</option>
+                </select>
+            </div>
+            
+            <!-- Custom days selection (initially hidden) -->
+            <div id="customDaysSection" style="display: none; margin-top: 15px;">
+                <label style="margin-bottom: 10px; display: block;">Select Days:</label>
+                <div class="days-selection">
+                    <div class="day-selector">
+                        <input type="checkbox" id="recDay0" class="day-checkbox">
+                        <label for="recDay0" class="day-label">Mon</label>
                     </div>
+                    <div class="day-selector">
+                        <input type="checkbox" id="recDay1" class="day-checkbox">
+                        <label for="recDay1" class="day-label">Tue</label>
+                    </div>
+                    <div class="day-selector">
+                        <input type="checkbox" id="recDay2" class="day-checkbox">
+                        <label for="recDay2" class="day-label">Wed</label>
+                    </div>
+                    <div class="day-selector">
+                        <input type="checkbox" id="recDay3" class="day-checkbox">
+                        <label for="recDay3" class="day-label">Thu</label>
+                    </div>
+                    <div class="day-selector">
+                        <input type="checkbox" id="recDay4" class="day-checkbox">
+                        <label for="recDay4" class="day-label">Fri</label>
+                    </div>
+                    <div class="day-selector">
+                        <input type="checkbox" id="recDay5" class="day-checkbox">
+                        <label for="recDay5" class="day-label">Sat</label>
+                    </div>
+                    <div class="day-selector">
+                        <input type="checkbox" id="recDay6" class="day-checkbox">
+                        <label for="recDay6" class="day-label">Sun</label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="recurringStartTime"><i class="fas fa-clock"></i> Start Time</label>
+                    <input type="time" id="recurringStartTime" required value="09:00">
+                </div>
+                <div class="form-group">
+                    <label for="recurringDuration"><i class="fas fa-hourglass-half"></i> Duration (hours)</label>
+                    <input type="number" id="recurringDuration" min="0.5" max="12" step="0.5" value="2.0" required>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="recurringRate"><i class="fas fa-dollar-sign"></i> Rate ($/hr)</label>
+                <input type="number" id="recurringRate" min="1" step="0.01" value="23.00" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="recurringNotes"><i class="fas fa-sticky-note"></i> Notes/Instructions</label>
+                <textarea id="recurringNotes" rows="2" placeholder="Special instructions, requirements, access details..."></textarea>
+            </div>
+            
+            <button type="submit" class="btn btn-success btn-block">
+                <i class="fas fa-calendar-alt"></i> Schedule Recurring Shifts
+            </button>
+        </form>
+        
+        <div id="shiftMessage" class="message"></div>
+    </div>
+</div>
                     <!-- Recent Entries -->
                     <div class="card">
                         <div class="card-header">
@@ -326,4 +405,5 @@
 <script src="script.js"></script>
 </body>
 </html>
+
 
