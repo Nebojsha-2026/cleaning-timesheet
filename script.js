@@ -54,12 +54,13 @@ document.getElementById('startDate').value = lastWeek.toISOString().split('T')[0
 document.getElementById('endDate').value = today.toISOString().split('T')[0];
       
         // Setup form handlers
-        document.getElementById('entryForm').addEventListener('submit', handleAddEntry);
-        document.getElementById('timesheetForm').addEventListener('submit', handleGenerateTimesheet);
-      
-        // Setup location input listener
-        document.getElementById('location').addEventListener('input', handleLocationInput);
-        document.getElementById('location').addEventListener('change', handleLocationSelection);
+document.getElementById('singleShiftForm').addEventListener('submit', handleAddSingleShift);
+document.getElementById('recurringShiftForm').addEventListener('submit', handleAddRecurringShift);
+document.getElementById('timesheetForm').addEventListener('submit', handleGenerateTimesheet);
+
+// Setup location input listener
+document.getElementById('shiftLocation').addEventListener('input', handleLocationInput);
+document.getElementById('recurringLocation').addEventListener('input', handleLocationInput);
         
         // Setup email notification checkbox
         const emailCheckbox = document.getElementById('sendEmail');
@@ -112,4 +113,5 @@ document.getElementById('endDate').value = today.toISOString().split('T')[0];
 
 // Final log
 console.log('🎉 Main script loaded');
+
 
