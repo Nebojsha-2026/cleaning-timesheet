@@ -8,14 +8,16 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
+    <!-- Loading Screen -->
     <div id="loadingScreen" class="loading-screen">
         <div class="loading-content">
             <div class="spinner"></div>
-            <h2>Connecting...</h2>
+            <h2>Connecting to Timesheet Manager</h2>
+            <p>Please wait...</p>
         </div>
     </div>
 
-    <div class="container" style="display: none; max-width: 500px; margin-top: 80px;">
+    <div class="container" style="display: none; max-width: 500px; margin-top: 100px;">
         <div class="card">
             <div class="card-header">
                 <h2><i class="fas fa-sign-in-alt"></i> Login</h2>
@@ -24,23 +26,25 @@
                 <form id="loginForm">
                     <div class="form-group">
                         <label for="email"><i class="fas fa-envelope"></i> Email</label>
-                        <input type="email" id="email" required placeholder="your@email.com">
+                        <input type="email" id="email" placeholder="your@email.com" required>
                     </div>
 
                     <div class="form-group">
                         <label for="password"><i class="fas fa-lock"></i> Password</label>
-                        <input type="password" id="password" required placeholder="••••••••">
+                        <input type="password" id="password" placeholder="••••••••" required>
                     </div>
 
                     <button type="submit" class="btn btn-primary btn-block">
                         <i class="fas fa-sign-in-alt"></i> Login
                     </button>
 
-                    <p style="text-align:center; margin-top:20px;">
-                        No account? <a href="register.html" style="color:var(--primary-color);">Register here</a>
-                    </p>
+                    <div style="text-align: center; margin-top: 20px;">
+                        <a href="register.html" style="color: var(--primary-color); text-decoration: none;">
+                            Don't have an account? Register here
+                        </a>
+                    </div>
 
-                    <div id="formMessage" class="message" style="margin-top:20px; display:none;"></div>
+                    <div id="loginMessage" class="message" style="margin-top: 20px; display: none;"></div>
                 </form>
             </div>
         </div>
@@ -55,7 +59,7 @@
             document.querySelector('.container').style.display = 'block';
 
             const form = document.getElementById('loginForm');
-            const message = document.getElementById('formMessage');
+            const messageDiv = document.getElementById('loginMessage');
 
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
@@ -63,18 +67,30 @@
                 const email = document.getElementById('email').value.trim();
                 const password = document.getElementById('password').value;
 
-                message.textContent = 'Logging in...';
-                message.className = 'message info';
-                message.style.display = 'block';
+                if (!email || !password) {
+                    messageDiv.textContent = 'Please fill in all fields';
+                    messageDiv.className = 'message error';
+                    messageDiv.style.display = 'block';
+                    return;
+                }
+
+                messageDiv.textContent = 'Logging in...';
+                messageDiv.className = 'message info';
+                messageDiv.style.display = 'block';
 
                 const result = await auth.login(email, password);
 
                 if (result.success) {
-                    message.textContent = 'Success! Redirecting...';
-                    message.className = 'message success';
+                    messageDiv.textContent = 'Success! Redirecting...';
+                    messageDiv.className = 'message success';
+
+                    // Force redirect after success (auth.js may delay)
+                    setTimeout(() => {
+                        window.location.href = 'manager.html';  // Change to index.html if employee
+                    }, 1500);
                 } else {
-                    message.textContent = result.error || 'Login failed';
-                    message.className = 'message error';
+                    messageDiv.textContent = result.error || 'Login failed';
+                    messageDiv.className = 'message error';
                 }
             });
         });
