@@ -84,8 +84,17 @@ async function initializeApp() {
             entryMode.addEventListener('change', handleEntryModeChange);
         }
         
-        // Initialize entry mode UI
+        // Initialize entry mode UI (with error handling)
+try {
+    if (typeof initializeEntryModeUI === 'function') {
         initializeEntryModeUI();
+    } else {
+        console.log('ℹ️ initializeEntryModeUI function not found - skipping');
+    }
+} catch (error) {
+    console.log('⚠️ Error initializing entry mode UI:', error.message);
+    // Don't crash the app - this is non-critical
+}
         
         // Setup custom dates button
         const customDatesBtn = document.getElementById('customDatesBtn');
@@ -535,3 +544,4 @@ window.generateExport = function() {
 
 // Final log
 console.log('🎉 Main script loaded (Employee Version)');
+
