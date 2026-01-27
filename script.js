@@ -213,7 +213,7 @@ async function saveCompanySettings() {
     if (file) {
         // Placeholder for future real upload
         showMessage('Logo upload coming soon – using placeholder for now', 'info');
-        logoUrl = 'https://via.placeholder.com/200x60/667eea/ffffff?text=' + encodeURIComponent(title.substring(0,3));
+        logoUrl = 'https://placehold.co/200x60/' + primary.replace('#','') + '/ffffff/png?text=' + encodeURIComponent(title.substring(0,3));
     }
 
     const updates = {
@@ -266,4 +266,5 @@ function showCompanySettings() {
 function refreshShifts() { showMessage('Refreshing shifts...', 'info'); }
 
 console.log('🎉 Manager dashboard script fully loaded');
+
 
