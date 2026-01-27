@@ -917,4 +917,5 @@ window.createTestManager = async function() {
     }
 };
 
-console.log('🎉 Main
+console.log('🎉 Main')
+
