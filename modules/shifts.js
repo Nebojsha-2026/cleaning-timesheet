@@ -872,7 +872,7 @@ async function deleteStaff(id) {
             </p>
             <div style="margin-top:20px; display:flex; gap:10px;">
                 <button class="btn confirm-delete-staff-btn" data-id="${id}" style="flex:1; background:#dc3545; color:white; border:none;">
-                    <i class="fas fa-trash"></i> Yes, Delete
+                    <i class="fas fa-trash"></i> Yes, Delete>
                 </button>
                 <button class="btn cancel-btn" style="flex:1;">
                     <i class="fas fa-times"></i> Cancel
