@@ -1151,3 +1151,139 @@ input[type="time"] {
     outline: none;
     border-color: #667eea;
 }
+/* Employee Shift Styles */
+.shifts-list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.shift-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 15px;
+    border-bottom: 1px solid #e9ecef;
+    transition: background-color 0.3s;
+}
+
+.shift-item:hover {
+    background-color: #f8f9fa;
+}
+
+.shift-item.today-shift {
+    background-color: #e8f4fd;
+    border-left: 4px solid #2196F3;
+}
+
+.today-badge {
+    display: inline-block;
+    background: #2196F3;
+    color: white;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-left: 8px;
+    font-weight: bold;
+}
+
+.shift-info h4 {
+    font-weight: 600;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.shift-info p {
+    color: #666;
+    font-size: 0.95rem;
+    margin-bottom: 3px;
+}
+
+.shift-actions-employee {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 120px;
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+}
+
+/* Button colors for shift actions */
+.btn-success {
+    background: #28a745;
+    color: white;
+    border: none;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+    border: none;
+}
+
+.btn-primary {
+    background: #007bff;
+    color: white;
+    border: none;
+}
+
+.btn-warning {
+    background: #ffc107;
+    color: #212529;
+    border: none;
+}
+
+/* Shift status badges */
+.shift-status {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.shift-status.pending {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.shift-status.confirmed {
+    background: #d4edda;
+    color: #155724;
+}
+
+.shift-status.in-progress {
+    background: #cce5ff;
+    color: #004085;
+}
+
+.shift-status.completed {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.shift-status.cancelled {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .shift-item {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .shift-actions-employee {
+        width: 100%;
+        flex-direction: row;
+        justify-content: flex-end;
+    }
+}
