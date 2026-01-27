@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Timesheet Manager</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loadingScreen" class="loading-screen">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h2>Setting up your account</h2>
+            <p>Please wait...</p>
+        </div>
+    </div>
+
+    <div class="container" style="display: none; max-width: 500px; margin-top: 100px;">
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-user-plus"></i> Register as Manager</h2>
+            </div>
+            <div class="card-body">
+                <form id="registerForm">
+                    <div class="form-group">
+                        <label for="companyName"><i class="fas fa-building"></i> Company Name</label>
+                        <input type="text" id="companyName" placeholder="My Cleaning Company" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="email"><i class="fas fa-envelope"></i> Email</label>
+                        <input type="email" id="email" placeholder="your@email.com" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password"><i class="fas fa-lock"></i> Password</label>
+                        <input type="password" id="password" placeholder="••••••••" required minlength="6">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="passwordConfirm"><i class="fas fa-lock"></i> Confirm Password</label>
+                        <input type="password" id="passwordConfirm" placeholder="••••••••" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-block">
+                        <i class="fas fa-user-plus"></i> Create Manager Account
+                    </button>
+
+                    <div style="text-align: center; margin-top: 20px;">
+                        <a href="login.html" style="color: var(--primary-color); text-decoration: none;">
+                            Already have an account? Login here
+                        </a>
+                    </div>
+
+                    <div id="registerMessage" class="message" style="margin-top: 20px;"></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
+    <script src="modules/utils.js"></script>
+    <script src="modules/auth.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('loadingScreen').style.display = 'none';
+            document.querySelector('.container').style.display = 'block';
+
+            const form = document.getElementById('registerForm');
+            const messageDiv = document.getElementById('registerMessage');
+
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const companyName = document.getElementById('companyName').value.trim();
+                const email = document.getElementById('email').value.trim();
+                const password = document.getElementById('password').value;
+                const passwordConfirm = document.getElementById('passwordConfirm').value;
+
+                if (!companyName || !email || !password) {
+                    messageDiv.textContent = 'Please fill in all fields';
+                    messageDiv.className = 'message error';
+                    messageDiv.style.display = 'block';
+                    return;
+                }
+
+                if (password !== passwordConfirm) {
+                    messageDiv.textContent = 'Passwords do not match';
+                    messageDiv.className = 'message error';
+                    messageDiv.style.display = 'block';
+                    return;
+                }
+
+                if (password.length < 6) {
+                    messageDiv.textContent = 'Password must be at least 6 characters';
+                    messageDiv.className = 'message error';
+                    messageDiv.style.display = 'block';
+                    return;
+                }
+
+                messageDiv.textContent = 'Creating account...';
+                messageDiv.className = 'message info';
+                messageDiv.style.display = 'block';
+
+                const result = await auth.registerManager(email, password, companyName);
+
+                if (result.success) {
+                    messageDiv.textContent = 'Account created! Redirecting...';
+                    messageDiv.className = 'message success';
+
+                    // Redirect handled by auth.js onAuthStateChange
+                    setTimeout(() => {}, 2000);
+                } else {
+                    messageDiv.textContent = result.error || 'Registration failed';
+                    messageDiv.className = 'message error';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
