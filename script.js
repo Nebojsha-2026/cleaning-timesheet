@@ -78,7 +78,7 @@ async function initializeApp() {
             timesheetPeriod.addEventListener('change', handleTimesheetPeriodChange);
         }
         
-        Setup entry mode selector (for work entries, not shifts)
+        //Setup entry mode selector (for work entries, not shifts)
         const entryMode = document.getElementById('entryMode');
         if (entryMode) {
            entryMode.addEventListener('change', handleEntryModeChange);
@@ -544,6 +544,7 @@ window.generateExport = function() {
 
 // Final log
 console.log('🎉 Main script loaded (Employee Version)');
+
 
 
 
