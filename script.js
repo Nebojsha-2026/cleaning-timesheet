@@ -79,20 +79,20 @@ async function initializeApp() {
         }
         
         // Setup entry mode selector (for work entries, not shifts)
-        const entryMode = document.getElementById('entryMode');
-        if (entryMode) {
-            entryMode.addEventListener('change', handleEntryModeChange);
-        }
+        //const entryMode = document.getElementById('entryMode');
+        //if (entryMode) {
+           // entryMode.addEventListener('change', handleEntryModeChange);
+       // }
         
         // Initialize entry mode UI (with error handling)
-try {
-    if (typeof initializeEntryModeUI === 'function') {
-        initializeEntryModeUI();
-    } else {
-        console.log('ℹ️ initializeEntryModeUI function not found - skipping');
-    }
-} catch (error) {
-    console.log('⚠️ Error initializing entry mode UI:', error.message);
+//try {
+    //if (typeof initializeEntryModeUI === 'function') {
+       // initializeEntryModeUI();
+  //  } else {
+     //   console.log('ℹ️ initializeEntryModeUI function not found - skipping');
+ //   }
+//} catch (error) {
+   // console.log('⚠️ Error initializing entry mode UI:', error.message);
     // Don't crash the app - this is non-critical
 }
         
@@ -544,4 +544,5 @@ window.generateExport = function() {
 
 // Final log
 console.log('🎉 Main script loaded (Employee Version)');
+
 
