@@ -8,16 +8,14 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-    <!-- Loading Screen -->
     <div id="loadingScreen" class="loading-screen">
         <div class="loading-content">
             <div class="spinner"></div>
-            <h2>Connecting to Timesheet Manager</h2>
-            <p>Please wait...</p>
+            <h2>Connecting...</h2>
         </div>
     </div>
 
-    <div class="container" style="display: none; max-width: 500px; margin-top: 100px;">
+    <div class="container" style="display: none; max-width: 500px; margin-top: 80px;">
         <div class="card">
             <div class="card-header">
                 <h2><i class="fas fa-sign-in-alt"></i> Login</h2>
@@ -26,25 +24,23 @@
                 <form id="loginForm">
                     <div class="form-group">
                         <label for="email"><i class="fas fa-envelope"></i> Email</label>
-                        <input type="email" id="email" placeholder="your@email.com" required>
+                        <input type="email" id="email" required placeholder="your@email.com">
                     </div>
 
                     <div class="form-group">
                         <label for="password"><i class="fas fa-lock"></i> Password</label>
-                        <input type="password" id="password" placeholder="••••••••" required>
+                        <input type="password" id="password" required placeholder="••••••••">
                     </div>
 
                     <button type="submit" class="btn btn-primary btn-block">
                         <i class="fas fa-sign-in-alt"></i> Login
                     </button>
 
-                    <div style="text-align: center; margin-top: 20px;">
-                        <a href="register.html" style="color: var(--primary-color); text-decoration: none;">
-                            Don't have an account? Register here
-                        </a>
-                    </div>
+                    <p style="text-align:center; margin-top:20px;">
+                        No account? <a href="register.html" style="color:var(--primary-color);">Register here</a>
+                    </p>
 
-                    <div id="loginMessage" class="message" style="margin-top: 20px;"></div>
+                    <div id="formMessage" class="message" style="margin-top:20px; display:none;"></div>
                 </form>
             </div>
         </div>
@@ -54,13 +50,12 @@
     <script src="modules/utils.js"></script>
     <script src="modules/auth.js"></script>
     <script>
-        // Simple login handler
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('loadingScreen').style.display = 'none';
             document.querySelector('.container').style.display = 'block';
 
             const form = document.getElementById('loginForm');
-            const messageDiv = document.getElementById('loginMessage');
+            const message = document.getElementById('formMessage');
 
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
@@ -68,30 +63,18 @@
                 const email = document.getElementById('email').value.trim();
                 const password = document.getElementById('password').value;
 
-                if (!email || !password) {
-                    messageDiv.textContent = 'Please fill in all fields';
-                    messageDiv.className = 'message error';
-                    messageDiv.style.display = 'block';
-                    return;
-                }
-
-                messageDiv.textContent = 'Logging in...';
-                messageDiv.className = 'message info';
-                messageDiv.style.display = 'block';
+                message.textContent = 'Logging in...';
+                message.className = 'message info';
+                message.style.display = 'block';
 
                 const result = await auth.login(email, password);
 
                 if (result.success) {
-                    messageDiv.textContent = 'Login successful! Redirecting...';
-                    messageDiv.className = 'message success';
-
-                    // Redirect based on role (handled in auth.js onAuthStateChange)
-                    setTimeout(() => {
-                        // auth.js already redirects based on role
-                    }, 1500);
+                    message.textContent = 'Success! Redirecting...';
+                    message.className = 'message success';
                 } else {
-                    messageDiv.textContent = result.error || 'Login failed';
-                    messageDiv.className = 'message error';
+                    message.textContent = result.error || 'Login failed';
+                    message.className = 'message error';
                 }
             });
         });
