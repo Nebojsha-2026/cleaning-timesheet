@@ -16,15 +16,25 @@ let appLocations = [];
 let currentEmployeeId = null;
 
 // Initialize App
-// In your script.js file, in the initializeApp() function, add this at the beginning:
-
-async function initializeApp() {
-    console.log('📱 Initializing app...');
+document.addEventListener('DOMContentLoaded', async function() {
+    console.log('✅ DOM Ready');
     
-    try {
-        // Initialize auth if available
-        if (typeof auth !== 'undefined' && typeof auth.initializeAuth === 'function') {
-            console.log('🔐 Initializing authentication system...');
+    if (!window.supabase) {
+        console.error('❌ Supabase global not found.');
+        throw new Error('Supabase not loaded');
+    }
+    
+    const { createClient } = window.supabase;
+    supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+    window.supabaseClient = supabase;
+    window.CONFIG = CONFIG;
+    
+    console.log('✅ Supabase client initialized');
+    
+    // Initialize auth if available
+    if (typeof auth !== 'undefined' && typeof auth.initializeAuth === 'function') {
+        console.log('🔐 Initializing authentication system...');
+        setTimeout(() => {
             auth.initializeAuth();
             
             // Check if user is authenticated
@@ -54,22 +64,8 @@ async function initializeApp() {
                     // Don't redirect yet - we'll handle this later
                 }
             }
-        }
-        
-document.addEventListener('DOMContentLoaded', async function() {
-    console.log('✅ DOM Ready');
-    
-    if (!window.supabase) {
-        console.error('❌ Supabase global not found.');
-        throw new Error('Supabase not loaded');
+        }, 500);
     }
-    
-    const { createClient } = window.supabase;
-    supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-    window.supabaseClient = supabase;
-    window.CONFIG = CONFIG;
-    
-    console.log('✅ Supabase client initialized');
     
     currentEmployeeId = await getCurrentEmployeeId();
     
@@ -108,6 +104,16 @@ async function initializeApp() {
         const today = new Date();
         document.getElementById('currentDate').textContent = formatDate(today);
 
+        // Set default dates for timesheet generator
+        const lastWeek = new Date(today);
+        lastWeek.setDate(today.getDate() - 7);
+        
+        const startDateInput = document.getElementById('startDate');
+        const endDateInput = document.getElementById('endDate');
+        
+        if (startDateInput) startDateInput.value = lastWeek.toISOString().split('T')[0];
+        if (endDateInput) endDateInput.value = today.toISOString().split('T')[0];
+      
         // Setup timesheet form
         const timesheetForm = document.getElementById('timesheetForm');
         if (timesheetForm) {
@@ -883,5 +889,32 @@ function formatTime(timeString) {
     return `${displayHour}:${minutes} ${ampm}`;
 }
 
-console.log('🎉 Main script loaded (Employee Version)');
+// TEST FUNCTION - Remove this later
+window.createTestManager = async function() {
+    console.log('🧪 Creating test manager account...');
+    
+    const email = `testmanager${Date.now()}@test.com`;
+    const companyName = `Test Company ${Date.now()}`;
+    
+    if (!window.auth || !window.auth.registerManager) {
+        console.error('❌ Auth module not loaded');
+        alert('Auth module not loaded. Check console for errors.');
+        return;
+    }
+    
+    const result = await auth.registerManager(email, 'test123', companyName);
+    
+    if (result.success) {
+        console.log('✅ Test manager created:', result.user.email);
+        console.log('Company:', result.company.name);
+        alert(`Test manager created!\nEmail: ${email}\nPassword: test123\nCompany: ${companyName}`);
+        
+        // Refresh to log in
+        window.location.reload();
+    } else {
+        console.error('❌ Failed to create test manager:', result.error);
+        alert('Error: ' + result.error);
+    }
+};
 
+console.log('🎉 Main
