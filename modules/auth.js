@@ -1,4 +1,4 @@
-// auth.js - Fixed role & company linking
+// auth.js - Fixed to avoid redirect loops on auth pages
 
 console.log('🔐 Real Auth module loading...');
 
@@ -16,6 +16,7 @@ let userRole = null;
 
 let supabase = null;
 
+// Safe Supabase init
 function initSupabase() {
     if (window.supabase && window.supabase.createClient) {
         supabase = window.supabase.createClient(
@@ -24,41 +25,46 @@ function initSupabase() {
         );
         window.supabaseClient = supabase;
         console.log('Supabase initialized');
+    } else {
+        console.error('Supabase script not loaded');
     }
 }
 
 initSupabase();
 
+// Initialize auth
 async function initializeAuth() {
-    if (!supabase) return;
+    if (!supabase) {
+        console.error('Supabase not ready');
+        return;
+    }
 
     supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('Auth event:', event);
+        console.log('Auth event:', event, session ? 'session exists' : 'no session');
+
+        // Skip redirect logic on login/register pages
+        const isAuthPage = window.location.pathname.includes('login.html') || 
+                           window.location.pathname.includes('register.html');
+
+        if (isAuthPage) {
+            console.log('On auth page - skipping redirect');
+            return;
+        }
 
         if (session?.user) {
             currentUser = session.user;
             currentToken = session.access_token;
 
-            // Get or create profile
-            let { data: profile, error } = await supabase
+            // Load profile
+            let profile = null;
+            const { data, error } = await supabase
                 .from('profiles')
                 .select('company_id, role')
                 .eq('id', currentUser.id)
                 .single();
 
-            if (error && error.code === 'PGRST116') {
-                // No profile – create default
-                const { data: newProfile, error: insertError } = await supabase
-                    .from('profiles')
-                    .insert([{ id: currentUser.id, role: 'employee' }])
-                    .select()
-                    .single();
-
-                if (insertError) {
-                    console.error('Create profile failed:', insertError);
-                } else {
-                    profile = newProfile;
-                }
+            if (!error && data) {
+                profile = data;
             }
 
             if (profile) {
@@ -76,23 +82,30 @@ async function initializeAuth() {
 
             console.log('Logged in as:', currentUser.email, userRole, currentCompanyId);
 
-            // Redirect
-            if (userRole === 'manager') {
+            // Redirect ONLY if not already on correct page
+            if (userRole === 'manager' && !window.location.pathname.includes('manager.html')) {
+                console.log('Redirecting manager to manager.html');
                 window.location.href = 'manager.html';
-            } else {
+            } else if (userRole !== 'manager' && !window.location.pathname.includes('index.html')) {
+                console.log('Redirecting employee to index.html');
                 window.location.href = 'index.html';
             }
 
         } else {
             clearAuth();
-            if (!window.location.pathname.includes('login.html') && !window.location.pathname.includes('register.html')) {
+            // Only redirect if not already on auth page
+            if (!isAuthPage) {
+                console.log('No session - redirecting to login');
                 window.location.href = 'login.html';
             }
         }
     });
 
+    // Check existing session
     const { data: { session } } = await supabase.auth.getSession();
-    if (session) supabase.auth.setSession(session);
+    if (session) {
+        supabase.auth.setSession(session);
+    }
 }
 
 // Login
@@ -111,12 +124,11 @@ async function login(email, password) {
     }
 }
 
-// Register manager – force manager role + company link
+// Register manager
 async function registerManager(email, password, companyName) {
     if (!supabase) throw new Error('Supabase not ready');
 
     try {
-        // Sign up
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
             email,
             password,
@@ -126,10 +138,8 @@ async function registerManager(email, password, companyName) {
         if (signUpError) throw signUpError;
         if (!authData.user) throw new Error('No user created');
 
-        // Wait longer for trigger
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 2000));
 
-        // Create company
         const { data: company, error: companyError } = await supabase
             .from('companies')
             .insert([{ 
@@ -143,31 +153,20 @@ async function registerManager(email, password, companyName) {
 
         if (companyError) throw companyError;
 
-        // Update profile – retry if needed
-        let updateSuccess = false;
-        for (let i = 0; i < 3; i++) {
-            const { error: updateError } = await supabase
-                .from('profiles')
-                .update({ 
-                    company_id: company.id,
-                    role: 'manager',
-                    name: 'Manager'
-                })
-                .eq('id', authData.user.id);
+        const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ 
+                company_id: company.id,
+                role: 'manager',
+                name: 'Manager'
+            })
+            .eq('id', authData.user.id);
 
-            if (!updateError) {
-                updateSuccess = true;
-                break;
-            }
-            await new Promise(r => setTimeout(r, 1000)); // retry delay
-        }
+        if (updateError) throw updateError;
 
-        if (!updateSuccess) throw new Error('Failed to update profile to manager');
-
-        // Auto sign-in
         await supabase.auth.signInWithPassword({ email, password });
 
-        console.log('Manager registered & logged in:', email, company.name);
+        console.log('Manager registered:', email, company.name);
         return { success: true, user: authData.user, company };
     } catch (err) {
         console.error('Register failed:', err.message);
