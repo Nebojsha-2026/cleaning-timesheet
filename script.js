@@ -83,6 +83,19 @@ async function initializeApp() {
 
         // Initialize shift buttons
         initializeShiftButtons();
+        
+        // Setup recurrence pattern change listener
+        const recurrencePattern = document.getElementById('recurrencePattern');
+        if (recurrencePattern) {
+            recurrencePattern.addEventListener('change', function() {
+                const customDaysSection = document.getElementById('customDaysSection');
+                if (this.value === 'custom') {
+                    customDaysSection.style.display = 'block';
+                } else {
+                    customDaysSection.style.display = 'none';
+                }
+            });
+        }
       
         // Test connection
         const connected = await testConnection();
@@ -101,6 +114,8 @@ async function initializeApp() {
                 await loadStats();
                 await loadLocations();
                 await loadRecentEntries();
+                await loadStaff(); // Load staff members
+                await loadUpcomingShifts(); // Load upcoming shifts
             }, 500);
           
         } else {
@@ -115,193 +130,31 @@ async function initializeApp() {
 }
 
 // ============================================
-// SHIFT SCHEDULER FUNCTIONS
+// SHIFT BUTTON INITIALIZATION
 // ============================================
 
-// Initialize shift buttons
 function initializeShiftButtons() {
-    document.getElementById('singleShiftBtn').addEventListener('click', function() {
-        document.getElementById('singleShiftForm').style.display = 'block';
-        document.getElementById('recurringShiftForm').style.display = 'none';
-        this.style.background = '#667eea';
-        this.style.color = 'white';
-        document.getElementById('recurringShiftBtn').style.background = '#f8f9fa';
-        document.getElementById('recurringShiftBtn').style.color = '#333';
-    });
-    
-    document.getElementById('recurringShiftBtn').addEventListener('click', function() {
-        document.getElementById('singleShiftForm').style.display = 'none';
-        document.getElementById('recurringShiftForm').style.display = 'block';
-        this.style.background = '#667eea';
-        this.style.color = 'white';
-        document.getElementById('singleShiftBtn').style.background = '#f8f9fa';
-        document.getElementById('singleShiftBtn').style.color = '#333';
-    });
-}
-
-// Toggle between single and recurring shift views
-function toggleShiftView() {
     const singleShiftBtn = document.getElementById('singleShiftBtn');
     const recurringShiftBtn = document.getElementById('recurringShiftBtn');
-    const singleForm = document.getElementById('singleShiftForm');
-    const recurringForm = document.getElementById('recurringShiftForm');
     
-    if (singleForm.style.display === 'none') {
-        // Show single shift form
-        singleForm.style.display = 'block';
-        recurringForm.style.display = 'none';
-        singleShiftBtn.style.background = '#667eea';
-        singleShiftBtn.style.color = 'white';
-        recurringShiftBtn.style.background = '#f8f9fa';
-        recurringShiftBtn.style.color = '#333';
-    } else {
-        // Show recurring shift form
-        singleForm.style.display = 'none';
-        recurringForm.style.display = 'block';
-        recurringShiftBtn.style.background = '#667eea';
-        recurringShiftBtn.style.color = 'white';
-        singleShiftBtn.style.background = '#f8f9fa';
-        singleShiftBtn.style.color = '#333';
-    }
-}
-
-// Handle recurrence pattern change
-document.addEventListener('DOMContentLoaded', function() {
-    const recurrencePattern = document.getElementById('recurrencePattern');
-    if (recurrencePattern) {
-        recurrencePattern.addEventListener('change', function() {
-            const customDaysSection = document.getElementById('customDaysSection');
-            if (this.value === 'custom') {
-                customDaysSection.style.display = 'block';
-            } else {
-                customDaysSection.style.display = 'none';
-            }
+    if (singleShiftBtn && recurringShiftBtn) {
+        singleShiftBtn.addEventListener('click', function() {
+            document.getElementById('singleShiftForm').style.display = 'block';
+            document.getElementById('recurringShiftForm').style.display = 'none';
+            this.style.background = '#667eea';
+            this.style.color = 'white';
+            recurringShiftBtn.style.background = '#f8f9fa';
+            recurringShiftBtn.style.color = '#333';
         });
-    }
-});
-
-// Handle single shift submission
-async function handleAddSingleShift(event) {
-    event.preventDefault();
-    
-    const button = event.target.querySelector('button[type="submit"]');
-    const originalText = button.innerHTML;
-    
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scheduling...';
-    button.disabled = true;
-    
-    try {
-        const location = document.getElementById('shiftLocation').value.trim();
-        const date = document.getElementById('shiftDate').value;
-        const startTime = document.getElementById('shiftStartTime').value;
-        const duration = parseFloat(document.getElementById('shiftDuration').value);
-        const rate = parseFloat(document.getElementById('shiftRate').value);
-        const notes = document.getElementById('shiftNotes').value.trim();
-        const confirmed = document.getElementById('shiftConfirmed').checked;
         
-        if (!location || !date || !startTime || !duration) {
-            throw new Error('Please fill in all required fields');
-        }
-        
-        // Create a shift object
-        const shift = {
-            location,
-            date,
-            start_time: startTime,
-            duration,
-            rate,
-            notes,
-            status: confirmed ? 'confirmed' : 'pending',
-            type: 'single',
-            created_at: new Date().toISOString()
-        };
-        
-        // For now, just show success message
-        // Later we'll save to database
-        showMessage(`✅ Shift scheduled for ${formatDate(date)} at ${startTime}`, 'success');
-        
-        // Clear form
-        document.getElementById('shiftLocation').value = '';
-        document.getElementById('shiftNotes').value = '';
-        document.getElementById('shiftConfirmed').checked = false;
-        
-    } catch (error) {
-        console.error('❌ Shift scheduling error:', error);
-        showMessage('❌ Error: ' + error.message, 'error');
-    } finally {
-        button.innerHTML = originalText;
-        button.disabled = false;
-    }
-}
-
-// Handle recurring shift submission
-async function handleAddRecurringShift(event) {
-    event.preventDefault();
-    
-    const button = event.target.querySelector('button[type="submit"]');
-    const originalText = button.innerHTML;
-    
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scheduling...';
-    button.disabled = true;
-    
-    try {
-        const location = document.getElementById('recurringLocation').value.trim();
-        const startDate = document.getElementById('recurringStartDate').value;
-        const endDate = document.getElementById('recurringEndDate').value;
-        const pattern = document.getElementById('recurrencePattern').value;
-        const startTime = document.getElementById('recurringStartTime').value;
-        const duration = parseFloat(document.getElementById('recurringDuration').value);
-        const rate = parseFloat(document.getElementById('recurringRate').value);
-        const notes = document.getElementById('recurringNotes').value.trim();
-        
-        if (!location || !startDate || !startTime || !duration) {
-            throw new Error('Please fill in all required fields');
-        }
-        
-        // Get selected days for custom pattern
-        let selectedDays = [];
-        if (pattern === 'custom') {
-            for (let i = 0; i < 7; i++) {
-                const checkbox = document.getElementById(`recDay${i}`);
-                if (checkbox && checkbox.checked) {
-                    selectedDays.push(i);
-                }
-            }
-            if (selectedDays.length === 0) {
-                throw new Error('Please select at least one day for custom schedule');
-            }
-        }
-        
-        // Create recurring shift pattern
-        const recurringShift = {
-            location,
-            start_date: startDate,
-            end_date: endDate || null,
-            pattern,
-            selected_days: selectedDays,
-            start_time: startTime,
-            duration,
-            rate,
-            notes,
-            status: 'pending',
-            type: 'recurring',
-            created_at: new Date().toISOString()
-        };
-        
-        // For now, just show success message
-        // Later we'll save to database
-        showMessage(`✅ Recurring shift scheduled starting ${formatDate(startDate)}`, 'success');
-        
-        // Clear form
-        document.getElementById('recurringLocation').value = '';
-        document.getElementById('recurringNotes').value = '';
-        
-    } catch (error) {
-        console.error('❌ Recurring shift error:', error);
-        showMessage('❌ Error: ' + error.message, 'error');
-    } finally {
-        button.innerHTML = originalText;
-        button.disabled = false;
+        recurringShiftBtn.addEventListener('click', function() {
+            document.getElementById('singleShiftForm').style.display = 'none';
+            document.getElementById('recurringShiftForm').style.display = 'block';
+            this.style.background = '#667eea';
+            this.style.color = 'white';
+            singleShiftBtn.style.background = '#f8f9fa';
+            singleShiftBtn.style.color = '#333';
+        });
     }
 }
 
@@ -315,6 +168,8 @@ window.refreshData = async function() {
     await loadStats();
     await loadRecentEntries();
     await loadLocations();
+    await loadStaff();
+    await loadUpcomingShifts();
     showMessage('✅ Data refreshed!', 'success');
 };
 
@@ -322,9 +177,40 @@ window.generateTimesheet = function() {
     document.getElementById('timesheetForm').scrollIntoView({ behavior: 'smooth' });
 };
 
-window.exportData = function() { alert('Export coming soon!'); };
-window.showSettings = function() { alert('Settings coming soon!'); };
-window.showHelp = function() { alert('Help coming soon!'); };
+window.exportData = function() { 
+    alert('Export feature coming soon!'); 
+};
+
+window.showSettings = function() { 
+    // Open settings modal
+    const html = `
+        <div class="modal-content">
+            <h2>Settings</h2>
+            <div style="margin-bottom: 20px;">
+                <h3>Staff Management</h3>
+                <button onclick="viewStaff()" class="btn" style="width: 100%; margin-bottom: 10px;">
+                    <i class="fas fa-users"></i> Manage Staff
+                </button>
+            </div>
+            <div style="margin-bottom: 20px;">
+                <h3>Shift Management</h3>
+                <button onclick="viewShiftCalendar()" class="btn" style="width: 100%; margin-bottom: 10px;">
+                    <i class="fas fa-calendar-alt"></i> Shift Calendar
+                </button>
+            </div>
+            <div>
+                <button onclick="closeModal()" class="btn" style="width: 100%;">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
+        </div>
+    `;
+    showModal(html);
+};
+
+window.showHelp = function() { 
+    alert('Help documentation coming soon!'); 
+};
 
 // Final log
 console.log('🎉 Main script loaded');
