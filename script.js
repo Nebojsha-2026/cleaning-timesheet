@@ -166,21 +166,34 @@ function setupCompanySettingsForm() {
 async function loadCurrentCompanySettings() {
     if (!currentCompanyId) return;
 
-    const { data: company, error } = await supabase
-        .from('companies')
-        .select('custom_title, primary_color, secondary_color, default_pay_frequency')
-        .eq('id', currentCompanyId)
-        .single();
+    try {
+        const { data: company, error } = await supabase
+            .from('companies')
+            .select('custom_title, primary_color, secondary_color, default_pay_frequency')
+            .eq('id', currentCompanyId)
+            .single();
 
-    if (error || !company) {
-        console.warn('No company settings found');
-        return;
+        if (error) {
+            console.warn('Settings load query failed:', error.message);
+            if (error.code === 'PGRST116') { // No rows
+                showMessage('No company settings row found', 'info');
+            } else if (error.code === '42703') { // Column does not exist
+                showMessage('Database column missing – please add default_pay_frequency', 'error');
+            }
+            return;
+        }
+
+        if (!company) return;
+
+        document.getElementById('companyTitle').value = company.custom_title || 'Cleaning Timesheet';
+        document.getElementById('primaryColor').value = company.primary_color || '#667eea';
+        document.getElementById('secondaryColor').value = company.secondary_color || '#764ba2';
+        document.getElementById('defaultPayFrequency').value = company.default_pay_frequency || 'weekly';
+
+        console.log('Form loaded with:', company);
+    } catch (err) {
+        console.error('Settings load error:', err);
     }
-
-    document.getElementById('companyTitle').value = company.custom_title || 'Cleaning Timesheet';
-    document.getElementById('primaryColor').value = company.primary_color || '#667eea';
-    document.getElementById('secondaryColor').value = company.secondary_color || '#764ba2';
-    document.getElementById('defaultPayFrequency').value = company.default_pay_frequency || 'weekly';
 }
 
 // Save company settings
@@ -253,3 +266,4 @@ function showCompanySettings() {
 function refreshShifts() { showMessage('Refreshing shifts...', 'info'); }
 
 console.log('🎉 Manager dashboard script fully loaded');
+
