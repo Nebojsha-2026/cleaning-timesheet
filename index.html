@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cleaning Timesheet Manager</title>
+    <title>Cleaning Timesheet Manager - Employee View</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -16,13 +16,14 @@
             <p>Connecting to your data...</p>
         </div>
     </div>
+    
     <!-- Main Container -->
     <div class="container" style="display: none;">
         <!-- Header -->
         <header class="header">
             <div class="header-content">
                 <h1><i class="fas fa-broom"></i> Cleaning Timesheet</h1>
-                <p class="subtitle">Track your cleaning jobs and generate invoices</p>
+                <p class="subtitle">Employee Dashboard - Track your shifts and earnings</p>
                 <div class="header-stats">
                     <div class="stat-badge">
                         <i class="fas fa-clock"></i>
@@ -39,6 +40,7 @@
                 </div>
             </div>
         </header>
+        
         <!-- Main Content -->
         <main class="main-content">
             <!-- Quick Stats Row -->
@@ -72,191 +74,52 @@
                     </div>
                 </div>
             </div>
+            
             <!-- Two Column Layout -->
             <div class="two-column">
                 <!-- Left Column -->
                 <div class="column">
-                  <!-- My Shifts - Employee View -->
-<div class="card">
-    <div class="card-header">
-        <h2><i class="fas fa-calendar-alt"></i> My Upcoming Shifts</h2>
-        <button onclick="refreshMyShifts()" class="btn-icon">
-            <i class="fas fa-sync-alt"></i>
-        </button>
-    </div>
-    <div class="card-body">
-        <div id="myShiftsList" class="shifts-list">
-            <div class="loading-simple">
-                <div class="spinner-small"></div>
-                Loading shifts...
-            </div>
-        </div>
-        
-        <!-- Shift Actions (for accepted shifts) -->
-        <div id="shiftActions" style="margin-top: 20px; display: none;">
-            <h3 style="margin-bottom: 10px;">Shift Actions</h3>
-            <div class="actions-grid">
-                <button onclick="startShift()" class="action-btn" id="startShiftBtn">
-                    <i class="fas fa-play-circle"></i>
-                    <span>Start Shift</span>
-                </button>
-                <button onclick="completeShift()" class="action-btn" id="completeShiftBtn">
-                    <i class="fas fa-check-circle"></i>
-                    <span>Complete</span>
-                </button>
-                <button onclick="reportIssue()" class="action-btn">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <span>Report Issue</span>
-                </button>
-                <button onclick="requestTimeOff()" class="action-btn">
-                    <i class="fas fa-calendar-times"></i>
-                    <span>Time Off</span>
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-        <!-- Single Shift Form -->
-        <form id="singleShiftForm" style="display: block;">
-            <div class="form-group">
-                <label for="shiftLocation"><i class="fas fa-map-marker-alt"></i> Location</label>
-                <input type="text" id="shiftLocation" placeholder="e.g., Main Office, Private House" required list="locationList">
-                <datalist id="locationList"></datalist>
-            </div>
-            
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="shiftDate"><i class="fas fa-calendar"></i> Date</label>
-                    <input type="date" id="shiftDate" required>
-                </div>
-                <div class="form-group">
-                    <label for="shiftStartTime"><i class="fas fa-clock"></i> Start Time</label>
-                    <input type="time" id="shiftStartTime" required value="09:00">
-                </div>
-            </div>
-            
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="shiftDuration"><i class="fas fa-hourglass-half"></i> Duration (hours)</label>
-                    <input type="number" id="shiftDuration" min="0.5" max="12" step="0.5" value="2.0" required>
-                </div>
-                <div class="form-group">
-                    <label for="shiftRate"><i class="fas fa-dollar-sign"></i> Rate ($/hr)</label>
-                    <input type="number" id="shiftRate" min="1" step="0.01" value="23.00" required>
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label for="shiftNotes"><i class="fas fa-sticky-note"></i> Notes/Instructions</label>
-                <textarea id="shiftNotes" rows="2" placeholder="Special instructions, requirements, access details..."></textarea>
-            </div>
-            
-            <div class="form-group">
-                <label class="checkbox">
-                    <input type="checkbox" id="shiftConfirmed">
-                    <span>Confirmed with client/manager</span>
-                </label>
-            </div>
-            
-            <button type="submit" class="btn btn-primary btn-block">
-                <i class="fas fa-calendar-plus"></i> Schedule Shift
-            </button>
-        </form>
-
-        <!-- Recurring Shift Form (initially hidden) -->
-        <form id="recurringShiftForm" style="display: none;">
-            <div class="form-group">
-                <label for="recurringLocation"><i class="fas fa-map-marker-alt"></i> Location</label>
-                <input type="text" id="recurringLocation" placeholder="e.g., Main Office, Private House" required list="locationList">
-            </div>
-            
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="recurringStartDate"><i class="fas fa-calendar"></i> Start Date</label>
-                    <input type="date" id="recurringStartDate" required>
-                </div>
-                <div class="form-group">
-                    <label for="recurringEndDate"><i class="fas fa-calendar"></i> End Date (optional)</label>
-                    <input type="date" id="recurringEndDate">
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label><i class="fas fa-calendar-days"></i> Recurrence Pattern</label>
-                <select id="recurrencePattern" class="form-control">
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="weekdays">Weekdays (Mon-Fri)</option>
-                    <option value="weekends">Weekends (Sat-Sun)</option>
-                    <option value="custom">Custom Days</option>
-                </select>
-            </div>
-            
-            <!-- Custom days selection (initially hidden) -->
-            <div id="customDaysSection" style="display: none; margin-top: 15px;">
-                <label style="margin-bottom: 10px; display: block;">Select Days:</label>
-                <div class="days-selection">
-                    <div class="day-selector">
-                        <input type="checkbox" id="recDay0" class="day-checkbox">
-                        <label for="recDay0" class="day-label">Mon</label>
+                    <!-- My Shifts - Employee View -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-calendar-alt"></i> My Upcoming Shifts</h2>
+                            <button onclick="refreshMyShifts()" class="btn-icon">
+                                <i class="fas fa-sync-alt"></i>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="myShiftsList" class="shifts-list">
+                                <div class="loading-simple">
+                                    <div class="spinner-small"></div>
+                                    Loading shifts...
+                                </div>
+                            </div>
+                            
+                            <!-- Shift Actions (for accepted shifts) -->
+                            <div id="shiftActions" style="margin-top: 20px; display: none;">
+                                <h3 style="margin-bottom: 10px;">Shift Actions</h3>
+                                <div class="actions-grid">
+                                    <button onclick="startShift()" class="action-btn" id="startShiftBtn">
+                                        <i class="fas fa-play-circle"></i>
+                                        <span>Start Shift</span>
+                                    </button>
+                                    <button onclick="completeShift()" class="action-btn" id="completeShiftBtn">
+                                        <i class="fas fa-check-circle"></i>
+                                        <span>Complete</span>
+                                    </button>
+                                    <button onclick="reportIssue()" class="action-btn">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                        <span>Report Issue</span>
+                                    </button>
+                                    <button onclick="requestTimeOff()" class="action-btn">
+                                        <i class="fas fa-calendar-times"></i>
+                                        <span>Time Off</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="day-selector">
-                        <input type="checkbox" id="recDay1" class="day-checkbox">
-                        <label for="recDay1" class="day-label">Tue</label>
-                    </div>
-                    <div class="day-selector">
-                        <input type="checkbox" id="recDay2" class="day-checkbox">
-                        <label for="recDay2" class="day-label">Wed</label>
-                    </div>
-                    <div class="day-selector">
-                        <input type="checkbox" id="recDay3" class="day-checkbox">
-                        <label for="recDay3" class="day-label">Thu</label>
-                    </div>
-                    <div class="day-selector">
-                        <input type="checkbox" id="recDay4" class="day-checkbox">
-                        <label for="recDay4" class="day-label">Fri</label>
-                    </div>
-                    <div class="day-selector">
-                        <input type="checkbox" id="recDay5" class="day-checkbox">
-                        <label for="recDay5" class="day-label">Sat</label>
-                    </div>
-                    <div class="day-selector">
-                        <input type="checkbox" id="recDay6" class="day-checkbox">
-                        <label for="recDay6" class="day-label">Sun</label>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="recurringStartTime"><i class="fas fa-clock"></i> Start Time</label>
-                    <input type="time" id="recurringStartTime" required value="09:00">
-                </div>
-                <div class="form-group">
-                    <label for="recurringDuration"><i class="fas fa-hourglass-half"></i> Duration (hours)</label>
-                    <input type="number" id="recurringDuration" min="0.5" max="12" step="0.5" value="2.0" required>
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label for="recurringRate"><i class="fas fa-dollar-sign"></i> Rate ($/hr)</label>
-                <input type="number" id="recurringRate" min="1" step="0.01" value="23.00" required>
-            </div>
-            
-            <div class="form-group">
-                <label for="recurringNotes"><i class="fas fa-sticky-note"></i> Notes/Instructions</label>
-                <textarea id="recurringNotes" rows="2" placeholder="Special instructions, requirements, access details..."></textarea>
-            </div>
-            
-            <button type="submit" class="btn btn-success btn-block">
-                <i class="fas fa-calendar-alt"></i> Schedule Recurring Shifts
-            </button>
-        </form>
-        
-        <div id="shiftMessage" class="message"></div>
-    </div>
-</div>
+                    
                     <!-- Recent Entries -->
                     <div class="card">
                         <div class="card-header">
@@ -275,6 +138,7 @@
                         </div>
                     </div>
                 </div>
+                
                 <!-- Right Column -->
                 <div class="column">
                     <!-- Quick Actions -->
@@ -296,13 +160,14 @@
                                     <i class="fas fa-folder"></i>
                                     <span>View Timesheets</span>
                                 </button>
-                                <button onclick="exportData()" class="action-btn">
+                                <button onclick="exportMyData()" class="action-btn">
                                     <i class="fas fa-download"></i>
                                     <span>Export Data</span>
                                 </button>
                             </div>
                         </div>
                     </div>
+                    
                     <!-- Timesheet Generator -->
                     <div class="card">
                         <div class="card-header">
@@ -349,6 +214,7 @@
                                         <span>Send email notification</span>
                                     </label>
                                 </div>
+                                
                                 <!-- Email field (initially hidden) -->
                                 <div class="form-group" id="emailGroup" style="display: none;">
                                     <label for="emailAddress"><i class="fas fa-envelope"></i> Email Address</label>
@@ -365,6 +231,7 @@
                             </form>
                         </div>
                     </div>
+                    
                     <!-- System Info -->
                     <div class="card">
                         <div class="card-header">
@@ -404,9 +271,10 @@
                 </div>
             </div>
         </main>
+        
         <!-- Footer -->
         <footer class="footer">
-            <p>Cleaning Timesheet Manager • Powered by Supabase</p>
+            <p>Cleaning Timesheet Manager • Employee Dashboard • Powered by Supabase</p>
             <p class="footer-links">
                 <a href="#" onclick="showSettings()">Settings</a> •
                 <a href="#" onclick="showHelp()">Help</a> •
@@ -414,21 +282,19 @@
             </p>
         </footer>
     </div>
+    
     <!-- Modals Container -->
     <div id="modalsContainer"></div>
+    
     <!-- JavaScript Files -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
+    
     <!-- Load modules in correct order -->
-  <!-- In your index.html file, update the script loading section -->
-<script src="modules/utils.js"></script>
-<script src="modules/entries.js"></script>
-<script src="modules/locations.js"></script>
-<script src="modules/timesheets.js"></script>
-<script src="modules/shifts.js"></script> <!-- ADD THIS LINE -->
-<script src="script.js"></script>
+    <script src="modules/utils.js"></script>
+    <script src="modules/entries.js"></script>
+    <script src="modules/locations.js"></script>
+    <script src="modules/timesheets.js"></script>
+    <script src="modules/shifts.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
-
-
-
-
