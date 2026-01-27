@@ -1550,3 +1550,143 @@ input[type="time"] {
         padding: 8px;
     }
 }
+/* Period Selection Blocks - Smaller */
+.period-selection-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.period-block {
+    background: #f8f9fa;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 60px;
+}
+
+.period-block:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+    border-color: #667eea;
+}
+
+.period-block.selected {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-color: #667eea;
+    box-shadow: 0 3px 8px rgba(102, 126, 234, 0.3);
+}
+
+.period-block.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: #f0f0f0;
+}
+
+.period-block.disabled:hover {
+    transform: none;
+    box-shadow: none;
+    border-color: #e0e0e0;
+}
+
+.period-icon {
+    font-size: 1.2rem;
+    margin-bottom: 5px;
+}
+
+.period-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.period-description {
+    font-size: 0.7rem;
+    color: #666;
+    margin-top: 3px;
+}
+
+.period-block.selected .period-description {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.period-block.disabled .period-description {
+    color: #999;
+}
+
+/* Dates Display */
+.dates-display {
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    border: 1px solid #e9ecef;
+}
+
+.dates-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.date-column {
+    flex: 1;
+}
+
+.date-column:first-child {
+    margin-right: 10px;
+}
+
+.date-column strong {
+    display: block;
+    margin-bottom: 5px;
+    color: #333;
+    font-size: 0.9rem;
+}
+
+.date-value {
+    color: #667eea;
+    font-weight: 600;
+    font-size: 0.95rem;
+    min-height: 1.2rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .period-selection-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .dates-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .date-column {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+    
+    .date-column:first-child {
+        margin-right: 0;
+    }
+}
+
+@media (max-width: 480px) {
+    .period-selection-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .period-block {
+        min-height: 55px;
+        padding: 8px;
+    }
+}
