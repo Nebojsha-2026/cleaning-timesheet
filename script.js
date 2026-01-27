@@ -44,54 +44,61 @@ async function initializeApp() {
         document.getElementById('currentDate').textContent = formatDate(today);
 
         // Set default dates for shift scheduler
-        document.getElementById('shiftDate').value = today.toISOString().split('T')[0];
-        document.getElementById('recurringStartDate').value = today.toISOString().split('T')[0];
+        const shiftDateInput = document.getElementById('shiftDate');
+        const recurringStartDateInput = document.getElementById('recurringStartDate');
+        
+        if (shiftDateInput) shiftDateInput.value = today.toISOString().split('T')[0];
+        if (recurringStartDateInput) recurringStartDateInput.value = today.toISOString().split('T')[0];
 
         // Set timesheet dates (last week)
         const lastWeek = new Date(today);
         lastWeek.setDate(today.getDate() - 7);
-        document.getElementById('startDate').value = lastWeek.toISOString().split('T')[0];
-        document.getElementById('endDate').value = today.toISOString().split('T')[0];
-      
-        // Setup form handlers
-        document.getElementById('singleShiftForm').addEventListener('submit', handleAddSingleShift);
-        document.getElementById('recurringShiftForm').addEventListener('submit', handleAddRecurringShift);
-        document.getElementById('timesheetForm').addEventListener('submit', handleGenerateTimesheet);
-
-        // Setup location input listener
-        document.getElementById('shiftLocation').addEventListener('input', handleLocationInput);
-        document.getElementById('recurringLocation').addEventListener('input', handleLocationInput);
         
-        // Setup email notification checkbox
-        const emailCheckbox = document.getElementById('sendEmail');
-        if (emailCheckbox) {
-            emailCheckbox.addEventListener('change', handleEmailCheckbox);
-            handleEmailCheckbox({ target: emailCheckbox });
+        const startDateInput = document.getElementById('startDate');
+        const endDateInput = document.getElementById('endDate');
+        
+        if (startDateInput) startDateInput.value = lastWeek.toISOString().split('T')[0];
+        if (endDateInput) endDateInput.value = today.toISOString().split('T')[0];
+      
+        // Setup form handlers - ONLY IF ELEMENTS EXIST
+        const singleShiftForm = document.getElementById('singleShiftForm');
+        const recurringShiftForm = document.getElementById('recurringShiftForm');
+        const timesheetForm = document.getElementById('timesheetForm');
+        
+        console.log('Checking forms:', {
+            singleShiftForm: !!singleShiftForm,
+            recurringShiftForm: !!recurringShiftForm,
+            timesheetForm: !!timesheetForm
+        });
+        
+        if (singleShiftForm) {
+            console.log('✅ Adding listener to singleShiftForm');
+            singleShiftForm.addEventListener('submit', handleAddSingleShift);
         }
         
-        // Setup timesheet period selector
-        document.getElementById('timesheetPeriod').addEventListener('change', handleTimesheetPeriodChange);
+        if (recurringShiftForm) {
+            console.log('✅ Adding listener to recurringShiftForm');
+            recurringShiftForm.addEventListener('submit', handleAddRecurringShift);
+        }
         
-        // Setup entry mode selector
-        document.getElementById('entryMode').addEventListener('change', handleEntryModeChange);
-        
-        // Initialize entry mode UI
-        initializeEntryModeUI();
-        
-        // Setup custom dates button
-        document.getElementById('customDatesBtn').addEventListener('click', showCustomDatesPopup);
+        if (timesheetForm) {
+            console.log('✅ Adding listener to timesheetForm');
+            timesheetForm.addEventListener('submit', handleGenerateTimesheet);
+        }
 
         // Initialize shift buttons
-        initializeShiftButtons();
+        if (typeof initializeShiftButtons === 'function') {
+            initializeShiftButtons();
+        }
         
         // Setup recurrence pattern change listener
         const recurrencePattern = document.getElementById('recurrencePattern');
         if (recurrencePattern) {
             recurrencePattern.addEventListener('change', function() {
                 const customDaysSection = document.getElementById('customDaysSection');
-                if (this.value === 'custom') {
+                if (this.value === 'custom' && customDaysSection) {
                     customDaysSection.style.display = 'block';
-                } else {
+                } else if (customDaysSection) {
                     customDaysSection.style.display = 'none';
                 }
             });
@@ -114,8 +121,14 @@ async function initializeApp() {
                 await loadStats();
                 await loadLocations();
                 await loadRecentEntries();
-                await loadStaff(); // Load staff members
-                await loadUpcomingShifts(); // Load upcoming shifts
+                
+                // Load staff if database tables exist
+                try {
+                    await loadStaff();
+                } catch (error) {
+                    console.log('⚠️ Could not load staff (tables may not exist yet):', error.message);
+                }
+                
             }, 500);
           
         } else {
@@ -214,3 +227,4 @@ window.showHelp = function() {
 
 // Final log
 console.log('🎉 Main script loaded');
+
