@@ -26,20 +26,29 @@ document.addEventListener('DOMContentLoaded', async function() {
     window.supabaseClient = supabase;
     window.CONFIG = CONFIG;
 
-    // Very basic role/company detection for now (fake auth)
+    // Fake auth detection (for testing)
     currentUserRole = localStorage.getItem('cleaning_timesheet_role') || 'manager';
-    currentCompanyId = localStorage.getItem('cleaning_timesheet_company_id');
+    currentCompanyId = localStorage.getItem('cleaning_timesheet_company_id') || null;
 
-    // Temporary: skip strict role check to allow testing
+    console.log('Detected role:', currentUserRole);
+    console.log('Detected company ID:', currentCompanyId);
+
+    // Temporarily disabled strict role check so page can load for testing
     // if (currentUserRole !== 'manager') {
     //     alert('Access denied. This is the manager dashboard.');
     //     window.location.href = 'index.html';
     //     return;
     // }
 
-    await loadCompanyBranding();
-    await initializeDashboard();  // This line was failing before
+    try {
+        await loadCompanyBranding();
+        await initializeDashboard();
+    } catch (err) {
+        console.error('Initialization failed:', err);
+        showMessage('Failed to initialize dashboard. Check console.', 'error');
+    }
 
+    // Hide loading screen regardless (safety net)
     document.getElementById('loadingScreen').style.display = 'none';
     document.querySelector('.container').style.display = 'block';
 
@@ -51,7 +60,8 @@ document.addEventListener('DOMContentLoaded', async function() {
 async function loadCompanyBranding() {
     try {
         if (!currentCompanyId) {
-            console.log('No company ID found in localStorage – using defaults');
+            console.log('No company ID in localStorage → using defaults');
+            showMessage('No company selected – using default branding', 'info');
             return;
         }
 
@@ -64,22 +74,24 @@ async function loadCompanyBranding() {
         if (error) throw error;
         if (!company) {
             console.log('No company found for ID:', currentCompanyId);
+            showMessage('Company not found – using defaults', 'info');
             return;
         }
 
-        // Apply to UI
+        // Apply title
         const title = company.custom_title || 'Cleaning Timesheet';
         document.getElementById('appTitle').textContent = title;
         document.getElementById('footerCompany').textContent = `${company.name || 'Company'} Timesheet Manager • Powered by Supabase`;
         document.getElementById('currentCompanyName').textContent = company.name || 'My Company';
 
+        // Apply logo if exists
         if (company.logo_url) {
             const logo = document.getElementById('companyLogo');
             logo.src = company.logo_url;
             logo.style.display = 'inline-block';
         }
 
-        // Apply colors via CSS variables
+        // Apply colors
         if (company.primary_color) {
             document.documentElement.style.setProperty('--primary-color', company.primary_color);
         }
@@ -87,29 +99,29 @@ async function loadCompanyBranding() {
             document.documentElement.style.setProperty('--secondary-color', company.secondary_color);
         }
 
-        console.log('Company branding applied:', title);
+        console.log('✅ Branding applied:', title, company.primary_color, company.secondary_color);
 
     } catch (err) {
-        console.error('Could not load company branding:', err);
-        showMessage('Could not load company settings (using defaults)', 'info');
+        console.error('Branding load failed:', err);
+        showMessage('Could not load company branding (using defaults)', 'info');
     }
 }
 
-// Initialize the dashboard after branding is loaded
+// Initialize dashboard content
 async function initializeDashboard() {
     console.log('Initializing manager dashboard...');
 
-    // Test Supabase connection
+    // Test connection
     const connected = await testConnection();
     if (!connected) {
-        showMessage('Connection issues – some features may be limited', 'error');
+        showMessage('Connection issues detected – some features limited', 'error');
     }
 
-    // Set today's date in header
+    // Set current date
     const today = new Date();
     document.getElementById('currentDate').textContent = formatDate(today);
 
-    // Placeholder stats (replace with real queries later)
+    // Placeholder stats (replace with real data later)
     document.getElementById('statEmployees').textContent = '8';
     document.getElementById('statUpcomingShifts').textContent = '14';
     document.getElementById('statHours').textContent = '112';
@@ -120,34 +132,37 @@ async function initializeDashboard() {
     console.log('Dashboard initialization complete');
 }
 
-// Setup company settings form
+// Company settings form setup
 function setupCompanySettingsForm() {
     const form = document.getElementById('companySettingsForm');
-    if (!form) return;
+    if (!form) {
+        console.warn('Company settings form not found');
+        return;
+    }
 
-    // Load current values
     loadCurrentCompanySettings();
 
-    // Logo preview on file select
-    document.getElementById('logoUpload').addEventListener('change', function(e) {
+    // Logo preview
+    document.getElementById('logoUpload').addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
-            reader.onload = function(ev) {
+            reader.onload = (ev) => {
                 document.getElementById('logoPreview').innerHTML = 
-                    `<img src="${ev.target.result}" style="max-height:80px; max-width:100%;">`;
+                    `<img src="${ev.target.result}" style="max-height:80px; max-width:100%; border-radius:4px;">`;
             };
             reader.readAsDataURL(file);
         }
     });
 
-    // Form submit
-    form.addEventListener('submit', async function(e) {
+    // Submit handler
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
         await saveCompanySettings();
     });
 }
 
+// Load current company settings into form
 async function loadCurrentCompanySettings() {
     if (!currentCompanyId) return;
 
@@ -157,7 +172,10 @@ async function loadCurrentCompanySettings() {
         .eq('id', currentCompanyId)
         .single();
 
-    if (error || !company) return;
+    if (error || !company) {
+        console.warn('No company settings found');
+        return;
+    }
 
     document.getElementById('companyTitle').value = company.custom_title || 'Cleaning Timesheet';
     document.getElementById('primaryColor').value = company.primary_color || '#667eea';
@@ -165,9 +183,10 @@ async function loadCurrentCompanySettings() {
     document.getElementById('defaultPayFrequency').value = company.default_pay_frequency || 'weekly';
 }
 
+// Save company settings
 async function saveCompanySettings() {
     if (!currentCompanyId) {
-        showMessage('No company selected – cannot save settings', 'error');
+        showMessage('No company selected – cannot save', 'error');
         return;
     }
 
@@ -178,11 +197,9 @@ async function saveCompanySettings() {
     const file = document.getElementById('logoUpload').files[0];
 
     let logoUrl = null;
-
-    // Real logo upload would go here (next step)
-    // For now: placeholder
     if (file) {
-        showMessage('Logo upload feature coming in next update', 'info');
+        // Placeholder for future real upload
+        showMessage('Logo upload coming soon – using placeholder for now', 'info');
         logoUrl = 'https://via.placeholder.com/200x60/667eea/ffffff?text=' + encodeURIComponent(title.substring(0,3));
     }
 
@@ -200,17 +217,16 @@ async function saveCompanySettings() {
         .eq('id', currentCompanyId);
 
     if (error) {
-        showMessage('Error saving settings: ' + error.message, 'error');
-        console.error(error);
+        showMessage('Save failed: ' + error.message, 'error');
+        console.error('Save error:', error);
         return;
     }
 
-    showMessage('Company settings saved!', 'success');
-
-    // Re-apply branding
-    await loadCompanyBranding();
+    showMessage('Settings saved successfully!', 'success');
+    await loadCompanyBranding(); // Re-apply live changes
 }
 
+// Preview button handler
 function previewBrandingChanges() {
     const primary = document.getElementById('primaryColor').value;
     const secondary = document.getElementById('secondaryColor').value;
@@ -220,13 +236,13 @@ function previewBrandingChanges() {
     document.documentElement.style.setProperty('--secondary-color', secondary);
     document.getElementById('appTitle').textContent = title;
 
-    showMessage('Preview applied! Click "Save Settings" to keep changes.', 'info');
+    showMessage('Preview applied! Save to keep changes.', 'info');
 }
 
-// Placeholder functions (implement later)
-function showInviteEmployeeModal() { showMessage('Invite employee modal coming soon', 'info'); }
-function showCreateShiftModal() { showMessage('Create shift modal coming soon', 'info'); }
-function viewAllTimesheets() { showMessage('All timesheets view coming soon', 'info'); }
+// Placeholder action functions
+function showInviteEmployeeModal() { showMessage('Invite employee modal – coming soon', 'info'); }
+function showCreateShiftModal() { showMessage('Create shift modal – coming soon', 'info'); }
+function viewAllTimesheets() { showMessage('Timesheets overview – coming soon', 'info'); }
 function showCompanySettings() {
     const card = document.getElementById('companySettingsCard');
     if (card) {
@@ -236,7 +252,4 @@ function showCompanySettings() {
 }
 function refreshShifts() { showMessage('Refreshing shifts...', 'info'); }
 
-// Reuse showMessage from utils.js
-// (assuming you already updated utils.js with the global version)
-
-console.log('🎉 Manager dashboard script loaded');
+console.log('🎉 Manager dashboard script fully loaded');
