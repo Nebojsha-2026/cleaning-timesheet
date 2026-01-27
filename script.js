@@ -13,6 +13,7 @@ let currentEntryMode = 'daily';
 let selectedDaysOfWeek = [];
 let selectedMonthDays = [];
 let appLocations = [];
+let currentEmployeeId = null; // This would be set after login
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', async function() {
@@ -31,9 +32,38 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     console.log('✅ Supabase client initialized');
     
+    // For demo, simulate an employee ID
+    // In production, this would come from authentication
+    currentEmployeeId = await getCurrentEmployeeId();
+    
     // Initialize the app
     await initializeApp();
 });
+
+// Get current employee ID (simulated for now)
+async function getCurrentEmployeeId() {
+    try {
+        // In a real app, this would come from auth/session
+        // For now, get the first employee from the database
+        const { data: staff, error } = await supabase
+            .from('staff')
+            .select('id')
+            .eq('role', 'employee')
+            .limit(1);
+        
+        if (error) throw error;
+        
+        if (staff && staff.length > 0) {
+            console.log('👤 Current employee ID:', staff[0].id);
+            return staff[0].id;
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('❌ Error getting employee ID:', error);
+        return null;
+    }
+}
 
 async function initializeApp() {
     console.log('📱 Initializing app...');
@@ -156,15 +186,17 @@ async function loadPastShifts() {
         
         const today = new Date().toISOString().split('T')[0];
         
-        // For now, get all completed shifts (in real app, filter by logged-in user and status)
+        // Query actual shifts from database
         const { data: shifts, error } = await window.supabaseClient
             .from('shifts')
             .select(`
                 *,
-                locations (name, address, notes),
-                staff (name, email)
+                locations (name, address, hourly_rate),
+                staff!shifts_staff_id_fkey (name, email)
             `)
+            .eq('staff_id', currentEmployeeId)
             .lt('shift_date', today)
+            .in('status', ['completed', 'cancelled'])
             .order('shift_date', { ascending: false })
             .limit(10);
         
@@ -175,12 +207,7 @@ async function loadPastShifts() {
         
     } catch (error) {
         console.error('❌ Error loading past shifts:', error);
-        
-        // If table doesn't exist yet, show sample data
-        if (error.message.includes('does not exist')) {
-            console.log('⚠️ Shifts table not created yet, showing sample data');
-            showSamplePastShifts();
-        }
+        showSamplePastShifts(); // Fallback to sample data
     }
 }
 
@@ -205,7 +232,8 @@ function updatePastShiftsDisplay(shifts) {
         const locationName = shift.locations?.name || 'Unknown Location';
         const staffName = shift.staff?.name || 'Manager';
         const statusClass = getShiftStatusClass(shift.status);
-        const earnings = shift.actual_duration ? (shift.actual_duration * 23).toFixed(2) : (shift.duration * 23).toFixed(2);
+        const rate = shift.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE;
+        const earnings = shift.actual_duration ? (shift.actual_duration * rate).toFixed(2) : (shift.duration * rate).toFixed(2);
         const hours = shift.actual_duration || shift.duration;
         
         html += `
@@ -219,12 +247,13 @@ function updatePastShiftsDisplay(shifts) {
                         • <i class="far fa-clock"></i> ${formatTime(shift.start_time)} 
                         • ${hours} hours
                     </p>
-                    <p style="color: #28a745; font-weight: bold; margin-top: 5px;">
-                        <i class="fas fa-money-bill-wave"></i> Earned: $${earnings}
-                    </p>
+                    ${shift.status === 'completed' ? `
+                        <p style="color: #28a745; font-weight: bold; margin-top: 5px;">
+                            <i class="fas fa-money-bill-wave"></i> Earned: $${earnings}
+                        </p>
+                    ` : ''}
                     <p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
-                        <i class="fas fa-user-tie"></i> Assigned by: ${escapeHtml(staffName)}
-                        ${shift.notes ? `<br><i class="fas fa-sticky-note"></i> ${escapeHtml(shift.notes)}` : ''}
+                        ${shift.notes ? `<i class="fas fa-sticky-note"></i> ${escapeHtml(shift.notes)}<br>` : ''}
                     </p>
                 </div>
                 <div class="shift-actions-employee">
@@ -276,21 +305,10 @@ function showSamplePastShifts() {
             status: 'completed',
             notes: 'Spring cleaning requested',
             earnings: 46.00
-        },
-        {
-            id: 'past3',
-            location_name: 'Business Center',
-            shift_date: new Date(Date.now() - 86400000 * 7).toISOString().split('T')[0],
-            start_time: '10:00',
-            duration: 4,
-            actual_duration: 3.75,
-            status: 'completed',
-            notes: 'Deep cleaning after renovation',
-            earnings: 86.25
         }
     ];
     
-    let html = '<div style="margin-bottom: 15px; color: #666; font-size: 0.9rem; text-align: center;">📋 Showing sample past shifts (database not set up yet)</div>';
+    let html = '<div style="margin-bottom: 15px; color: #666; font-size: 0.9rem; text-align: center;">📋 Showing sample past shifts</div>';
     
     sampleShifts.forEach(shift => {
         const statusClass = getShiftStatusClass(shift.status);
@@ -333,7 +351,7 @@ async function viewShiftDetails(id) {
             .select(`
                 *,
                 locations (name, address, hourly_rate),
-                staff (name, email)
+                staff!shifts_staff_id_fkey (name, email)
             `)
             .eq('id', id)
             .single();
@@ -342,7 +360,7 @@ async function viewShiftDetails(id) {
 
         const locationName = shift.locations?.name || 'Unknown Location';
         const address = shift.locations?.address || 'No address provided';
-        const rate = shift.locations?.hourly_rate || 23;
+        const rate = shift.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE;
         const staffName = shift.staff?.name || 'Manager';
         const earnings = shift.actual_duration ? (shift.actual_duration * rate).toFixed(2) : (shift.duration * rate).toFixed(2);
         const hours = shift.actual_duration || shift.duration;
@@ -378,23 +396,25 @@ async function viewShiftDetails(id) {
                     </div>
                 </div>
                 
-                <div style="margin-bottom: 20px;">
-                    <h4 style="color: #333; margin-bottom: 10px;">Earnings Breakdown</h4>
-                    <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                            <span>Hours worked:</span>
-                            <strong>${hours} hrs</strong>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                            <span>Hourly rate:</span>
-                            <strong>$${rate}/hr</strong>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; font-size: 1.2rem; color: #28a745; font-weight: bold; padding-top: 10px; border-top: 2px solid #e0e0e0;">
-                            <span>Total earnings:</span>
-                            <strong>$${earnings}</strong>
+                ${shift.status === 'completed' ? `
+                    <div style="margin-bottom: 20px;">
+                        <h4 style="color: #333; margin-bottom: 10px;">Earnings Breakdown</h4>
+                        <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                                <span>Hours worked:</span>
+                                <strong>${hours} hrs</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                                <span>Hourly rate:</span>
+                                <strong>$${rate}/hr</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 1.2rem; color: #28a745; font-weight: bold; padding-top: 10px; border-top: 2px solid #e0e0e0;">
+                                <span>Total earnings:</span>
+                                <strong>$${earnings}</strong>
+                            </div>
                         </div>
                     </div>
-                </div>
+                ` : ''}
                 
                 <div style="margin-bottom: 20px;">
                     <h4 style="color: #333; margin-bottom: 10px;">Shift Information</h4>
@@ -470,17 +490,19 @@ async function loadStats() {
     try {
         console.log('📊 Loading statistics...');
       
-        // Get completed shifts count instead of entries
+        // Get completed shifts count for current employee
         const { count: completedShifts, error: shiftsError } = await window.supabaseClient
             .from('shifts')
             .select('*', { count: 'exact', head: true })
+            .eq('staff_id', currentEmployeeId)
             .eq('status', 'completed');
       
         if (shiftsError) throw shiftsError;
       
         const { count: totalLocations, error: locationsError } = await window.supabaseClient
             .from('locations')
-            .select('*', { count: 'exact', head: true });
+            .select('*', { count: 'exact', head: true })
+            .eq('is_active', true);
       
         if (locationsError) throw locationsError;
       
@@ -490,7 +512,7 @@ async function loadStats() {
       
         if (timesheetsError) throw timesheetsError;
       
-        // Calculate total earnings from completed shifts
+        // Calculate total earnings from completed shifts for current employee
         const { data: completedShiftsData, error: earningsError } = await window.supabaseClient
             .from('shifts')
             .select(`
@@ -498,12 +520,13 @@ async function loadStats() {
                 actual_duration,
                 locations (hourly_rate)
             `)
+            .eq('staff_id', currentEmployeeId)
             .eq('status', 'completed');
       
         if (earningsError) throw earningsError;
       
         const totalEarnings = completedShiftsData.reduce((sum, shift) => {
-            const rate = shift.locations?.hourly_rate || window.CONFIG.DEFAULT_HOURLY_RATE;
+            const rate = shift.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE;
             const hours = shift.actual_duration || shift.duration;
             return sum + (parseFloat(hours) * rate);
         }, 0).toFixed(2);
@@ -568,16 +591,16 @@ async function loadTimesheetPeriods() {
     try {
         console.log('📅 Loading available timesheet periods...');
         
-        // In a real app, this would come from the database with manager settings
-        // For now, we'll simulate getting settings for the current employee
-        // You can replace this with actual API call later
+        // Query employee settings from database
+        const { data: employeeSettings, error } = await window.supabaseClient
+            .from('staff')
+            .select('timesheet_weekly, timesheet_fortnightly, timesheet_monthly, timesheet_custom')
+            .eq('id', currentEmployeeId)
+            .single();
         
-        const availablePeriods = await getEmployeeTimesheetSettings();
-        
-        if (availablePeriods && availablePeriods.length > 0) {
-            renderPeriodSelectionBlocks(availablePeriods);
-        } else {
-            // Default to all periods if no specific settings
+        if (error) {
+            console.log('⚠️ No employee settings found, using defaults');
+            // Use default periods
             const defaultPeriods = [
                 { id: 'weekly', label: 'Weekly', icon: 'calendar-week', enabled: true, description: 'Monday to Sunday' },
                 { id: 'fortnightly', label: 'Fortnightly', icon: 'calendar-alt', enabled: true, description: '2 weeks period' },
@@ -585,7 +608,46 @@ async function loadTimesheetPeriods() {
                 { id: 'custom', label: 'Custom', icon: 'calendar-day', enabled: true, description: 'Select dates' }
             ];
             renderPeriodSelectionBlocks(defaultPeriods);
+            return;
         }
+        
+        // Map database settings to period objects
+        const availablePeriods = [
+            { 
+                id: 'weekly', 
+                label: 'Weekly', 
+                icon: 'calendar-week', 
+                enabled: employeeSettings.timesheet_weekly !== false, 
+                description: 'Monday to Sunday' 
+            },
+            { 
+                id: 'fortnightly', 
+                label: 'Fortnightly', 
+                icon: 'calendar-alt', 
+                enabled: employeeSettings.timesheet_fortnightly !== false, 
+                description: '2 weeks period' 
+            },
+            { 
+                id: 'monthly', 
+                label: 'Monthly', 
+                icon: 'calendar', 
+                enabled: employeeSettings.timesheet_monthly !== false, 
+                description: '1st to end of month' 
+            },
+            { 
+                id: 'custom', 
+                label: 'Custom', 
+                icon: 'calendar-day', 
+                enabled: employeeSettings.timesheet_custom !== false, 
+                description: 'Select dates' 
+            }
+        ];
+        
+        // Filter out disabled periods
+        const enabledPeriods = availablePeriods.filter(period => period.enabled);
+        
+        console.log('📅 Available timesheet periods:', enabledPeriods.map(p => p.label));
+        renderPeriodSelectionBlocks(enabledPeriods);
         
     } catch (error) {
         console.error('❌ Error loading timesheet periods:', error);
@@ -598,101 +660,6 @@ async function loadTimesheetPeriods() {
             { id: 'custom', label: 'Custom', icon: 'calendar-day', enabled: true, description: 'Select dates' }
         ];
         renderPeriodSelectionBlocks(defaultPeriods);
-    }
-}
-
-// Get employee timesheet settings (simulated - replace with actual API call)
-async function getEmployeeTimesheetSettings() {
-    // SIMULATION: In real app, this would come from database
-    // Example structure in database could be:
-    // employee_settings table with columns: employee_id, allow_weekly, allow_fortnightly, allow_monthly, allow_custom
-    
-    try {
-        // For now, let's simulate some data
-        // In production, you would query your database:
-        // const { data, error } = await supabase
-        //     .from('employee_settings')
-        //     .select('allow_weekly, allow_fortnightly, allow_monthly, allow_custom')
-        //     .eq('employee_id', currentEmployeeId)
-        //     .single();
-        
-        // Simulate different scenarios for testing:
-        const scenarios = [
-            // Scenario 1: Manager allows all periods (default)
-            { 
-                weekly: true, 
-                fortnightly: true, 
-                monthly: true, 
-                custom: true 
-            },
-            // Scenario 2: Manager allows only fortnightly
-            { 
-                weekly: false, 
-                fortnightly: true, 
-                monthly: false, 
-                custom: false 
-            },
-            // Scenario 3: Manager allows weekly and monthly only
-            { 
-                weekly: true, 
-                fortnightly: false, 
-                monthly: true, 
-                custom: true 
-            }
-        ];
-        
-        // For demo, randomly pick a scenario or use localStorage to simulate manager changing settings
-        let scenario;
-        const savedScenario = localStorage.getItem('timesheetScenario');
-        
-        if (savedScenario) {
-            scenario = scenarios[parseInt(savedScenario)];
-        } else {
-            // Randomly pick scenario for demo
-            scenario = scenarios[0]; // Default to all enabled
-            localStorage.setItem('timesheetScenario', '0');
-        }
-        
-        const availablePeriods = [
-            { 
-                id: 'weekly', 
-                label: 'Weekly', 
-                icon: 'calendar-week', 
-                enabled: scenario.weekly, 
-                description: 'Monday to Sunday' 
-            },
-            { 
-                id: 'fortnightly', 
-                label: 'Fortnightly', 
-                icon: 'calendar-alt', 
-                enabled: scenario.fortnightly, 
-                description: '2 weeks period' 
-            },
-            { 
-                id: 'monthly', 
-                label: 'Monthly', 
-                icon: 'calendar', 
-                enabled: scenario.monthly, 
-                description: '1st to end of month' 
-            },
-            { 
-                id: 'custom', 
-                label: 'Custom', 
-                icon: 'calendar-day', 
-                enabled: scenario.custom, 
-                description: 'Select dates' 
-            }
-        ];
-        
-        // Filter out disabled periods
-        const enabledPeriods = availablePeriods.filter(period => period.enabled);
-        
-        console.log('📅 Available timesheet periods:', enabledPeriods.map(p => p.label));
-        return enabledPeriods;
-        
-    } catch (error) {
-        console.error('❌ Error getting timesheet settings:', error);
-        return null;
     }
 }
 
@@ -967,59 +934,83 @@ window.showHelp = function() {
 // EMPLOYEE PROFILE & SETTINGS FUNCTIONS
 // ============================================
 
-window.viewMyProfile = function() {
-    const html = `
-        <div class="modal-content">
-            <h2><i class="fas fa-user-circle"></i> My Profile</h2>
-            <div style="text-align: center; margin: 20px 0;">
-                <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: white; font-size: 2.5rem; margin-bottom: 15px;">
-                    <i class="fas fa-user"></i>
+window.viewMyProfile = async function() {
+    try {
+        const { data: employee, error } = await window.supabaseClient
+            .from('staff')
+            .select('*')
+            .eq('id', currentEmployeeId)
+            .single();
+        
+        if (error) throw error;
+        
+        const html = `
+            <div class="modal-content">
+                <h2><i class="fas fa-user-circle"></i> My Profile</h2>
+                <div style="text-align: center; margin: 20px 0;">
+                    <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: white; font-size: 2.5rem; margin-bottom: 15px;">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <h3 style="margin: 10px 0 5px 0;">${escapeHtml(employee.name)}</h3>
+                    <p style="color: #666; margin-bottom: 20px;">${employee.role === 'employee' ? 'Cleaning Staff' : employee.role}</p>
                 </div>
-                <h3 style="margin: 10px 0 5px 0;">Employee Name</h3>
-                <p style="color: #666; margin-bottom: 20px;">Cleaning Staff</p>
+                
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <div class="info-item">
+                        <i class="fas fa-envelope"></i>
+                        <div>
+                            <strong>Email:</strong>
+                            <span>${employee.email || 'Not provided'}</span>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <i class="fas fa-phone"></i>
+                        <div>
+                            <strong>Phone:</strong>
+                            <span>${employee.phone || 'Not provided'}</span>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <i class="fas fa-money-bill"></i>
+                        <div>
+                            <strong>Hourly Rate:</strong>
+                            <span>$${employee.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE} AUD</span>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <i class="fas fa-calendar"></i>
+                        <div>
+                            <strong>Member Since:</strong>
+                            <span>${formatDate(employee.created_at)}</span>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <i class="fas fa-user-check"></i>
+                        <div>
+                            <strong>Status:</strong>
+                            <span style="color: ${employee.is_active ? '#28a745' : '#dc3545'}">
+                                ${employee.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                <p style="text-align: center; color: #666; font-size: 0.9rem; margin-bottom: 20px;">
+                    Contact your manager to update personal information
+                </p>
+                
+                <button onclick="closeModal()" class="btn" style="width: 100%;">
+                    <i class="fas fa-times"></i> Close
+                </button>
             </div>
-            
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                <div class="info-item">
-                    <i class="fas fa-envelope"></i>
-                    <div>
-                        <strong>Email:</strong>
-                        <span>employee@example.com</span>
-                    </div>
-                </div>
-                <div class="info-item">
-                    <i class="fas fa-phone"></i>
-                    <div>
-                        <strong>Phone:</strong>
-                        <span>+1 (555) 123-4567</span>
-                    </div>
-                </div>
-                <div class="info-item">
-                    <i class="fas fa-money-bill"></i>
-                    <div>
-                        <strong>Hourly Rate:</strong>
-                        <span>$23.00 AUD</span>
-                    </div>
-                </div>
-                <div class="info-item">
-                    <i class="fas fa-calendar"></i>
-                    <div>
-                        <strong>Member Since:</strong>
-                        <span>${formatDate(new Date())}</span>
-                    </div>
-                </div>
-            </div>
-            
-            <p style="text-align: center; color: #666; font-size: 0.9rem; margin-bottom: 20px;">
-                Contact your manager to update personal information
-            </p>
-            
-            <button onclick="closeModal()" class="btn" style="width: 100%;">
-                <i class="fas fa-times"></i> Close
-            </button>
-        </div>
-    `;
-    showModal(html);
+        `;
+        
+        showModal(html);
+        
+    } catch (error) {
+        console.error('❌ Error loading profile:', error);
+        showMessage('❌ Error loading profile: ' + error.message, 'error');
+    }
 };
 
 window.viewShiftCalendar = function() {
@@ -1087,39 +1078,80 @@ window.viewMyTimesheets = function() {
     showModal(html);
 };
 
-window.viewMyEarnings = function() {
-    const html = `
-        <div class="modal-content">
-            <h2><i class="fas fa-money-bill-wave"></i> My Earnings</h2>
-            
-            <div style="margin-bottom: 20px; padding: 20px; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border-radius: 8px;">
-                <div style="text-align: center;">
-                    <div style="font-size: 2.5rem; font-weight: bold; margin-bottom: 5px;">$0.00</div>
-                    <div style="font-size: 0.9rem; opacity: 0.9;">Total Earnings (This Month)</div>
+window.viewMyEarnings = async function() {
+    try {
+        const today = new Date();
+        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        
+        // Get shifts for current month
+        const { data: shifts, error } = await window.supabaseClient
+            .from('shifts')
+            .select(`
+                duration,
+                actual_duration,
+                locations (hourly_rate)
+            `)
+            .eq('staff_id', currentEmployeeId)
+            .eq('status', 'completed')
+            .gte('shift_date', firstDayOfMonth.toISOString().split('T')[0])
+            .lte('shift_date', lastDayOfMonth.toISOString().split('T')[0]);
+        
+        if (error) throw error;
+        
+        // Calculate earnings
+        let totalEarnings = 0;
+        let totalHours = 0;
+        let shiftCount = 0;
+        
+        if (shifts) {
+            shiftCount = shifts.length;
+            shifts.forEach(shift => {
+                const rate = shift.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE;
+                const hours = shift.actual_duration || shift.duration;
+                totalHours += parseFloat(hours);
+                totalEarnings += parseFloat(hours) * rate;
+            });
+        }
+        
+        const html = `
+            <div class="modal-content">
+                <h2><i class="fas fa-money-bill-wave"></i> My Earnings</h2>
+                
+                <div style="margin-bottom: 20px; padding: 20px; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border-radius: 8px;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 2.5rem; font-weight: bold; margin-bottom: 5px;">$${totalEarnings.toFixed(2)}</div>
+                        <div style="font-size: 0.9rem; opacity: 0.9;">Total Earnings (This Month)</div>
+                    </div>
                 </div>
-            </div>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center;">
-                    <div style="font-size: 1.2rem; font-weight: bold; color: #667eea;">0</div>
-                    <div style="font-size: 0.8rem; color: #666;">Shifts This Month</div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 1.2rem; font-weight: bold; color: #667eea;">${shiftCount}</div>
+                        <div style="font-size: 0.8rem; color: #666;">Shifts This Month</div>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 1.2rem; font-weight: bold; color: #28a745;">${totalHours.toFixed(1)} hrs</div>
+                        <div style="font-size: 0.8rem; color: #666;">Total Hours</div>
+                    </div>
                 </div>
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center;">
-                    <div style="font-size: 1.2rem; font-weight: bold; color: #28a745;">0 hrs</div>
-                    <div style="font-size: 0.8rem; color: #666;">Total Hours</div>
+                
+                <div style="text-align: center; color: #666; font-size: 0.9rem; margin-bottom: 20px;">
+                    <i class="fas fa-info-circle"></i> Based on completed shifts for ${new Date().toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })}
                 </div>
+                
+                <button onclick="closeModal()" class="btn" style="width: 100%;">
+                    <i class="fas fa-times"></i> Close
+                </button>
             </div>
-            
-            <div style="text-align: center; color: #666; font-size: 0.9rem; margin-bottom: 20px;">
-                <i class="fas fa-info-circle"></i> Earnings data will populate as you complete shifts
-            </div>
-            
-            <button onclick="closeModal()" class="btn" style="width: 100%;">
-                <i class="fas fa-times"></i> Close
-            </button>
-        </div>
-    `;
-    showModal(html);
+        `;
+        
+        showModal(html);
+        
+    } catch (error) {
+        console.error('❌ Error loading earnings:', error);
+        showMessage('❌ Error loading earnings: ' + error.message, 'error');
+    }
 };
 
 window.contactSupport = function() {
