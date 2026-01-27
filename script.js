@@ -72,10 +72,10 @@ async function initializeApp() {
             handleEmailCheckbox({ target: emailCheckbox });
         }
         
-        // Setup timesheet period selector
-        const timesheetPeriod = document.getElementById('timesheetPeriod');
-        if (timesheetPeriod) {
-            timesheetPeriod.addEventListener('change', handleTimesheetPeriodChange);
+        // Setup custom dates button
+        const customDatesBtn = document.getElementById('customDatesBtn');
+        if (customDatesBtn) {
+            customDatesBtn.addEventListener('click', showCustomDatesPopup);
         }
         
         // Setup entry mode selector (for work entries, not shifts)
@@ -94,12 +94,6 @@ async function initializeApp() {
         } catch (error) {
             console.log('⚠️ Error initializing entry mode UI:', error.message);
             // Don't crash the app - this is non-critical
-        }
-        
-        // Setup custom dates button
-        const customDatesBtn = document.getElementById('customDatesBtn');
-        if (customDatesBtn) {
-            customDatesBtn.addEventListener('click', showCustomDatesPopup);
         }
       
         // Test connection
@@ -129,6 +123,10 @@ async function initializeApp() {
                     
                     if (typeof loadPastShifts === 'function') {
                         await loadPastShifts(); // Past shifts
+                    }
+                    
+                    if (typeof loadTimesheetPeriods === 'function') {
+                        await loadTimesheetPeriods(); // Timesheet periods
                     }
                 } catch (error) {
                     console.log('⚠️ Could not load shifts:', error.message);
@@ -562,6 +560,299 @@ function updateStatsDisplay(stats) {
 }
 
 // ============================================
+// TIMESHEET PERIOD SELECTION FUNCTIONS
+// ============================================
+
+// Load available timesheet periods for employee
+async function loadTimesheetPeriods() {
+    try {
+        console.log('📅 Loading available timesheet periods...');
+        
+        // In a real app, this would come from the database with manager settings
+        // For now, we'll simulate getting settings for the current employee
+        // You can replace this with actual API call later
+        
+        const availablePeriods = await getEmployeeTimesheetSettings();
+        
+        if (availablePeriods && availablePeriods.length > 0) {
+            renderPeriodSelectionBlocks(availablePeriods);
+        } else {
+            // Default to all periods if no specific settings
+            const defaultPeriods = [
+                { id: 'weekly', label: 'Weekly', icon: 'calendar-week', enabled: true, description: 'Monday to Sunday' },
+                { id: 'fortnightly', label: 'Fortnightly', icon: 'calendar-alt', enabled: true, description: '2 weeks period' },
+                { id: 'monthly', label: 'Monthly', icon: 'calendar', enabled: true, description: '1st to end of month' },
+                { id: 'custom', label: 'Custom', icon: 'calendar-day', enabled: true, description: 'Select dates' }
+            ];
+            renderPeriodSelectionBlocks(defaultPeriods);
+        }
+        
+    } catch (error) {
+        console.error('❌ Error loading timesheet periods:', error);
+        
+        // Fallback to default periods on error
+        const defaultPeriods = [
+            { id: 'weekly', label: 'Weekly', icon: 'calendar-week', enabled: true, description: 'Monday to Sunday' },
+            { id: 'fortnightly', label: 'Fortnightly', icon: 'calendar-alt', enabled: true, description: '2 weeks period' },
+            { id: 'monthly', label: 'Monthly', icon: 'calendar', enabled: true, description: '1st to end of month' },
+            { id: 'custom', label: 'Custom', icon: 'calendar-day', enabled: true, description: 'Select dates' }
+        ];
+        renderPeriodSelectionBlocks(defaultPeriods);
+    }
+}
+
+// Get employee timesheet settings (simulated - replace with actual API call)
+async function getEmployeeTimesheetSettings() {
+    // SIMULATION: In real app, this would come from database
+    // Example structure in database could be:
+    // employee_settings table with columns: employee_id, allow_weekly, allow_fortnightly, allow_monthly, allow_custom
+    
+    try {
+        // For now, let's simulate some data
+        // In production, you would query your database:
+        // const { data, error } = await supabase
+        //     .from('employee_settings')
+        //     .select('allow_weekly, allow_fortnightly, allow_monthly, allow_custom')
+        //     .eq('employee_id', currentEmployeeId)
+        //     .single();
+        
+        // Simulate different scenarios for testing:
+        const scenarios = [
+            // Scenario 1: Manager allows all periods (default)
+            { 
+                weekly: true, 
+                fortnightly: true, 
+                monthly: true, 
+                custom: true 
+            },
+            // Scenario 2: Manager allows only fortnightly
+            { 
+                weekly: false, 
+                fortnightly: true, 
+                monthly: false, 
+                custom: false 
+            },
+            // Scenario 3: Manager allows weekly and monthly only
+            { 
+                weekly: true, 
+                fortnightly: false, 
+                monthly: true, 
+                custom: true 
+            }
+        ];
+        
+        // For demo, randomly pick a scenario or use localStorage to simulate manager changing settings
+        let scenario;
+        const savedScenario = localStorage.getItem('timesheetScenario');
+        
+        if (savedScenario) {
+            scenario = scenarios[parseInt(savedScenario)];
+        } else {
+            // Randomly pick scenario for demo
+            scenario = scenarios[0]; // Default to all enabled
+            localStorage.setItem('timesheetScenario', '0');
+        }
+        
+        const availablePeriods = [
+            { 
+                id: 'weekly', 
+                label: 'Weekly', 
+                icon: 'calendar-week', 
+                enabled: scenario.weekly, 
+                description: 'Monday to Sunday' 
+            },
+            { 
+                id: 'fortnightly', 
+                label: 'Fortnightly', 
+                icon: 'calendar-alt', 
+                enabled: scenario.fortnightly, 
+                description: '2 weeks period' 
+            },
+            { 
+                id: 'monthly', 
+                label: 'Monthly', 
+                icon: 'calendar', 
+                enabled: scenario.monthly, 
+                description: '1st to end of month' 
+            },
+            { 
+                id: 'custom', 
+                label: 'Custom', 
+                icon: 'calendar-day', 
+                enabled: scenario.custom, 
+                description: 'Select dates' 
+            }
+        ];
+        
+        // Filter out disabled periods
+        const enabledPeriods = availablePeriods.filter(period => period.enabled);
+        
+        console.log('📅 Available timesheet periods:', enabledPeriods.map(p => p.label));
+        return enabledPeriods;
+        
+    } catch (error) {
+        console.error('❌ Error getting timesheet settings:', error);
+        return null;
+    }
+}
+
+// Render period selection blocks
+function renderPeriodSelectionBlocks(periods) {
+    const container = document.getElementById('periodSelectionBlocks');
+    if (!container) return;
+    
+    if (!periods || periods.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 20px; color: #666;">
+                <i class="fas fa-calendar-times" style="font-size: 2rem; margin-bottom: 10px;"></i>
+                <p>No timesheet periods available.</p>
+                <p style="font-size: 0.9rem;">Contact your manager to enable timesheet generation.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // If only one period is available, show it as a single prominent option
+    if (periods.length === 1) {
+        const period = periods[0];
+        container.innerHTML = `
+            <div class="single-period-option" data-period="${period.id}">
+                <i class="fas fa-${period.icon}" style="font-size: 2rem; margin-bottom: 10px;"></i>
+                <div style="font-weight: bold; font-size: 1.1rem;">${period.label}</div>
+                <div style="font-size: 0.9rem; opacity: 0.9;">${period.description}</div>
+            </div>
+        `;
+        
+        // Auto-select the only available period
+        setTimeout(() => {
+            selectPeriod(period.id);
+            
+            // Add click handler
+            const singleOption = document.querySelector('.single-period-option');
+            if (singleOption) {
+                singleOption.addEventListener('click', function() {
+                    selectPeriod(period.id);
+                });
+            }
+        }, 100);
+        
+        return;
+    }
+    
+    // Multiple periods available - show as grid
+    let html = '';
+    periods.forEach(period => {
+        html += `
+            <div class="period-block ${period.enabled ? '' : 'disabled'}" 
+                 data-period="${period.id}" 
+                 onclick="${period.enabled ? `selectPeriod('${period.id}')` : ''}">
+                <div class="period-icon">
+                    <i class="fas fa-${period.icon}"></i>
+                </div>
+                <div class="period-label">${period.label}</div>
+                <div class="period-description">${period.description}</div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    
+    // Auto-select first enabled period
+    const firstEnabled = periods.find(p => p.enabled);
+    if (firstEnabled) {
+        setTimeout(() => {
+            selectPeriod(firstEnabled.id);
+        }, 100);
+    }
+}
+
+// Select a period
+function selectPeriod(periodId) {
+    console.log('📅 Selected period:', periodId);
+    
+    // Update visual selection
+    document.querySelectorAll('.period-block').forEach(block => {
+        block.classList.remove('selected');
+        if (block.getAttribute('data-period') === periodId) {
+            block.classList.add('selected');
+        }
+    });
+    
+    // Also handle single period option
+    const singleOption = document.querySelector('.single-period-option');
+    if (singleOption && singleOption.getAttribute('data-period') === periodId) {
+        singleOption.classList.add('selected');
+    }
+    
+    // Update hidden input
+    document.getElementById('timesheetPeriod').value = periodId;
+    
+    // Handle period selection
+    handlePeriodSelection(periodId);
+}
+
+// Handle period selection
+function handlePeriodSelection(periodId) {
+    const customDatesDiv = document.getElementById('customDatesSection');
+    const autoDatesDiv = document.getElementById('autoDatesSection');
+    const today = new Date();
+    
+    if (periodId === 'custom') {
+        customDatesDiv.style.display = 'block';
+        autoDatesDiv.style.display = 'none';
+        
+        // Set default custom dates (last week)
+        const lastWeek = new Date(today);
+        lastWeek.setDate(today.getDate() - 7);
+        
+        // We'll set these when custom dates button is clicked
+        document.getElementById('startDate').value = '';
+        document.getElementById('endDate').value = '';
+        
+    } else {
+        customDatesDiv.style.display = 'none';
+        autoDatesDiv.style.display = 'block';
+        
+        let startDate, endDate;
+        
+        switch(periodId) {
+            case 'weekly':
+                startDate = getStartOfWeek(today);
+                endDate = getEndOfWeek(today);
+                break;
+            case 'fortnightly':
+                startDate = getStartOfFortnight(today);
+                endDate = getEndOfFortnight(today);
+                break;
+            case 'monthly':
+                startDate = getStartOfMonth(today);
+                endDate = getEndOfMonth(today);
+                break;
+            default:
+                startDate = new Date(today);
+                startDate.setDate(today.getDate() - 7);
+                endDate = today;
+        }
+        
+        document.getElementById('autoStartDate').textContent = formatDate(startDate);
+        document.getElementById('autoEndDate').textContent = formatDate(endDate);
+        
+        document.getElementById('startDate').value = startDate.toISOString().split('T')[0];
+        document.getElementById('endDate').value = endDate.toISOString().split('T')[0];
+    }
+    
+    // Show confirmation message
+    const periodLabels = {
+        'weekly': 'Weekly (Monday to Sunday)',
+        'fortnightly': 'Fortnightly (2 weeks)',
+        'monthly': 'Monthly (1st to end of month)',
+        'custom': 'Custom Dates'
+    };
+    
+    showMessage(`✅ Selected: ${periodLabels[periodId] || periodId}`, 'success', 2000);
+}
+
+// ============================================
 // ACTION BUTTONS
 // ============================================
 
@@ -572,6 +863,7 @@ window.refreshData = async function() {
     await loadMyShifts();
     await loadPastShifts();
     await loadLocations();
+    await loadTimesheetPeriods();
     showMessage('✅ Data refreshed!', 'success');
 };
 
@@ -958,6 +1250,25 @@ window.generateExport = function() {
     // This would be implemented to actually generate the export
     showMessage('✅ Export generated successfully!', 'success');
     closeModal();
+};
+
+// Add a function to simulate manager changing settings (for demo/testing)
+window.simulateManagerSettings = function(scenarioIndex) {
+    const scenarios = [
+        'All periods enabled',
+        'Fortnightly only',
+        'Weekly and Monthly only'
+    ];
+    
+    localStorage.setItem('timesheetScenario', scenarioIndex.toString());
+    
+    showMessage(`🔄 Manager settings updated: ${scenarios[scenarioIndex]}`, 'info');
+    
+    // Reload periods
+    setTimeout(async () => {
+        await loadTimesheetPeriods();
+        showMessage('✅ Timesheet periods updated!', 'success');
+    }, 500);
 };
 
 // Final log
