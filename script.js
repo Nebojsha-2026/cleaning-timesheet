@@ -93,7 +93,7 @@ try {
  }
 } catch (error) {
     console.log('⚠️ Error initializing entry mode UI:', error.message);
-    Don't crash the app - this is non-critical
+    //Don't crash the app - this is non-critical
 }
         
         // Setup custom dates button
@@ -544,6 +544,7 @@ window.generateExport = function() {
 
 // Final log
 console.log('🎉 Main script loaded (Employee Version)');
+
 
 
 
