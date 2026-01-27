@@ -78,22 +78,22 @@ async function initializeApp() {
             timesheetPeriod.addEventListener('change', handleTimesheetPeriodChange);
         }
         
-        // Setup entry mode selector (for work entries, not shifts)
-        //const entryMode = document.getElementById('entryMode');
-        //if (entryMode) {
-           // entryMode.addEventListener('change', handleEntryModeChange);
-       // }
+        Setup entry mode selector (for work entries, not shifts)
+        const entryMode = document.getElementById('entryMode');
+        if (entryMode) {
+           entryMode.addEventListener('change', handleEntryModeChange);
+       }
         
         // Initialize entry mode UI (with error handling)
-//try {
-    //if (typeof initializeEntryModeUI === 'function') {
-       // initializeEntryModeUI();
-  //  } else {
-     //   console.log('ℹ️ initializeEntryModeUI function not found - skipping');
- //   }
-//} catch (error) {
-   // console.log('⚠️ Error initializing entry mode UI:', error.message);
-    // Don't crash the app - this is non-critical
+try {
+    if (typeof initializeEntryModeUI === 'function') {
+       initializeEntryModeUI();
+  } else {
+        console.log('ℹ️ initializeEntryModeUI function not found - skipping');
+ }
+} catch (error) {
+    console.log('⚠️ Error initializing entry mode UI:', error.message);
+    Don't crash the app - this is non-critical
 }
         
         // Setup custom dates button
@@ -544,5 +544,6 @@ window.generateExport = function() {
 
 // Final log
 console.log('🎉 Main script loaded (Employee Version)');
+
 
 
