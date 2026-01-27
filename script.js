@@ -117,19 +117,27 @@ async function initializeApp() {
             console.log('✨ Dashboard ready');
           
             // Load data in background
-            setTimeout(async () => {
-                await loadStats();
-                await loadLocations();
-                await loadRecentEntries();
-                
-                // Load staff if database tables exist
-                try {
-                    await loadStaff();
-                } catch (error) {
-                    console.log('⚠️ Could not load staff (tables may not exist yet):', error.message);
-                }
-                
-            }, 500);
+setTimeout(async () => {
+    await loadStats();
+    await loadLocations();
+    await loadRecentEntries();
+    
+    // Load employee shifts (instead of staff management)
+    try {
+        await loadMyShifts(); // This is the employee shift loading function
+    } catch (error) {
+        console.log('⚠️ Could not load shifts:', error.message);
+        // If function doesn't exist yet, it's OK - we'll add it in shifts.js
+    }
+    
+    // Also try to load staff for reference (optional)
+    try {
+        await loadStaff();
+    } catch (error) {
+        console.log('⚠️ Could not load staff (tables may not exist yet):', error.message);
+    }
+    
+}, 500);
           
         } else {
             console.error('❌ Database connection failed');
@@ -227,4 +235,5 @@ window.showHelp = function() {
 
 // Final log
 console.log('🎉 Main script loaded');
+
 
