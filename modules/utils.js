@@ -156,5 +156,25 @@ async function testConnection() {
         return false;
     }
 }
+// ... your existing utils.js content ...
 
-console.log('✅ Utils module loaded');
+// Add these at the bottom if missing
+
+function showMessage(text, type = 'info') {
+    let container = document.getElementById('formMessage') || document.createElement('div');
+    container.id = 'formMessage';
+    container.className = `message ${type}`;
+    container.textContent = text;
+    container.style.padding = '12px';
+    container.style.margin = '12px 0';
+    container.style.borderRadius = '6px';
+    container.style.background = type === 'success' ? '#d4edda' : type === 'error' ? '#f8d7da' : '#e2e3e5';
+    container.style.color = type === 'success' ? '#155724' : type === 'error' ? '#721c24' : '#333';
+
+    const target = document.querySelector('.container') || document.body;
+    target.insertBefore(container, target.firstChild);
+
+    setTimeout(() => container.remove(), 5000);
+}
+
+console.log('Utils → message helper added');
