@@ -871,4 +871,185 @@ async function deleteStaff(id) {
                 Warning: This will remove all their shift assignments!
             </p>
             <div style="margin-top:20px; display:flex; gap:10px;">
-                <button class="btn confirm-delete-staff-btn" data-id="${id}" style="flex:1
+                <button class="btn confirm-delete-staff-btn" data-id="${id}" style="flex:1; background:#dc3545; color:white; border:none;">
+                    <i class="fas fa-trash"></i> Yes, Delete
+                </button>
+                <button class="btn cancel-btn" style="flex:1;">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    `;
+    
+    showModal(html);
+    
+    document.querySelector('.confirm-delete-staff-btn').addEventListener('click', async function() {
+        const staffId = this.getAttribute('data-id');
+        
+        try {
+            // First, remove staff from shifts
+            const { error: shiftError } = await window.supabaseClient
+                .from('shifts')
+                .update({ staff_id: null })
+                .eq('staff_id', staffId);
+            
+            if (shiftError) throw shiftError;
+            
+            // Then delete the staff member
+            const { error: staffError } = await window.supabaseClient
+                .from('staff')
+                .delete()
+                .eq('id', staffId);
+            
+            if (staffError) throw staffError;
+            
+            closeModal();
+            showMessage('✅ Staff member deleted!', 'success');
+            await loadStaff();
+            viewStaff(); // Refresh the staff list
+            
+        } catch (error) {
+            console.error('❌ Error deleting staff:', error);
+            showMessage('❌ Error: ' + error.message, 'error');
+        }
+    });
+    
+    document.querySelector('.cancel-btn').addEventListener('click', closeModal);
+}
+
+// View shift calendar
+window.viewShiftCalendar = function() {
+    const html = `
+        <div class="modal-content">
+            <h2>Shift Calendar</h2>
+            <div style="margin-bottom: 15px;">
+                <button onclick="viewUpcomingShifts()" class="btn btn-primary">
+                    <i class="fas fa-list"></i> List View
+                </button>
+                <button onclick="viewMonthlyCalendar()" class="btn" style="margin-left: 10px;">
+                    <i class="fas fa-calendar-alt"></i> Monthly View
+                </button>
+            </div>
+            <div id="calendarView">
+                <!-- Calendar will be loaded here -->
+                <p>Loading calendar...</p>
+            </div>
+            <div style="margin-top:20px;">
+                <button onclick="closeModal()" class="btn" style="width:100%;">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
+        </div>
+    `;
+    
+    showModal(html);
+    viewUpcomingShifts(); // Show list view by default
+};
+
+// View upcoming shifts in list format
+async function viewUpcomingShifts() {
+    try {
+        const shifts = await loadUpcomingShifts();
+        const calendarView = document.getElementById('calendarView');
+        
+        if (!calendarView) return;
+        
+        if (!shifts || shifts.length === 0) {
+            calendarView.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: #666;">
+                    <i class="fas fa-calendar" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
+                    <p>No upcoming shifts scheduled.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '<div class="upcoming-shifts-list">';
+        
+        // Group shifts by date
+        const shiftsByDate = {};
+        shifts.forEach(shift => {
+            const date = shift.shift_date;
+            if (!shiftsByDate[date]) {
+                shiftsByDate[date] = [];
+            }
+            shiftsByDate[date].push(shift);
+        });
+        
+        // Sort dates
+        const sortedDates = Object.keys(shiftsByDate).sort();
+        
+        sortedDates.forEach(date => {
+            html += `
+                <div class="calendar-day">
+                    <h3 style="margin: 20px 0 10px; padding-bottom: 5px; border-bottom: 2px solid #667eea;">
+                        ${formatDate(date)}
+                    </h3>
+            `;
+            
+            shiftsByDate[date].forEach(shift => {
+                const locationName = shift.locations?.name || 'Unknown';
+                const staffName = shift.staff?.name || 'Unassigned';
+                const statusClass = getStatusClass(shift.status);
+                
+                html += `
+                    <div class="calendar-shift-item">
+                        <div>
+                            <strong>${shift.start_time} - ${locationName}</strong><br>
+                            <span style="color: #666;">${staffName} • ${shift.duration} hrs</span>
+                            <span class="shift-status ${statusClass}" style="margin-left: 10px;">${shift.status}</span>
+                        </div>
+                        <div>
+                            <button class="btn-icon" onclick="editShift('${shift.id}')" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+        });
+        
+        html += '</div>';
+        calendarView.innerHTML = html;
+        
+    } catch (error) {
+        console.error('❌ Error loading calendar:', error);
+        document.getElementById('calendarView').innerHTML = `
+            <div style="color: #dc3545; text-align: center; padding: 20px;">
+                Error loading calendar: ${error.message}
+            </div>
+        `;
+    }
+}
+
+// View monthly calendar
+async function viewMonthlyCalendar() {
+    const calendarView = document.getElementById('calendarView');
+    if (!calendarView) return;
+    
+    calendarView.innerHTML = `
+        <div style="text-align: center; padding: 40px;">
+            <i class="fas fa-spinner fa-spin" style="font-size: 2rem;"></i>
+            <p>Loading monthly calendar...</p>
+        </div>
+    `;
+    
+    // This would be implemented to show a full calendar view
+    // For now, we'll show a simple implementation
+    setTimeout(() => {
+        calendarView.innerHTML = `
+            <div style="text-align: center; padding: 20px;">
+                <h3>Monthly Calendar View</h3>
+                <p>Full calendar implementation coming soon!</p>
+                <p>For now, use the list view to see upcoming shifts.</p>
+                <button onclick="viewUpcomingShifts()" class="btn btn-primary" style="margin-top: 15px;">
+                    <i class="fas fa-list"></i> Back to List View
+                </button>
+            </div>
+        `;
+    }, 500);
+}
+
+console.log('✅ Shifts module loaded');
