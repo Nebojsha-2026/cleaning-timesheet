@@ -1,4 +1,4 @@
-// auth.js - Fixed version with manager role enforcement
+// auth.js - Fixed role & company linking
 
 console.log('🔐 Real Auth module loading...');
 
@@ -16,7 +16,6 @@ let userRole = null;
 
 let supabase = null;
 
-// Init Supabase safely
 function initSupabase() {
     if (window.supabase && window.supabase.createClient) {
         supabase = window.supabase.createClient(
@@ -25,19 +24,13 @@ function initSupabase() {
         );
         window.supabaseClient = supabase;
         console.log('Supabase initialized');
-    } else {
-        console.error('Supabase script not loaded yet');
     }
 }
 
 initSupabase();
 
-// Initialize auth listener
 async function initializeAuth() {
-    if (!supabase) {
-        console.error('Supabase not ready – skipping auth init');
-        return;
-    }
+    if (!supabase) return;
 
     supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('Auth event:', event);
@@ -46,24 +39,15 @@ async function initializeAuth() {
             currentUser = session.user;
             currentToken = session.access_token;
 
-            // Load or create profile
-            let profile = null;
-            let profileError = null;
-
-            const { data, error } = await supabase
+            // Get or create profile
+            let { data: profile, error } = await supabase
                 .from('profiles')
                 .select('company_id, role')
                 .eq('id', currentUser.id)
                 .single();
 
-            if (error && error.code !== 'PGRST116') { // not "no rows"
-                console.error('Profile query error:', error);
-            }
-
-            profile = data;
-
-            if (!profile) {
-                // Profile not created yet – create default
+            if (error && error.code === 'PGRST116') {
+                // No profile – create default
                 const { data: newProfile, error: insertError } = await supabase
                     .from('profiles')
                     .insert([{ id: currentUser.id, role: 'employee' }])
@@ -71,7 +55,7 @@ async function initializeAuth() {
                     .single();
 
                 if (insertError) {
-                    console.error('Auto-create profile failed:', insertError);
+                    console.error('Create profile failed:', insertError);
                 } else {
                     profile = newProfile;
                 }
@@ -92,31 +76,23 @@ async function initializeAuth() {
 
             console.log('Logged in as:', currentUser.email, userRole, currentCompanyId);
 
-            // Force redirect based on role
+            // Redirect
             if (userRole === 'manager') {
-                if (window.location.pathname !== '/manager.html') {
-                    window.location.href = 'manager.html';
-                }
+                window.location.href = 'manager.html';
             } else {
-                if (window.location.pathname !== '/index.html') {
-                    window.location.href = 'index.html';
-                }
+                window.location.href = 'index.html';
             }
 
         } else {
             clearAuth();
-            if (!window.location.pathname.includes('login.html') && 
-                !window.location.pathname.includes('register.html')) {
+            if (!window.location.pathname.includes('login.html') && !window.location.pathname.includes('register.html')) {
                 window.location.href = 'login.html';
             }
         }
     });
 
-    // Check current session
     const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-        supabase.auth.setSession(session);
-    }
+    if (session) supabase.auth.setSession(session);
 }
 
 // Login
@@ -135,7 +111,7 @@ async function login(email, password) {
     }
 }
 
-// Register manager (fixed role enforcement)
+// Register manager – force manager role + company link
 async function registerManager(email, password, companyName) {
     if (!supabase) throw new Error('Supabase not ready');
 
@@ -150,8 +126,8 @@ async function registerManager(email, password, companyName) {
         if (signUpError) throw signUpError;
         if (!authData.user) throw new Error('No user created');
 
-        // Wait for auth trigger/profile creation
-        await new Promise(r => setTimeout(r, 2000));
+        // Wait longer for trigger
+        await new Promise(r => setTimeout(r, 3000));
 
         // Create company
         const { data: company, error: companyError } = await supabase
@@ -167,17 +143,26 @@ async function registerManager(email, password, companyName) {
 
         if (companyError) throw companyError;
 
-        // Force update profile to manager role + company
-        const { error: updateError } = await supabase
-            .from('profiles')
-            .update({ 
-                company_id: company.id,
-                role: 'manager',
-                name: 'Manager'
-            })
-            .eq('id', authData.user.id);
+        // Update profile – retry if needed
+        let updateSuccess = false;
+        for (let i = 0; i < 3; i++) {
+            const { error: updateError } = await supabase
+                .from('profiles')
+                .update({ 
+                    company_id: company.id,
+                    role: 'manager',
+                    name: 'Manager'
+                })
+                .eq('id', authData.user.id);
 
-        if (updateError) throw updateError;
+            if (!updateError) {
+                updateSuccess = true;
+                break;
+            }
+            await new Promise(r => setTimeout(r, 1000)); // retry delay
+        }
+
+        if (!updateSuccess) throw new Error('Failed to update profile to manager');
 
         // Auto sign-in
         await supabase.auth.signInWithPassword({ email, password });
@@ -232,8 +217,7 @@ function protectRoute(requiredRole = null) {
     return true;
 }
 
-// Auto-init with delay to ensure supabase loaded
-setTimeout(initializeAuth, 800);
+setTimeout(initializeAuth, 1000);
 
 console.log('✅ Real Auth module loaded');
 
