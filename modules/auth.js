@@ -1,6 +1,21 @@
 // auth.js - Real Supabase Auth
 
 console.log('🔐 Real Auth module loading...');
+// At the very top of auth.js, after console.log('🔐 Real Auth module loading...');
+if (!window.supabase) {
+    console.error('Supabase not loaded yet – waiting...');
+    setTimeout(() => {
+        if (window.supabase) {
+            supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+            window.supabaseClient = supabase;
+        } else {
+            console.error('Supabase failed to load');
+        }
+    }, 500);
+} else {
+    supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+    window.supabaseClient = supabase;
+}
 
 const AUTH_CONFIG = {
     TOKEN_KEY: 'cleaning_timesheet_token',
