@@ -1,4 +1,4 @@
-// auth.js - Real Supabase Auth (fixed version)
+// auth.js - Fixed version with manager role enforcement
 
 console.log('🔐 Real Auth module loading...');
 
@@ -16,7 +16,7 @@ let userRole = null;
 
 let supabase = null;
 
-// Wait for Supabase
+// Init Supabase safely
 function initSupabase() {
     if (window.supabase && window.supabase.createClient) {
         supabase = window.supabase.createClient(
@@ -26,16 +26,16 @@ function initSupabase() {
         window.supabaseClient = supabase;
         console.log('Supabase initialized');
     } else {
-        console.error('Supabase not loaded yet');
+        console.error('Supabase script not loaded yet');
     }
 }
 
 initSupabase();
 
-// Initialize auth
+// Initialize auth listener
 async function initializeAuth() {
     if (!supabase) {
-        console.error('Supabase not ready');
+        console.error('Supabase not ready – skipping auth init');
         return;
     }
 
@@ -46,45 +46,73 @@ async function initializeAuth() {
             currentUser = session.user;
             currentToken = session.access_token;
 
-            // Load profile
-            const { data: profile, error } = await supabase
+            // Load or create profile
+            let profile = null;
+            let profileError = null;
+
+            const { data, error } = await supabase
                 .from('profiles')
                 .select('company_id, role')
                 .eq('id', currentUser.id)
                 .single();
 
-            if (error || !profile) {
-                console.error('Profile load failed:', error);
-                // Fallback
+            if (error && error.code !== 'PGRST116') { // not "no rows"
+                console.error('Profile query error:', error);
+            }
+
+            profile = data;
+
+            if (!profile) {
+                // Profile not created yet – create default
+                const { data: newProfile, error: insertError } = await supabase
+                    .from('profiles')
+                    .insert([{ id: currentUser.id, role: 'employee' }])
+                    .select()
+                    .single();
+
+                if (insertError) {
+                    console.error('Auto-create profile failed:', insertError);
+                } else {
+                    profile = newProfile;
+                }
+            }
+
+            if (profile) {
+                currentCompanyId = profile.company_id;
+                userRole = profile.role || 'employee';
+            } else {
                 userRole = 'employee';
                 currentCompanyId = null;
-            } else {
-                currentCompanyId = profile.company_id;
-                userRole = profile.role;
             }
 
             localStorage.setItem(AUTH_CONFIG.TOKEN_KEY, currentToken);
             localStorage.setItem(AUTH_CONFIG.USER_KEY, JSON.stringify(currentUser));
             localStorage.setItem(AUTH_CONFIG.COMPANY_KEY, currentCompanyId || '');
-            localStorage.setItem(AUTH_CONFIG.ROLE_KEY, userRole || 'employee');
+            localStorage.setItem(AUTH_CONFIG.ROLE_KEY, userRole);
 
-            console.log('Logged in:', currentUser.email, userRole, currentCompanyId);
+            console.log('Logged in as:', currentUser.email, userRole, currentCompanyId);
 
-            // ALWAYS redirect after sign in
+            // Force redirect based on role
             if (userRole === 'manager') {
-                window.location.href = 'manager.html';
+                if (window.location.pathname !== '/manager.html') {
+                    window.location.href = 'manager.html';
+                }
             } else {
-                window.location.href = 'index.html';
+                if (window.location.pathname !== '/index.html') {
+                    window.location.href = 'index.html';
+                }
             }
 
         } else {
             clearAuth();
-            if (!window.location.pathname.includes('login') && !window.location.pathname.includes('register')) {
+            if (!window.location.pathname.includes('login.html') && 
+                !window.location.pathname.includes('register.html')) {
                 window.location.href = 'login.html';
             }
         }
     });
 
+    // Check current session
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
         supabase.auth.setSession(session);
@@ -107,11 +135,12 @@ async function login(email, password) {
     }
 }
 
-// Register manager (fixed)
+// Register manager (fixed role enforcement)
 async function registerManager(email, password, companyName) {
     if (!supabase) throw new Error('Supabase not ready');
 
     try {
+        // Sign up
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
             email,
             password,
@@ -121,7 +150,7 @@ async function registerManager(email, password, companyName) {
         if (signUpError) throw signUpError;
         if (!authData.user) throw new Error('No user created');
 
-        // Wait for trigger
+        // Wait for auth trigger/profile creation
         await new Promise(r => setTimeout(r, 2000));
 
         // Create company
@@ -138,8 +167,8 @@ async function registerManager(email, password, companyName) {
 
         if (companyError) throw companyError;
 
-        // Update profile to manager + company
-        const { error: profileError } = await supabase
+        // Force update profile to manager role + company
+        const { error: updateError } = await supabase
             .from('profiles')
             .update({ 
                 company_id: company.id,
@@ -148,12 +177,12 @@ async function registerManager(email, password, companyName) {
             })
             .eq('id', authData.user.id);
 
-        if (profileError) throw profileError;
+        if (updateError) throw updateError;
 
-        // Auto sign in
+        // Auto sign-in
         await supabase.auth.signInWithPassword({ email, password });
 
-        console.log('Manager registered:', email, company.name);
+        console.log('Manager registered & logged in:', email, company.name);
         return { success: true, user: authData.user, company };
     } catch (err) {
         console.error('Register failed:', err.message);
@@ -203,8 +232,8 @@ function protectRoute(requiredRole = null) {
     return true;
 }
 
-// Auto-init
-setTimeout(initializeAuth, 1000);
+// Auto-init with delay to ensure supabase loaded
+setTimeout(initializeAuth, 800);
 
 console.log('✅ Real Auth module loaded');
 
