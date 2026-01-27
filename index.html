@@ -169,37 +169,72 @@
                     </div>
                     
                     <!-- Timesheet Generator -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h2><i class="fas fa-calendar-alt"></i> Generate Timesheet</h2>
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-calendar-alt"></i> Generate Timesheet</h2>
+    </div>
+    <div class="card-body">
+        <form id="timesheetForm">
+            <div class="form-group">
+                <label for="timesheetPeriod">Timesheet Period</label>
+                <!-- Dynamic Period Selection Blocks -->
+                <div id="periodSelectionBlocks" class="period-selection-grid">
+                    <div class="loading-simple">
+                        <div class="spinner-small"></div>
+                        Loading available periods...
+                    </div>
+                </div>
+                
+                <!-- Hidden input to store selected period -->
+                <input type="hidden" id="timesheetPeriod" name="timesheetPeriod" value="">
+            </div>
+            
+            <!-- Auto-calculated dates section -->
+            <div id="autoDatesSection">
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <div>
+                            <strong>Start Date:</strong><br>
+                            <span id="autoStartDate">Select period first</span>
                         </div>
-                        <div class="card-body">
-                            <form id="timesheetForm">
-                                <div class="form-group">
-                                    <label for="timesheetPeriod">Timesheet Period</label>
-                                    <select id="timesheetPeriod" class="form-control">
-                                        <option value="weekly">Weekly (Monday to Sunday)</option>
-                                        <option value="fortnightly">Fortnightly (2 weeks)</option>
-                                        <option value="monthly">Monthly (1st to end of month)</option>
-                                        <option value="custom">Custom Dates</option>
-                                    </select>
-                                </div>
-                                
-                                <!-- Auto-calculated dates section -->
-                                <div id="autoDatesSection">
-                                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                                        <div style="display: flex; justify-content: space-between;">
-                                            <div>
-                                                <strong>Start Date:</strong><br>
-                                                <span id="autoStartDate">Loading...</span>
-                                            </div>
-                                            <div style="text-align: right;">
-                                                <strong>End Date:</strong><br>
-                                                <span id="autoEndDate">Loading...</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                        <div style="text-align: right;">
+                            <strong>End Date:</strong><br>
+                            <span id="autoEndDate">Select period first</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Custom dates section (initially hidden) -->
+            <div id="customDatesSection" style="display: none;">
+                <button type="button" id="customDatesBtn" class="btn" style="width: 100%; margin-bottom: 15px; background: #6c757d; color: white;">
+                    <i class="fas fa-calendar"></i> Select Custom Dates
+                </button>
+            </div>
+            
+            <div class="form-group">
+                <label class="checkbox">
+                    <input type="checkbox" id="sendEmail">
+                    <span>Send email notification</span>
+                </label>
+            </div>
+            
+            <!-- Email field (initially hidden) -->
+            <div class="form-group" id="emailGroup" style="display: none;">
+                <label for="emailAddress"><i class="fas fa-envelope"></i> Email Address</label>
+                <input type="email" id="emailAddress" placeholder="your@email.com">
+            </div>
+            
+            <!-- Hidden date inputs for form submission -->
+            <input type="hidden" id="startDate" name="startDate">
+            <input type="hidden" id="endDate" name="endDate">
+            
+            <button type="submit" class="btn btn-success btn-block">
+                <i class="fas fa-file-export"></i> Generate Timesheet
+            </button>
+        </form>
+    </div>
+</div>
                                 
                                 <!-- Custom dates section (initially hidden) -->
                                 <div id="customDatesSection" style="display: none;">
@@ -298,3 +333,4 @@
     <script src="script.js"></script>
 </body>
 </html>
+
