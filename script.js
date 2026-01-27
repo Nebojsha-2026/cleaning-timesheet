@@ -85,16 +85,16 @@ async function initializeApp() {
        }
         
         // Initialize entry mode UI (with error handling)
-try {
-    if (typeof initializeEntryModeUI === 'function') {
-       initializeEntryModeUI();
-  } else {
-        console.log('ℹ️ initializeEntryModeUI function not found - skipping');
- }
-} catch (error) {
-    console.log('⚠️ Error initializing entry mode UI:', error.message);
-    //Don't crash the app - this is non-critical
-}
+        try {
+            if (typeof initializeEntryModeUI === 'function') {
+               initializeEntryModeUI();
+          } else {
+                console.log('ℹ️ initializeEntryModeUI function not found - skipping');
+         }
+        } catch (error) {
+            console.log('⚠️ Error initializing entry mode UI:', error.message);
+            // Don't crash the app - this is non-critical
+        }
         
         // Setup custom dates button
         const customDatesBtn = document.getElementById('customDatesBtn');
@@ -118,14 +118,17 @@ try {
             setTimeout(async () => {
                 await loadStats();
                 await loadLocations();
-                await loadRecentEntries();
                 
                 // Load employee shifts
                 try {
                     if (typeof loadMyShifts === 'function') {
-                        await loadMyShifts(); // Employee shift viewing function
+                        await loadMyShifts(); // Upcoming shifts
                     } else {
                         console.log('⚠️ loadMyShifts function not found - shifts.js might not be loaded');
+                    }
+                    
+                    if (typeof loadPastShifts === 'function') {
+                        await loadPastShifts(); // Past shifts
                     }
                 } catch (error) {
                     console.log('⚠️ Could not load shifts:', error.message);
@@ -145,6 +148,420 @@ try {
 }
 
 // ============================================
+// PAST SHIFTS FUNCTIONS (Employee View)
+// ============================================
+
+// Load past shifts for employee view
+async function loadPastShifts() {
+    try {
+        console.log('📋 Loading past shifts...');
+        
+        const today = new Date().toISOString().split('T')[0];
+        
+        // For now, get all completed shifts (in real app, filter by logged-in user and status)
+        const { data: shifts, error } = await window.supabaseClient
+            .from('shifts')
+            .select(`
+                *,
+                locations (name, address, notes),
+                staff (name, email)
+            `)
+            .lt('shift_date', today)
+            .order('shift_date', { ascending: false })
+            .limit(10);
+        
+        if (error) throw error;
+        
+        updatePastShiftsDisplay(shifts || []);
+        console.log('✅ Past shifts loaded:', shifts?.length || 0);
+        
+    } catch (error) {
+        console.error('❌ Error loading past shifts:', error);
+        
+        // If table doesn't exist yet, show sample data
+        if (error.message.includes('does not exist')) {
+            console.log('⚠️ Shifts table not created yet, showing sample data');
+            showSamplePastShifts();
+        }
+    }
+}
+
+// Update past shifts display
+function updatePastShiftsDisplay(shifts) {
+    const container = document.getElementById('pastShiftsList');
+    if (!container) return;
+    
+    if (!shifts || shifts.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #666;">
+                <i class="fas fa-history" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
+                <p>No past shifts found.</p>
+                <p style="font-size: 0.9rem;">Completed shifts will appear here.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    shifts.forEach(shift => {
+        const locationName = shift.locations?.name || 'Unknown Location';
+        const staffName = shift.staff?.name || 'Manager';
+        const statusClass = getShiftStatusClass(shift.status);
+        const earnings = shift.actual_duration ? (shift.actual_duration * 23).toFixed(2) : (shift.duration * 23).toFixed(2);
+        const hours = shift.actual_duration || shift.duration;
+        
+        html += `
+            <div class="shift-item completed-shift" data-shift-id="${shift.id}">
+                <div class="shift-info">
+                    <h4>${escapeHtml(locationName)} 
+                        <span class="shift-status ${statusClass}">${shift.status}</span>
+                    </h4>
+                    <p>
+                        <i class="far fa-calendar"></i> ${formatDate(shift.shift_date)} 
+                        • <i class="far fa-clock"></i> ${formatTime(shift.start_time)} 
+                        • ${hours} hours
+                    </p>
+                    <p style="color: #28a745; font-weight: bold; margin-top: 5px;">
+                        <i class="fas fa-money-bill-wave"></i> Earned: $${earnings}
+                    </p>
+                    <p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
+                        <i class="fas fa-user-tie"></i> Assigned by: ${escapeHtml(staffName)}
+                        ${shift.notes ? `<br><i class="fas fa-sticky-note"></i> ${escapeHtml(shift.notes)}` : ''}
+                    </p>
+                </div>
+                <div class="shift-actions-employee">
+                    <button class="btn btn-sm btn-info view-shift-details" data-id="${shift.id}">
+                        <i class="fas fa-eye"></i> Details
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    
+    // Add event listeners for view details buttons
+    setTimeout(() => {
+        document.querySelectorAll('.view-shift-details').forEach(button => {
+            button.addEventListener('click', function() {
+                const id = this.getAttribute('data-id');
+                viewShiftDetails(id);
+            });
+        });
+    }, 100);
+}
+
+// Show sample past shifts (for demo)
+function showSamplePastShifts() {
+    const container = document.getElementById('pastShiftsList');
+    if (!container) return;
+    
+    const sampleShifts = [
+        {
+            id: 'past1',
+            location_name: 'Main Office',
+            shift_date: new Date(Date.now() - 86400000 * 2).toISOString().split('T')[0],
+            start_time: '09:00',
+            duration: 3,
+            actual_duration: 3.5,
+            status: 'completed',
+            notes: 'Regular cleaning - all floors',
+            earnings: 80.50
+        },
+        {
+            id: 'past2',
+            location_name: 'Private Residence',
+            shift_date: new Date(Date.now() - 86400000 * 5).toISOString().split('T')[0],
+            start_time: '14:00',
+            duration: 2,
+            actual_duration: 2.0,
+            status: 'completed',
+            notes: 'Spring cleaning requested',
+            earnings: 46.00
+        },
+        {
+            id: 'past3',
+            location_name: 'Business Center',
+            shift_date: new Date(Date.now() - 86400000 * 7).toISOString().split('T')[0],
+            start_time: '10:00',
+            duration: 4,
+            actual_duration: 3.75,
+            status: 'completed',
+            notes: 'Deep cleaning after renovation',
+            earnings: 86.25
+        }
+    ];
+    
+    let html = '<div style="margin-bottom: 15px; color: #666; font-size: 0.9rem; text-align: center;">📋 Showing sample past shifts (database not set up yet)</div>';
+    
+    sampleShifts.forEach(shift => {
+        const statusClass = getShiftStatusClass(shift.status);
+        
+        html += `
+            <div class="shift-item completed-shift">
+                <div class="shift-info">
+                    <h4>${escapeHtml(shift.location_name)} 
+                        <span class="shift-status ${statusClass}">${shift.status}</span>
+                    </h4>
+                    <p>
+                        <i class="far fa-calendar"></i> ${formatDate(shift.shift_date)} 
+                        • <i class="far fa-clock"></i> ${formatTime(shift.start_time)} 
+                        • ${shift.actual_duration} hours
+                    </p>
+                    <p style="color: #28a745; font-weight: bold; margin-top: 5px;">
+                        <i class="fas fa-money-bill-wave"></i> Earned: $${shift.earnings}
+                    </p>
+                    <p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
+                        <i class="fas fa-sticky-note"></i> ${escapeHtml(shift.notes)}
+                    </p>
+                </div>
+                <div class="shift-actions-employee">
+                    <button class="btn btn-sm btn-info" onclick="showMessage('Shift details would show here', 'info')">
+                        <i class="fas fa-eye"></i> Details
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// View shift details
+async function viewShiftDetails(id) {
+    try {
+        const { data: shift, error } = await window.supabaseClient
+            .from('shifts')
+            .select(`
+                *,
+                locations (name, address, hourly_rate),
+                staff (name, email)
+            `)
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+
+        const locationName = shift.locations?.name || 'Unknown Location';
+        const address = shift.locations?.address || 'No address provided';
+        const rate = shift.locations?.hourly_rate || 23;
+        const staffName = shift.staff?.name || 'Manager';
+        const earnings = shift.actual_duration ? (shift.actual_duration * rate).toFixed(2) : (shift.duration * rate).toFixed(2);
+        const hours = shift.actual_duration || shift.duration;
+
+        const html = `
+            <div class="modal-content">
+                <h2><i class="fas fa-info-circle"></i> Shift Details</h2>
+                
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h3 style="margin-top: 0; color: #667eea;">${escapeHtml(locationName)}</h3>
+                    <p style="color: #666; margin-bottom: 15px;">${escapeHtml(address)}</p>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div>
+                            <strong>Date:</strong><br>
+                            ${formatDate(shift.shift_date)}
+                        </div>
+                        <div style="text-align: right;">
+                            <strong>Status:</strong><br>
+                            <span class="shift-status ${getShiftStatusClass(shift.status)}">${shift.status}</span>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <strong>Scheduled:</strong><br>
+                            ${formatTime(shift.start_time)} for ${shift.duration} hours
+                        </div>
+                        <div style="text-align: right;">
+                            <strong>Actual:</strong><br>
+                            ${shift.actual_start_time ? formatTime(shift.actual_start_time) : 'N/A'} for ${hours} hours
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <h4 style="color: #333; margin-bottom: 10px;">Earnings Breakdown</h4>
+                    <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                            <span>Hours worked:</span>
+                            <strong>${hours} hrs</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                            <span>Hourly rate:</span>
+                            <strong>$${rate}/hr</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 1.2rem; color: #28a745; font-weight: bold; padding-top: 10px; border-top: 2px solid #e0e0e0;">
+                            <span>Total earnings:</span>
+                            <strong>$${earnings}</strong>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <h4 style="color: #333; margin-bottom: 10px;">Shift Information</h4>
+                    <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px;">
+                        <div style="margin-bottom: 10px;">
+                            <strong><i class="fas fa-user-tie"></i> Assigned by:</strong><br>
+                            ${escapeHtml(staffName)}
+                        </div>
+                        ${shift.confirmed_at ? `
+                            <div style="margin-bottom: 10px;">
+                                <strong><i class="fas fa-check-circle"></i> Accepted on:</strong><br>
+                                ${formatDate(shift.confirmed_at)}
+                            </div>
+                        ` : ''}
+                        ${shift.completed_at ? `
+                            <div style="margin-bottom: 10px;">
+                                <strong><i class="fas fa-flag-checkered"></i> Completed on:</strong><br>
+                                ${formatDate(shift.completed_at)}
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                ${shift.notes ? `
+                    <div style="margin-bottom: 20px;">
+                        <h4 style="color: #333; margin-bottom: 10px;">Notes</h4>
+                        <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px;">
+                            ${escapeHtml(shift.notes)}
+                        </div>
+                    </div>
+                ` : ''}
+                
+                <button onclick="closeModal()" class="btn" style="width: 100%;">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
+        `;
+        
+        showModal(html);
+        
+    } catch (error) {
+        console.error('❌ Error viewing shift details:', error);
+        showMessage('❌ Error loading shift details: ' + error.message, 'error');
+    }
+}
+
+// Get CSS class for shift status
+function getShiftStatusClass(status) {
+    switch(status) {
+        case 'confirmed': return 'confirmed';
+        case 'in_progress': return 'in-progress';
+        case 'completed': return 'completed';
+        case 'cancelled': return 'cancelled';
+        default: return 'pending';
+    }
+}
+
+// Format time for display
+function formatTime(timeString) {
+    if (!timeString) return '';
+    
+    // Convert "14:30" to "2:30 PM"
+    const [hours, minutes] = timeString.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    
+    return `${displayHour}:${minutes} ${ampm}`;
+}
+
+// Load statistics for employee view (shows completed shifts)
+async function loadStats() {
+    try {
+        console.log('📊 Loading statistics...');
+      
+        // Get completed shifts count instead of entries
+        const { count: completedShifts, error: shiftsError } = await window.supabaseClient
+            .from('shifts')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'completed');
+      
+        if (shiftsError) throw shiftsError;
+      
+        const { count: totalLocations, error: locationsError } = await window.supabaseClient
+            .from('locations')
+            .select('*', { count: 'exact', head: true });
+      
+        if (locationsError) throw locationsError;
+      
+        const { count: totalTimesheets, error: timesheetsError } = await window.supabaseClient
+            .from('timesheets')
+            .select('*', { count: 'exact', head: true });
+      
+        if (timesheetsError) throw timesheetsError;
+      
+        // Calculate total earnings from completed shifts
+        const { data: completedShiftsData, error: earningsError } = await window.supabaseClient
+            .from('shifts')
+            .select(`
+                duration,
+                actual_duration,
+                locations (hourly_rate)
+            `)
+            .eq('status', 'completed');
+      
+        if (earningsError) throw earningsError;
+      
+        const totalEarnings = completedShiftsData.reduce((sum, shift) => {
+            const rate = shift.locations?.hourly_rate || window.CONFIG.DEFAULT_HOURLY_RATE;
+            const hours = shift.actual_duration || shift.duration;
+            return sum + (parseFloat(hours) * rate);
+        }, 0).toFixed(2);
+      
+        updateStatsDisplay({
+            completedShifts: completedShifts || 0,
+            totalLocations: totalLocations || 0,
+            totalTimesheets: totalTimesheets || 0,
+            totalEarnings: totalEarnings
+        });
+      
+        console.log('✅ Statistics loaded');
+      
+    } catch (error) {
+        console.error('❌ Error loading statistics:', error);
+    }
+}
+
+// Update stats display with completed shifts
+function updateStatsDisplay(stats) {
+    document.querySelectorAll('.stat-card')[0].innerHTML = `
+        <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+        <div class="stat-info">
+            <h3>Completed Shifts</h3>
+            <div class="stat-value">${stats.completedShifts}</div>
+        </div>
+    `;
+  
+    document.querySelectorAll('.stat-card')[1].innerHTML = `
+        <div class="stat-icon"><i class="fas fa-map-marker-alt"></i></div>
+        <div class="stat-info">
+            <h3>Locations</h3>
+            <div class="stat-value">${stats.totalLocations}</div>
+        </div>
+    `;
+  
+    document.querySelectorAll('.stat-card')[2].innerHTML = `
+        <div class="stat-icon"><i class="fas fa-file-invoice-dollar"></i></div>
+        <div class="stat-info">
+            <h3>Timesheets</h3>
+            <div class="stat-value">${stats.totalTimesheets}</div>
+        </div>
+    `;
+  
+    document.querySelectorAll('.stat-card')[3].innerHTML = `
+        <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
+        <div class="stat-info">
+            <h3>Total Earned</h3>
+            <div class="stat-value">$${stats.totalEarnings}</div>
+        </div>
+    `;
+  
+    document.querySelectorAll('.stat-card').forEach(card => card.classList.remove('loading'));
+}
+
+// ============================================
 // ACTION BUTTONS
 // ============================================
 
@@ -152,20 +569,21 @@ window.refreshData = async function() {
     console.log('🔄 Refreshing data...');
     showMessage('Refreshing data...', 'info');
     await loadStats();
-    await loadRecentEntries();
+    await loadMyShifts();
+    await loadPastShifts();
     await loadLocations();
-    if (typeof loadMyShifts === 'function') {
-        await loadMyShifts();
-    }
     showMessage('✅ Data refreshed!', 'success');
+};
+
+window.refreshPastShifts = async function() {
+    console.log('🔄 Refreshing past shifts...');
+    showMessage('Refreshing past shifts...', 'info');
+    await loadPastShifts();
+    showMessage('✅ Past shifts refreshed!', 'success');
 };
 
 window.generateTimesheet = function() {
     document.getElementById('timesheetForm').scrollIntoView({ behavior: 'smooth' });
-};
-
-window.exportData = function() { 
-    alert('Export feature coming soon!'); 
 };
 
 window.showSettings = function() { 
@@ -544,9 +962,3 @@ window.generateExport = function() {
 
 // Final log
 console.log('🎉 Main script loaded (Employee Version)');
-
-
-
-
-
-
