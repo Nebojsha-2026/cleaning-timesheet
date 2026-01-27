@@ -304,6 +304,69 @@ select {
     overflow-y: auto;
 }
 
+.entry-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid #e9ecef;
+    transition: background-color 0.3s;
+}
+
+.entry-item:hover {
+    background-color: #f8f9fa;
+}
+
+.entry-item:last-child {
+    border-bottom: none;
+}
+
+.entry-info h4 {
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+.entry-info p {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.entry-stats {
+    text-align: right;
+}
+
+.entry-hours {
+    font-weight: bold;
+    color: #667eea;
+    font-size: 1.1rem;
+}
+
+.entry-earnings {
+    color: #28a745;
+    font-weight: 600;
+}
+
+/* Entry Actions */
+.entry-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.entry-actions button {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 4px;
+    transition: color 0.2s;
+    color: #667eea;
+}
+
+.entry-actions button:hover {
+    color: #764ba2;
+}
+
 /* Quick Actions */
 .actions-grid {
     display: grid;
