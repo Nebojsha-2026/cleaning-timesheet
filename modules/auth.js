@@ -1,4 +1,4 @@
-// auth.js - Fixed to avoid redirect loops on auth pages
+// auth.js - Final fixed version - no redirect loop on auth pages
 
 console.log('🔐 Real Auth module loading...');
 
@@ -16,7 +16,7 @@ let userRole = null;
 
 let supabase = null;
 
-// Safe Supabase init
+// Init Supabase
 function initSupabase() {
     if (window.supabase && window.supabase.createClient) {
         supabase = window.supabase.createClient(
@@ -26,7 +26,7 @@ function initSupabase() {
         window.supabaseClient = supabase;
         console.log('Supabase initialized');
     } else {
-        console.error('Supabase script not loaded');
+        console.error('Supabase not loaded');
     }
 }
 
@@ -40,14 +40,14 @@ async function initializeAuth() {
     }
 
     supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('Auth event:', event, session ? 'session exists' : 'no session');
+        console.log('Auth event:', event, session ? 'has session' : 'no session');
 
-        // Skip redirect logic on login/register pages
+        // NEVER redirect if on login or register page
         const isAuthPage = window.location.pathname.includes('login.html') || 
-                           window.location.pathname.includes('register.html');
+                          window.location.pathname.includes('register.html');
 
         if (isAuthPage) {
-            console.log('On auth page - skipping redirect');
+            console.log('On auth page - no redirect');
             return;
         }
 
@@ -56,52 +56,44 @@ async function initializeAuth() {
             currentToken = session.access_token;
 
             // Load profile
-            let profile = null;
-            const { data, error } = await supabase
+            const { data: profile, error } = await supabase
                 .from('profiles')
                 .select('company_id, role')
                 .eq('id', currentUser.id)
                 .single();
 
-            if (!error && data) {
-                profile = data;
-            }
+            if (error) console.warn('Profile load warning:', error.message);
 
-            if (profile) {
-                currentCompanyId = profile.company_id;
-                userRole = profile.role || 'employee';
-            } else {
-                userRole = 'employee';
-                currentCompanyId = null;
-            }
+            currentCompanyId = profile?.company_id || null;
+            userRole = profile?.role || 'employee';
 
             localStorage.setItem(AUTH_CONFIG.TOKEN_KEY, currentToken);
             localStorage.setItem(AUTH_CONFIG.USER_KEY, JSON.stringify(currentUser));
             localStorage.setItem(AUTH_CONFIG.COMPANY_KEY, currentCompanyId || '');
             localStorage.setItem(AUTH_CONFIG.ROLE_KEY, userRole);
 
-            console.log('Logged in as:', currentUser.email, userRole, currentCompanyId);
+            console.log('Logged in:', currentUser.email, userRole, currentCompanyId);
 
-            // Redirect ONLY if not already on correct page
+            // Redirect only if not already on correct page
             if (userRole === 'manager' && !window.location.pathname.includes('manager.html')) {
-                console.log('Redirecting manager to manager.html');
+                console.log('Redirect to manager.html');
                 window.location.href = 'manager.html';
             } else if (userRole !== 'manager' && !window.location.pathname.includes('index.html')) {
-                console.log('Redirecting employee to index.html');
+                console.log('Redirect to index.html');
                 window.location.href = 'index.html';
             }
 
         } else {
             clearAuth();
-            // Only redirect if not already on auth page
+            // Only redirect if not on auth page
             if (!isAuthPage) {
-                console.log('No session - redirecting to login');
+                console.log('No session - to login');
                 window.location.href = 'login.html';
             }
         }
     });
 
-    // Check existing session
+    // Check current session
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
         supabase.auth.setSession(session);
@@ -216,7 +208,7 @@ function protectRoute(requiredRole = null) {
     return true;
 }
 
-setTimeout(initializeAuth, 1000);
+setTimeout(initializeAuth, 800);
 
 console.log('✅ Real Auth module loaded');
 
