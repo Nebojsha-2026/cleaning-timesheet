@@ -46,7 +46,7 @@
             <!-- Quick Stats Row -->
             <div class="stats-row" id="statsRow">
                 <div class="stat-card loading">
-                    <div class="stat-icon"><i class="fas fa-list"></i></div>
+                    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
                     <div class="stat-info">
                         <h3>Completed Shifts</h3>
                         <div class="stat-value">...</div>
@@ -160,110 +160,48 @@
                                     <i class="fas fa-folder"></i>
                                     <span>View Timesheets</span>
                                 </button>
-                                <button onclick="exportMyData()" class="action-btn">
-                                    <i class="fas fa-download"></i>
-                                    <span>Export Data</span>
+                                <button onclick="showSettings()" class="action-btn">
+                                    <i class="fas fa-cog"></i>
+                                    <span>Settings</span>
                                 </button>
                             </div>
                         </div>
                     </div>
                     
                     <!-- Timesheet Generator -->
-<div class="card">
-    <div class="card-header">
-        <h2><i class="fas fa-calendar-alt"></i> Generate Timesheet</h2>
-    </div>
-    <div class="card-body">
-        <form id="timesheetForm">
-            <div class="form-group">
-                <label for="timesheetPeriod">Timesheet Period</label>
-                <!-- Dynamic Period Selection Blocks -->
-                <div id="periodSelectionBlocks" class="period-selection-grid">
-                    <div class="loading-simple">
-                        <div class="spinner-small"></div>
-                        Loading available periods...
-                    </div>
-                </div>
-                
-                <!-- Hidden input to store selected period -->
-                <input type="hidden" id="timesheetPeriod" name="timesheetPeriod" value="">
-            </div>
-            
-            <!-- Auto-calculated dates section -->
-            <div id="autoDatesSection" class="dates-display">
-                <div class="dates-row">
-                    <div class="date-column">
-                        <strong>Start Date:</strong>
-                        <div id="autoStartDate" class="date-value">Select period first</div>
-                    </div>
-                    <div class="date-column">
-                        <strong>End Date:</strong>
-                        <div id="autoEndDate" class="date-value">Select period first</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Custom dates section (initially hidden) -->
-            <div id="customDatesSection" style="display: none;">
-                <button type="button" id="customDatesBtn" class="btn" style="width: 100%; margin-bottom: 15px; background: #6c757d; color: white;">
-                    <i class="fas fa-calendar"></i> Select Custom Dates
-                </button>
-            </div>
-            
-            <div class="form-group">
-                <label class="checkbox">
-                    <input type="checkbox" id="sendEmail">
-                    <span>Send email notification</span>
-                </label>
-            </div>
-            
-            <!-- Email field (initially hidden) -->
-            <div class="form-group" id="emailGroup" style="display: none;">
-                <label for="emailAddress"><i class="fas fa-envelope"></i> Email Address</label>
-                <input type="email" id="emailAddress" placeholder="your@email.com">
-            </div>
-            
-            <!-- Hidden date inputs for form submission -->
-            <input type="hidden" id="startDate" name="startDate">
-            <input type="hidden" id="endDate" name="endDate">
-            
-            <button type="submit" class="btn btn-success btn-block">
-                <i class="fas fa-file-export"></i> Generate Timesheet
-            </button>
-        </form>
-    </div>
-</div>
-            
-            <!-- Custom dates section (initially hidden) -->
-            <div id="customDatesSection" style="display: none;">
-                <button type="button" id="customDatesBtn" class="btn" style="width: 100%; margin-bottom: 15px; background: #6c757d; color: white;">
-                    <i class="fas fa-calendar"></i> Select Custom Dates
-                </button>
-            </div>
-            
-            <div class="form-group">
-                <label class="checkbox">
-                    <input type="checkbox" id="sendEmail">
-                    <span>Send email notification</span>
-                </label>
-            </div>
-            
-            <!-- Email field (initially hidden) -->
-            <div class="form-group" id="emailGroup" style="display: none;">
-                <label for="emailAddress"><i class="fas fa-envelope"></i> Email Address</label>
-                <input type="email" id="emailAddress" placeholder="your@email.com">
-            </div>
-            
-            <!-- Hidden date inputs for form submission -->
-            <input type="hidden" id="startDate" name="startDate">
-            <input type="hidden" id="endDate" name="endDate">
-            
-            <button type="submit" class="btn btn-success btn-block">
-                <i class="fas fa-file-export"></i> Generate Timesheet
-            </button>
-        </form>
-    </div>
-</div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-calendar-alt"></i> Generate Timesheet</h2>
+                        </div>
+                        <div class="card-body">
+                            <form id="timesheetForm">
+                                <div class="form-group">
+                                    <label for="timesheetPeriod">Timesheet Period</label>
+                                    <!-- Dynamic Period Selection Blocks -->
+                                    <div id="periodSelectionBlocks" class="period-selection-grid">
+                                        <div class="loading-simple">
+                                            <div class="spinner-small"></div>
+                                            Loading available periods...
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Hidden input to store selected period -->
+                                    <input type="hidden" id="timesheetPeriod" name="timesheetPeriod" value="">
+                                </div>
+                                
+                                <!-- Auto-calculated dates section -->
+                                <div id="autoDatesSection" class="dates-display">
+                                    <div class="dates-row">
+                                        <div class="date-column">
+                                            <strong>Start Date:</strong>
+                                            <div id="autoStartDate" class="date-value">Select period first</div>
+                                        </div>
+                                        <div class="date-column">
+                                            <strong>End Date:</strong>
+                                            <div id="autoEndDate" class="date-value">Select period first</div>
+                                        </div>
+                                    </div>
+                                </div>
                                 
                                 <!-- Custom dates section (initially hidden) -->
                                 <div id="customDatesSection" style="display: none;">
@@ -362,5 +300,3 @@
     <script src="script.js"></script>
 </body>
 </html>
-
-
