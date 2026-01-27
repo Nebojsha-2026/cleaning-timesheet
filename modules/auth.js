@@ -1,4 +1,4 @@
-// auth.js - Real Supabase Authentication
+// auth.js - Real Supabase Auth (fixed version)
 
 console.log('🔐 Real Auth module loading...');
 
@@ -14,29 +14,31 @@ let currentToken = null;
 let currentCompanyId = null;
 let userRole = null;
 
-// Wait for Supabase to be ready
-function waitForSupabase() {
+let supabase = null;
+
+// Wait for Supabase
+function initSupabase() {
     if (window.supabase && window.supabase.createClient) {
-        return window.supabase.createClient(
+        supabase = window.supabase.createClient(
             'https://hqmtigcjyqckqdzepcdu.supabase.co',
             'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbXRpZ2NqeXFja3FkemVwY2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwODgwMjYsImV4cCI6MjA4NDY2NDAyNn0.Rs6yv54hZyXzqqWQM4m-Z4g3gKqacBeDfHiMfpOuFRw'
         );
+        window.supabaseClient = supabase;
+        console.log('Supabase initialized');
+    } else {
+        console.error('Supabase not loaded yet');
     }
-    return null;
 }
 
-let supabase = waitForSupabase();
+initSupabase();
 
 // Initialize auth
 async function initializeAuth() {
-    console.log('Initializing real auth...');
-
     if (!supabase) {
-        console.error('Supabase not loaded – cannot initialize auth');
+        console.error('Supabase not ready');
         return;
     }
 
-    // Listen for auth changes
     supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('Auth event:', event);
 
@@ -53,37 +55,36 @@ async function initializeAuth() {
 
             if (error || !profile) {
                 console.error('Profile load failed:', error);
-                logout();
-                return;
+                // Fallback
+                userRole = 'employee';
+                currentCompanyId = null;
+            } else {
+                currentCompanyId = profile.company_id;
+                userRole = profile.role;
             }
-
-            currentCompanyId = profile.company_id;
-            userRole = profile.role;
 
             localStorage.setItem(AUTH_CONFIG.TOKEN_KEY, currentToken);
             localStorage.setItem(AUTH_CONFIG.USER_KEY, JSON.stringify(currentUser));
-            localStorage.setItem(AUTH_CONFIG.COMPANY_KEY, currentCompanyId);
-            localStorage.setItem(AUTH_CONFIG.ROLE_KEY, userRole);
+            localStorage.setItem(AUTH_CONFIG.COMPANY_KEY, currentCompanyId || '');
+            localStorage.setItem(AUTH_CONFIG.ROLE_KEY, userRole || 'employee');
 
             console.log('Logged in:', currentUser.email, userRole, currentCompanyId);
 
-            // Redirect based on role
-            if (userRole === 'manager' && window.location.pathname.includes('index.html')) {
+            // ALWAYS redirect after sign in
+            if (userRole === 'manager') {
                 window.location.href = 'manager.html';
-            } else if (userRole !== 'manager' && window.location.pathname.includes('manager.html')) {
+            } else {
                 window.location.href = 'index.html';
             }
 
         } else {
             clearAuth();
-            if (!window.location.pathname.includes('login.html') && 
-                !window.location.pathname.includes('register.html')) {
+            if (!window.location.pathname.includes('login') && !window.location.pathname.includes('register')) {
                 window.location.href = 'login.html';
             }
         }
     });
 
-    // Check existing session
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
         supabase.auth.setSession(session);
@@ -95,11 +96,7 @@ async function login(email, password) {
     if (!supabase) throw new Error('Supabase not ready');
 
     try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password
-        });
-
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
 
         console.log('Login success:', data.user.email);
@@ -110,12 +107,11 @@ async function login(email, password) {
     }
 }
 
-// Register manager (creates company + profile)
+// Register manager (fixed)
 async function registerManager(email, password, companyName) {
     if (!supabase) throw new Error('Supabase not ready');
 
     try {
-        // Sign up
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
             email,
             password,
@@ -125,8 +121,8 @@ async function registerManager(email, password, companyName) {
         if (signUpError) throw signUpError;
         if (!authData.user) throw new Error('No user created');
 
-        // Wait a moment for trigger to create profile
-        await new Promise(r => setTimeout(r, 1000));
+        // Wait for trigger
+        await new Promise(r => setTimeout(r, 2000));
 
         // Create company
         const { data: company, error: companyError } = await supabase
@@ -142,7 +138,7 @@ async function registerManager(email, password, companyName) {
 
         if (companyError) throw companyError;
 
-        // Update profile
+        // Update profile to manager + company
         const { error: profileError } = await supabase
             .from('profiles')
             .update({ 
@@ -153,6 +149,9 @@ async function registerManager(email, password, companyName) {
             .eq('id', authData.user.id);
 
         if (profileError) throw profileError;
+
+        // Auto sign in
+        await supabase.auth.signInWithPassword({ email, password });
 
         console.log('Manager registered:', email, company.name);
         return { success: true, user: authData.user, company };
@@ -205,7 +204,7 @@ function protectRoute(requiredRole = null) {
 }
 
 // Auto-init
-setTimeout(initializeAuth, 500); // give time for supabase to load
+setTimeout(initializeAuth, 1000);
 
 console.log('✅ Real Auth module loaded');
 
