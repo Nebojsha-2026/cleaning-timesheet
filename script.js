@@ -13,13 +13,12 @@ let currentEntryMode = 'daily';
 let selectedDaysOfWeek = [];
 let selectedMonthDays = [];
 let appLocations = [];
-let currentEmployeeId = null; // This would be set after login
+let currentEmployeeId = null;
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('✅ DOM Ready');
     
-    // Modern Supabase client initialization
     if (!window.supabase) {
         console.error('❌ Supabase global not found.');
         throw new Error('Supabase not loaded');
@@ -32,19 +31,15 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     console.log('✅ Supabase client initialized');
     
-    // For demo, simulate an employee ID
-    // In production, this would come from authentication
     currentEmployeeId = await getCurrentEmployeeId();
     
-    // Initialize the app
     await initializeApp();
 });
 
-// Get current employee ID (simulated for now)
+// Get current employee ID
 async function getCurrentEmployeeId() {
     try {
-        // In a real app, this would come from auth/session
-        // For now, get the first employee from the database
+        // For demo - get first employee
         const { data: staff, error } = await supabase
             .from('staff')
             .select('id')
@@ -73,25 +68,9 @@ async function initializeApp() {
         const today = new Date();
         document.getElementById('currentDate').textContent = formatDate(today);
 
-        // Set default dates for timesheet generator
-        const lastWeek = new Date(today);
-        lastWeek.setDate(today.getDate() - 7);
-        
-        const startDateInput = document.getElementById('startDate');
-        const endDateInput = document.getElementById('endDate');
-        
-        if (startDateInput) startDateInput.value = lastWeek.toISOString().split('T')[0];
-        if (endDateInput) endDateInput.value = today.toISOString().split('T')[0];
-      
-        // Setup form handlers - ONLY TIMESHEET FORM (no shift forms for employees)
+        // Setup timesheet form
         const timesheetForm = document.getElementById('timesheetForm');
-        
-        console.log('Checking forms:', {
-            timesheetForm: !!timesheetForm
-        });
-        
         if (timesheetForm) {
-            console.log('✅ Adding listener to timesheetForm');
             timesheetForm.addEventListener('submit', handleGenerateTimesheet);
         }
 
@@ -107,24 +86,6 @@ async function initializeApp() {
         if (customDatesBtn) {
             customDatesBtn.addEventListener('click', showCustomDatesPopup);
         }
-        
-        // Setup entry mode selector (for work entries, not shifts)
-        const entryMode = document.getElementById('entryMode');
-        if (entryMode) {
-           entryMode.addEventListener('change', handleEntryModeChange);
-       }
-        
-        // Initialize entry mode UI (with error handling)
-        try {
-            if (typeof initializeEntryModeUI === 'function') {
-               initializeEntryModeUI();
-          } else {
-                console.log('ℹ️ initializeEntryModeUI function not found - skipping');
-         }
-        } catch (error) {
-            console.log('⚠️ Error initializing entry mode UI:', error.message);
-            // Don't crash the app - this is non-critical
-        }
       
         // Test connection
         const connected = await testConnection();
@@ -138,28 +99,25 @@ async function initializeApp() {
             document.querySelector('.container').style.display = 'block';
             console.log('✨ Dashboard ready');
           
-            // Load data in background
+            // Load data
             setTimeout(async () => {
                 await loadStats();
                 await loadLocations();
                 
-                // Load employee shifts
                 try {
                     if (typeof loadMyShifts === 'function') {
-                        await loadMyShifts(); // Upcoming shifts
-                    } else {
-                        console.log('⚠️ loadMyShifts function not found - shifts.js might not be loaded');
+                        await loadMyShifts();
                     }
                     
                     if (typeof loadPastShifts === 'function') {
-                        await loadPastShifts(); // Past shifts
+                        await loadPastShifts();
                     }
                     
                     if (typeof loadTimesheetPeriods === 'function') {
-                        await loadTimesheetPeriods(); // Timesheet periods
+                        await loadTimesheetPeriods();
                     }
                 } catch (error) {
-                    console.log('⚠️ Could not load shifts:', error.message);
+                    console.log('⚠️ Could not load data:', error.message);
                 }
                 
             }, 500);
@@ -176,7 +134,7 @@ async function initializeApp() {
 }
 
 // ============================================
-// PAST SHIFTS FUNCTIONS (Employee View)
+// PAST SHIFTS FUNCTIONS
 // ============================================
 
 // Load past shifts for employee view
@@ -186,13 +144,11 @@ async function loadPastShifts() {
         
         const today = new Date().toISOString().split('T')[0];
         
-        // Query actual shifts from database
         const { data: shifts, error } = await window.supabaseClient
             .from('shifts')
             .select(`
                 *,
-                locations (name, address, hourly_rate),
-                staff!shifts_staff_id_fkey (name, email)
+                locations (name, address, hourly_rate)
             `)
             .eq('staff_id', currentEmployeeId)
             .lt('shift_date', today)
@@ -207,7 +163,7 @@ async function loadPastShifts() {
         
     } catch (error) {
         console.error('❌ Error loading past shifts:', error);
-        showSamplePastShifts(); // Fallback to sample data
+        showSamplePastShifts();
     }
 }
 
@@ -230,7 +186,6 @@ function updatePastShiftsDisplay(shifts) {
     let html = '';
     shifts.forEach(shift => {
         const locationName = shift.locations?.name || 'Unknown Location';
-        const staffName = shift.staff?.name || 'Manager';
         const statusClass = getShiftStatusClass(shift.status);
         const rate = shift.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE;
         const earnings = shift.actual_duration ? (shift.actual_duration * rate).toFixed(2) : (shift.duration * rate).toFixed(2);
@@ -252,9 +207,9 @@ function updatePastShiftsDisplay(shifts) {
                             <i class="fas fa-money-bill-wave"></i> Earned: $${earnings}
                         </p>
                     ` : ''}
-                    <p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
-                        ${shift.notes ? `<i class="fas fa-sticky-note"></i> ${escapeHtml(shift.notes)}<br>` : ''}
-                    </p>
+                    ${shift.notes ? `<p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
+                        <i class="fas fa-sticky-note"></i> ${escapeHtml(shift.notes)}
+                    </p>` : ''}
                 </div>
                 <div class="shift-actions-employee">
                     <button class="btn btn-sm btn-info view-shift-details" data-id="${shift.id}">
@@ -267,7 +222,7 @@ function updatePastShiftsDisplay(shifts) {
     
     container.innerHTML = html;
     
-    // Add event listeners for view details buttons
+    // Add event listeners
     setTimeout(() => {
         document.querySelectorAll('.view-shift-details').forEach(button => {
             button.addEventListener('click', function() {
@@ -278,7 +233,7 @@ function updatePastShiftsDisplay(shifts) {
     }, 100);
 }
 
-// Show sample past shifts (for demo)
+// Show sample past shifts
 function showSamplePastShifts() {
     const container = document.getElementById('pastShiftsList');
     if (!container) return;
@@ -294,17 +249,6 @@ function showSamplePastShifts() {
             status: 'completed',
             notes: 'Regular cleaning - all floors',
             earnings: 80.50
-        },
-        {
-            id: 'past2',
-            location_name: 'Private Residence',
-            shift_date: new Date(Date.now() - 86400000 * 5).toISOString().split('T')[0],
-            start_time: '14:00',
-            duration: 2,
-            actual_duration: 2.0,
-            status: 'completed',
-            notes: 'Spring cleaning requested',
-            earnings: 46.00
         }
     ];
     
@@ -326,9 +270,6 @@ function showSamplePastShifts() {
                     </p>
                     <p style="color: #28a745; font-weight: bold; margin-top: 5px;">
                         <i class="fas fa-money-bill-wave"></i> Earned: $${shift.earnings}
-                    </p>
-                    <p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
-                        <i class="fas fa-sticky-note"></i> ${escapeHtml(shift.notes)}
                     </p>
                 </div>
                 <div class="shift-actions-employee">
@@ -359,9 +300,7 @@ async function viewShiftDetails(id) {
         if (error) throw error;
 
         const locationName = shift.locations?.name || 'Unknown Location';
-        const address = shift.locations?.address || 'No address provided';
         const rate = shift.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE;
-        const staffName = shift.staff?.name || 'Manager';
         const earnings = shift.actual_duration ? (shift.actual_duration * rate).toFixed(2) : (shift.duration * rate).toFixed(2);
         const hours = shift.actual_duration || shift.duration;
 
@@ -371,7 +310,6 @@ async function viewShiftDetails(id) {
                 
                 <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
                     <h3 style="margin-top: 0; color: #667eea;">${escapeHtml(locationName)}</h3>
-                    <p style="color: #666; margin-bottom: 15px;">${escapeHtml(address)}</p>
                     
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
                         <div>
@@ -416,28 +354,6 @@ async function viewShiftDetails(id) {
                     </div>
                 ` : ''}
                 
-                <div style="margin-bottom: 20px;">
-                    <h4 style="color: #333; margin-bottom: 10px;">Shift Information</h4>
-                    <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px;">
-                        <div style="margin-bottom: 10px;">
-                            <strong><i class="fas fa-user-tie"></i> Assigned by:</strong><br>
-                            ${escapeHtml(staffName)}
-                        </div>
-                        ${shift.confirmed_at ? `
-                            <div style="margin-bottom: 10px;">
-                                <strong><i class="fas fa-check-circle"></i> Accepted on:</strong><br>
-                                ${formatDate(shift.confirmed_at)}
-                            </div>
-                        ` : ''}
-                        ${shift.completed_at ? `
-                            <div style="margin-bottom: 10px;">
-                                <strong><i class="fas fa-flag-checkered"></i> Completed on:</strong><br>
-                                ${formatDate(shift.completed_at)}
-                            </div>
-                        ` : ''}
-                    </div>
-                </div>
-                
                 ${shift.notes ? `
                     <div style="margin-bottom: 20px;">
                         <h4 style="color: #333; margin-bottom: 10px;">Notes</h4>
@@ -461,36 +377,15 @@ async function viewShiftDetails(id) {
     }
 }
 
-// Get CSS class for shift status
-function getShiftStatusClass(status) {
-    switch(status) {
-        case 'confirmed': return 'confirmed';
-        case 'in_progress': return 'in-progress';
-        case 'completed': return 'completed';
-        case 'cancelled': return 'cancelled';
-        default: return 'pending';
-    }
-}
+// ============================================
+// STATISTICS FUNCTIONS
+// ============================================
 
-// Format time for display
-function formatTime(timeString) {
-    if (!timeString) return '';
-    
-    // Convert "14:30" to "2:30 PM"
-    const [hours, minutes] = timeString.split(':');
-    const hour = parseInt(hours);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour % 12 || 12;
-    
-    return `${displayHour}:${minutes} ${ampm}`;
-}
-
-// Load statistics for employee view (shows completed shifts)
 async function loadStats() {
     try {
         console.log('📊 Loading statistics...');
       
-        // Get completed shifts count for current employee
+        // Get completed shifts count
         const { count: completedShifts, error: shiftsError } = await window.supabaseClient
             .from('shifts')
             .select('*', { count: 'exact', head: true })
@@ -512,7 +407,7 @@ async function loadStats() {
       
         if (timesheetsError) throw timesheetsError;
       
-        // Calculate total earnings from completed shifts for current employee
+        // Calculate total earnings
         const { data: completedShiftsData, error: earningsError } = await window.supabaseClient
             .from('shifts')
             .select(`
@@ -545,7 +440,6 @@ async function loadStats() {
     }
 }
 
-// Update stats display with completed shifts
 function updateStatsDisplay(stats) {
     document.querySelectorAll('.stat-card')[0].innerHTML = `
         <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
@@ -586,84 +480,90 @@ function updateStatsDisplay(stats) {
 // TIMESHEET PERIOD SELECTION FUNCTIONS
 // ============================================
 
-// Load available timesheet periods for employee
 async function loadTimesheetPeriods() {
     try {
         console.log('📅 Loading available timesheet periods...');
         
-        // Query employee settings from database
-        const { data: employeeSettings, error } = await window.supabaseClient
+        // First check if columns exist
+        const { data: employee, error } = await window.supabaseClient
             .from('staff')
-            .select('timesheet_weekly, timesheet_fortnightly, timesheet_monthly, timesheet_custom')
+            .select('*')
             .eq('id', currentEmployeeId)
             .single();
         
         if (error) {
-            console.log('⚠️ No employee settings found, using defaults');
-            // Use default periods
+            console.log('⚠️ Using default periods');
             const defaultPeriods = [
-                { id: 'weekly', label: 'Weekly', icon: 'calendar-week', enabled: true, description: 'Monday to Sunday' },
-                { id: 'fortnightly', label: 'Fortnightly', icon: 'calendar-alt', enabled: true, description: '2 weeks period' },
-                { id: 'monthly', label: 'Monthly', icon: 'calendar', enabled: true, description: '1st to end of month' },
-                { id: 'custom', label: 'Custom', icon: 'calendar-day', enabled: true, description: 'Select dates' }
+                { id: 'weekly', label: 'Weekly', icon: 'calendar-week', enabled: true, description: 'Mon-Sun' },
+                { id: 'fortnightly', label: 'Fortnightly', icon: 'calendar-alt', enabled: true, description: '2 weeks' },
+                { id: 'monthly', label: 'Monthly', icon: 'calendar', enabled: true, description: 'Month' },
+                { id: 'custom', label: 'Custom', icon: 'calendar-day', enabled: true, description: 'Pick dates' }
             ];
             renderPeriodSelectionBlocks(defaultPeriods);
             return;
         }
         
-        // Map database settings to period objects
-        const availablePeriods = [
-            { 
-                id: 'weekly', 
-                label: 'Weekly', 
-                icon: 'calendar-week', 
-                enabled: employeeSettings.timesheet_weekly !== false, 
-                description: 'Monday to Sunday' 
-            },
-            { 
-                id: 'fortnightly', 
-                label: 'Fortnightly', 
-                icon: 'calendar-alt', 
-                enabled: employeeSettings.timesheet_fortnightly !== false, 
-                description: '2 weeks period' 
-            },
-            { 
-                id: 'monthly', 
-                label: 'Monthly', 
-                icon: 'calendar', 
-                enabled: employeeSettings.timesheet_monthly !== false, 
-                description: '1st to end of month' 
-            },
-            { 
-                id: 'custom', 
-                label: 'Custom', 
-                icon: 'calendar-day', 
-                enabled: employeeSettings.timesheet_custom !== false, 
-                description: 'Select dates' 
-            }
-        ];
+        // Check for timesheet settings columns
+        const hasWeekly = employee.timesheet_weekly !== undefined;
         
-        // Filter out disabled periods
+        let availablePeriods;
+        if (hasWeekly) {
+            availablePeriods = [
+                { 
+                    id: 'weekly', 
+                    label: 'Weekly', 
+                    icon: 'calendar-week', 
+                    enabled: employee.timesheet_weekly !== false, 
+                    description: 'Mon-Sun' 
+                },
+                { 
+                    id: 'fortnightly', 
+                    label: 'Fortnightly', 
+                    icon: 'calendar-alt', 
+                    enabled: employee.timesheet_fortnightly !== false, 
+                    description: '2 weeks' 
+                },
+                { 
+                    id: 'monthly', 
+                    label: 'Monthly', 
+                    icon: 'calendar', 
+                    enabled: employee.timesheet_monthly !== false, 
+                    description: 'Month' 
+                },
+                { 
+                    id: 'custom', 
+                    label: 'Custom', 
+                    icon: 'calendar-day', 
+                    enabled: employee.timesheet_custom !== false, 
+                    description: 'Pick dates' 
+                }
+            ];
+        } else {
+            // Default to all enabled
+            availablePeriods = [
+                { id: 'weekly', label: 'Weekly', icon: 'calendar-week', enabled: true, description: 'Mon-Sun' },
+                { id: 'fortnightly', label: 'Fortnightly', icon: 'calendar-alt', enabled: true, description: '2 weeks' },
+                { id: 'monthly', label: 'Monthly', icon: 'calendar', enabled: true, description: 'Month' },
+                { id: 'custom', label: 'Custom', icon: 'calendar-day', enabled: true, description: 'Pick dates' }
+            ];
+        }
+        
         const enabledPeriods = availablePeriods.filter(period => period.enabled);
-        
-        console.log('📅 Available timesheet periods:', enabledPeriods.map(p => p.label));
+        console.log('📅 Available periods:', enabledPeriods.map(p => p.label));
         renderPeriodSelectionBlocks(enabledPeriods);
         
     } catch (error) {
         console.error('❌ Error loading timesheet periods:', error);
-        
-        // Fallback to default periods on error
         const defaultPeriods = [
-            { id: 'weekly', label: 'Weekly', icon: 'calendar-week', enabled: true, description: 'Monday to Sunday' },
-            { id: 'fortnightly', label: 'Fortnightly', icon: 'calendar-alt', enabled: true, description: '2 weeks period' },
-            { id: 'monthly', label: 'Monthly', icon: 'calendar', enabled: true, description: '1st to end of month' },
-            { id: 'custom', label: 'Custom', icon: 'calendar-day', enabled: true, description: 'Select dates' }
+            { id: 'weekly', label: 'Weekly', icon: 'calendar-week', enabled: true, description: 'Mon-Sun' },
+            { id: 'fortnightly', label: 'Fortnightly', icon: 'calendar-alt', enabled: true, description: '2 weeks' },
+            { id: 'monthly', label: 'Monthly', icon: 'calendar', enabled: true, description: 'Month' },
+            { id: 'custom', label: 'Custom', icon: 'calendar-day', enabled: true, description: 'Pick dates' }
         ];
         renderPeriodSelectionBlocks(defaultPeriods);
     }
 }
 
-// Render period selection blocks
 function renderPeriodSelectionBlocks(periods) {
     const container = document.getElementById('periodSelectionBlocks');
     if (!container) return;
@@ -673,13 +573,12 @@ function renderPeriodSelectionBlocks(periods) {
             <div style="text-align: center; padding: 20px; color: #666;">
                 <i class="fas fa-calendar-times" style="font-size: 2rem; margin-bottom: 10px;"></i>
                 <p>No timesheet periods available.</p>
-                <p style="font-size: 0.9rem;">Contact your manager to enable timesheet generation.</p>
             </div>
         `;
         return;
     }
     
-    // If only one period is available, show it as a single prominent option
+    // If only one period is available
     if (periods.length === 1) {
         const period = periods[0];
         container.innerHTML = `
@@ -690,11 +589,8 @@ function renderPeriodSelectionBlocks(periods) {
             </div>
         `;
         
-        // Auto-select the only available period
         setTimeout(() => {
             selectPeriod(period.id);
-            
-            // Add click handler
             const singleOption = document.querySelector('.single-period-option');
             if (singleOption) {
                 singleOption.addEventListener('click', function() {
@@ -706,7 +602,7 @@ function renderPeriodSelectionBlocks(periods) {
         return;
     }
     
-    // Multiple periods available - show as grid
+    // Multiple periods available
     let html = '';
     periods.forEach(period => {
         html += `
@@ -733,11 +629,9 @@ function renderPeriodSelectionBlocks(periods) {
     }
 }
 
-// Select a period
 function selectPeriod(periodId) {
     console.log('📅 Selected period:', periodId);
     
-    // Update visual selection
     document.querySelectorAll('.period-block').forEach(block => {
         block.classList.remove('selected');
         if (block.getAttribute('data-period') === periodId) {
@@ -745,20 +639,15 @@ function selectPeriod(periodId) {
         }
     });
     
-    // Also handle single period option
     const singleOption = document.querySelector('.single-period-option');
     if (singleOption && singleOption.getAttribute('data-period') === periodId) {
         singleOption.classList.add('selected');
     }
     
-    // Update hidden input
     document.getElementById('timesheetPeriod').value = periodId;
-    
-    // Handle period selection
     handlePeriodSelection(periodId);
 }
 
-// Handle period selection
 function handlePeriodSelection(periodId) {
     const customDatesDiv = document.getElementById('customDatesSection');
     const autoDatesDiv = document.getElementById('autoDatesSection');
@@ -767,15 +656,8 @@ function handlePeriodSelection(periodId) {
     if (periodId === 'custom') {
         customDatesDiv.style.display = 'block';
         autoDatesDiv.style.display = 'none';
-        
-        // Set default custom dates (last week)
-        const lastWeek = new Date(today);
-        lastWeek.setDate(today.getDate() - 7);
-        
-        // We'll set these when custom dates button is clicked
         document.getElementById('startDate').value = '';
         document.getElementById('endDate').value = '';
-        
     } else {
         customDatesDiv.style.display = 'none';
         autoDatesDiv.style.display = 'block';
@@ -803,20 +685,11 @@ function handlePeriodSelection(periodId) {
         
         document.getElementById('autoStartDate').textContent = formatDate(startDate);
         document.getElementById('autoEndDate').textContent = formatDate(endDate);
-        
         document.getElementById('startDate').value = startDate.toISOString().split('T')[0];
         document.getElementById('endDate').value = endDate.toISOString().split('T')[0];
     }
     
-    // Show confirmation message
-    const periodLabels = {
-        'weekly': 'Weekly (Monday to Sunday)',
-        'fortnightly': 'Fortnightly (2 weeks)',
-        'monthly': 'Monthly (1st to end of month)',
-        'custom': 'Custom Dates'
-    };
-    
-    showMessage(`✅ Selected: ${periodLabels[periodId] || periodId}`, 'success', 2000);
+    showMessage(`✅ Selected: ${periodId}`, 'success', 1500);
 }
 
 // ============================================
@@ -827,7 +700,7 @@ window.refreshData = async function() {
     console.log('🔄 Refreshing data...');
     showMessage('Refreshing data...', 'info');
     await loadStats();
-    await loadMyShifts();
+    if (typeof loadMyShifts === 'function') await loadMyShifts();
     await loadPastShifts();
     await loadLocations();
     await loadTimesheetPeriods();
@@ -846,7 +719,6 @@ window.generateTimesheet = function() {
 };
 
 window.showSettings = function() { 
-    // Open settings modal for employee
     const html = `
         <div class="modal-content">
             <h2><i class="fas fa-cog"></i> Employee Settings</h2>
@@ -855,17 +727,8 @@ window.showSettings = function() {
                 <h3 style="margin-top: 0; color: #667eea;">
                     <i class="fas fa-user-circle"></i> My Account
                 </h3>
-                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
-                    <div style="width: 50px; height: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem;">
-                        <i class="fas fa-user"></i>
-                    </div>
-                    <div>
-                        <h4 style="margin: 0 0 5px 0;">Employee Profile</h4>
-                        <p style="margin: 0; color: #666; font-size: 0.9rem;">View and update your information</p>
-                    </div>
-                </div>
                 <button onclick="viewMyProfile()" class="btn" style="width: 100%; margin-bottom: 10px; background: #667eea; color: white;">
-                    <i class="fas fa-user-edit"></i> Edit My Profile
+                    <i class="fas fa-user-edit"></i> View My Profile
                 </button>
             </div>
             
@@ -876,12 +739,6 @@ window.showSettings = function() {
                 <button onclick="refreshMyShifts()" class="btn" style="width: 100%; margin-bottom: 10px;">
                     <i class="fas fa-sync-alt"></i> Refresh My Shifts
                 </button>
-                <button onclick="viewShiftCalendar()" class="btn" style="width: 100%; margin-bottom: 10px;">
-                    <i class="fas fa-calendar-week"></i> View Shift Calendar
-                </button>
-                <button onclick="requestTimeOff()" class="btn" style="width: 100%; margin-bottom: 10px;">
-                    <i class="fas fa-calendar-times"></i> Request Time Off
-                </button>
             </div>
             
             <div style="margin-bottom: 25px;">
@@ -891,35 +748,12 @@ window.showSettings = function() {
                 <button onclick="reportIssue()" class="btn" style="width: 100%; margin-bottom: 10px; background: #ffc107; color: #212529;">
                     <i class="fas fa-exclamation-triangle"></i> Report Issue
                 </button>
-                <button onclick="showHelp()" class="btn" style="width: 100%; margin-bottom: 10px;">
-                    <i class="fas fa-question-circle"></i> Help & Documentation
-                </button>
-                <button onclick="contactSupport()" class="btn" style="width: 100%; margin-bottom: 10px;">
-                    <i class="fas fa-headset"></i> Contact Support
-                </button>
-            </div>
-            
-            <div style="margin-bottom: 25px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                <h3 style="color: #667eea; margin-top: 0; margin-bottom: 15px;">
-                    <i class="fas fa-chart-line"></i> Performance
-                </h3>
-                <button onclick="viewMyTimesheets()" class="btn" style="width: 100%; margin-bottom: 10px;">
-                    <i class="fas fa-file-invoice"></i> My Timesheets
-                </button>
-                <button onclick="viewMyEarnings()" class="btn" style="width: 100%; margin-bottom: 10px;">
-                    <i class="fas fa-money-bill-wave"></i> View Earnings
-                </button>
             </div>
             
             <div style="border-top: 1px solid #e9ecef; padding-top: 15px;">
-                <div style="display: flex; gap: 10px;">
-                    <button onclick="exportMyData()" class="btn" style="flex: 1;">
-                        <i class="fas fa-download"></i> Export Data
-                    </button>
-                    <button onclick="closeModal()" class="btn" style="flex: 1; background: #6c757d; color: white;">
-                        <i class="fas fa-times"></i> Close
-                    </button>
-                </div>
+                <button onclick="closeModal()" class="btn" style="width: 100%; background: #6c757d; color: white;">
+                    <i class="fas fa-times"></i> Close
+                </button>
             </div>
         </div>
     `;
@@ -929,10 +763,6 @@ window.showSettings = function() {
 window.showHelp = function() { 
     alert('Help documentation coming soon!'); 
 };
-
-// ============================================
-// EMPLOYEE PROFILE & SETTINGS FUNCTIONS
-// ============================================
 
 window.viewMyProfile = async function() {
     try {
@@ -952,7 +782,7 @@ window.viewMyProfile = async function() {
                         <i class="fas fa-user"></i>
                     </div>
                     <h3 style="margin: 10px 0 5px 0;">${escapeHtml(employee.name)}</h3>
-                    <p style="color: #666; margin-bottom: 20px;">${employee.role === 'employee' ? 'Cleaning Staff' : employee.role}</p>
+                    <p style="color: #666; margin-bottom: 20px;">Cleaning Staff</p>
                 </div>
                 
                 <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
@@ -977,27 +807,7 @@ window.viewMyProfile = async function() {
                             <span>$${employee.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE} AUD</span>
                         </div>
                     </div>
-                    <div class="info-item">
-                        <i class="fas fa-calendar"></i>
-                        <div>
-                            <strong>Member Since:</strong>
-                            <span>${formatDate(employee.created_at)}</span>
-                        </div>
-                    </div>
-                    <div class="info-item">
-                        <i class="fas fa-user-check"></i>
-                        <div>
-                            <strong>Status:</strong>
-                            <span style="color: ${employee.is_active ? '#28a745' : '#dc3545'}">
-                                ${employee.is_active ? 'Active' : 'Inactive'}
-                            </span>
-                        </div>
-                    </div>
                 </div>
-                
-                <p style="text-align: center; color: #666; font-size: 0.9rem; margin-bottom: 20px;">
-                    Contact your manager to update personal information
-                </p>
                 
                 <button onclick="closeModal()" class="btn" style="width: 100%;">
                     <i class="fas fa-times"></i> Close
@@ -1013,295 +823,24 @@ window.viewMyProfile = async function() {
     }
 };
 
-window.viewShiftCalendar = function() {
-    const html = `
-        <div class="modal-content">
-            <h2><i class="fas fa-calendar-alt"></i> My Shift Calendar</h2>
-            
-            <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <div>
-                        <strong>Current Month:</strong>
-                        <div>${new Date().toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })}</div>
-                    </div>
-                    <div style="text-align: right;">
-                        <strong>Shifts This Month:</strong>
-                        <div>Loading...</div>
-                    </div>
-                </div>
-                <button onclick="refreshMyShifts()" class="btn" style="width: 100%;">
-                    <i class="fas fa-sync-alt"></i> Refresh Calendar
-                </button>
-            </div>
-            
-            <div style="text-align: center; padding: 40px 20px;">
-                <i class="fas fa-calendar" style="font-size: 3rem; color: #667eea; opacity: 0.7; margin-bottom: 15px;"></i>
-                <h3>Calendar View</h3>
-                <p style="color: #666; margin-bottom: 20px;">
-                    Full calendar view will be available in the next update.
-                </p>
-                <p style="color: #666; font-size: 0.9rem;">
-                    For now, use the "My Upcoming Shifts" section on the main page.
-                </p>
-            </div>
-            
-            <button onclick="closeModal()" class="btn" style="width: 100%;">
-                <i class="fas fa-times"></i> Close
-            </button>
-        </div>
-    `;
-    showModal(html);
-};
-
-window.viewMyTimesheets = function() {
-    const html = `
-        <div class="modal-content">
-            <h2><i class="fas fa-file-invoice"></i> My Timesheets</h2>
-            <div style="text-align: center; padding: 40px 20px;">
-                <i class="fas fa-file-invoice-dollar" style="font-size: 3rem; color: #28a745; opacity: 0.7; margin-bottom: 15px;"></i>
-                <h3>Timesheet History</h3>
-                <p style="color: #666; margin-bottom: 20px;">
-                    View all your generated timesheets and earnings history.
-                </p>
-                <button onclick="viewTimesheets()" class="btn btn-success" style="padding: 12px 30px; margin-bottom: 15px;">
-                    <i class="fas fa-folder-open"></i> View All Timesheets
-                </button>
-                <p style="color: #666; font-size: 0.9rem;">
-                    Generate new timesheets from the main page.
-                </p>
-            </div>
-            <button onclick="closeModal()" class="btn" style="width: 100%;">
-                <i class="fas fa-times"></i> Close
-            </button>
-        </div>
-    `;
-    showModal(html);
-};
-
-window.viewMyEarnings = async function() {
-    try {
-        const today = new Date();
-        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        
-        // Get shifts for current month
-        const { data: shifts, error } = await window.supabaseClient
-            .from('shifts')
-            .select(`
-                duration,
-                actual_duration,
-                locations (hourly_rate)
-            `)
-            .eq('staff_id', currentEmployeeId)
-            .eq('status', 'completed')
-            .gte('shift_date', firstDayOfMonth.toISOString().split('T')[0])
-            .lte('shift_date', lastDayOfMonth.toISOString().split('T')[0]);
-        
-        if (error) throw error;
-        
-        // Calculate earnings
-        let totalEarnings = 0;
-        let totalHours = 0;
-        let shiftCount = 0;
-        
-        if (shifts) {
-            shiftCount = shifts.length;
-            shifts.forEach(shift => {
-                const rate = shift.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE;
-                const hours = shift.actual_duration || shift.duration;
-                totalHours += parseFloat(hours);
-                totalEarnings += parseFloat(hours) * rate;
-            });
-        }
-        
-        const html = `
-            <div class="modal-content">
-                <h2><i class="fas fa-money-bill-wave"></i> My Earnings</h2>
-                
-                <div style="margin-bottom: 20px; padding: 20px; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border-radius: 8px;">
-                    <div style="text-align: center;">
-                        <div style="font-size: 2.5rem; font-weight: bold; margin-bottom: 5px;">$${totalEarnings.toFixed(2)}</div>
-                        <div style="font-size: 0.9rem; opacity: 0.9;">Total Earnings (This Month)</div>
-                    </div>
-                </div>
-                
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
-                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center;">
-                        <div style="font-size: 1.2rem; font-weight: bold; color: #667eea;">${shiftCount}</div>
-                        <div style="font-size: 0.8rem; color: #666;">Shifts This Month</div>
-                    </div>
-                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center;">
-                        <div style="font-size: 1.2rem; font-weight: bold; color: #28a745;">${totalHours.toFixed(1)} hrs</div>
-                        <div style="font-size: 0.8rem; color: #666;">Total Hours</div>
-                    </div>
-                </div>
-                
-                <div style="text-align: center; color: #666; font-size: 0.9rem; margin-bottom: 20px;">
-                    <i class="fas fa-info-circle"></i> Based on completed shifts for ${new Date().toLocaleDateString('en-AU', { month: 'long', year: 'numeric' })}
-                </div>
-                
-                <button onclick="closeModal()" class="btn" style="width: 100%;">
-                    <i class="fas fa-times"></i> Close
-                </button>
-            </div>
-        `;
-        
-        showModal(html);
-        
-    } catch (error) {
-        console.error('❌ Error loading earnings:', error);
-        showMessage('❌ Error loading earnings: ' + error.message, 'error');
+// Helper functions
+function getShiftStatusClass(status) {
+    switch(status) {
+        case 'confirmed': return 'confirmed';
+        case 'in_progress': return 'in-progress';
+        case 'completed': return 'completed';
+        case 'cancelled': return 'cancelled';
+        default: return 'pending';
     }
-};
+}
 
-window.contactSupport = function() {
-    const html = `
-        <div class="modal-content">
-            <h2><i class="fas fa-headset"></i> Contact Support</h2>
-            
-            <div style="margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
-                <h3 style="margin-top: 0; color: #667eea;">Need Help?</h3>
-                <p style="color: #666; margin-bottom: 15px;">
-                    Our support team is here to help you with any questions or issues.
-                </p>
-                
-                <div style="margin-bottom: 15px;">
-                    <h4 style="color: #333; margin-bottom: 8px;">Support Hours:</h4>
-                    <p style="color: #666; margin: 0;">Monday - Friday: 9:00 AM - 5:00 PM</p>
-                    <p style="color: #666; margin: 0;">Weekends: Emergency support only</p>
-                </div>
-                
-                <div style="margin-bottom: 15px;">
-                    <h4 style="color: #333; margin-bottom: 8px;">Contact Methods:</h4>
-                    <div class="info-item">
-                        <i class="fas fa-envelope"></i>
-                        <div>
-                            <strong>Email:</strong>
-                            <span>support@cleaningcompany.com</span>
-                        </div>
-                    </div>
-                    <div class="info-item">
-                        <i class="fas fa-phone"></i>
-                        <div>
-                            <strong>Phone:</strong>
-                            <span>(555) 123-HELP</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div style="border-top: 1px solid #e9ecef; padding-top: 15px;">
-                <p style="color: #666; font-size: 0.9rem; text-align: center;">
-                    For urgent shift-related issues, use the "Report Issue" button.
-                </p>
-            </div>
-            
-            <button onclick="closeModal()" class="btn" style="width: 100%; margin-top: 15px;">
-                <i class="fas fa-times"></i> Close
-            </button>
-        </div>
-    `;
-    showModal(html);
-};
+function formatTime(timeString) {
+    if (!timeString) return '';
+    const [hours, minutes] = timeString.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${minutes} ${ampm}`;
+}
 
-window.exportMyData = function() {
-    showMessage('📊 Preparing your data export...', 'info');
-    
-    setTimeout(() => {
-        const html = `
-            <div class="modal-content">
-                <h2><i class="fas fa-download"></i> Export My Data</h2>
-                
-                <div style="margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
-                    <h3 style="margin-top: 0; color: #667eea;">Select Data to Export</h3>
-                    
-                    <div style="margin-bottom: 15px;">
-                        <label class="checkbox">
-                            <input type="checkbox" id="exportShifts" checked>
-                            <span>Shift History</span>
-                        </label>
-                    </div>
-                    <div style="margin-bottom: 15px;">
-                        <label class="checkbox">
-                            <input type="checkbox" id="exportTimesheets" checked>
-                            <span>Timesheets</span>
-                        </label>
-                    </div>
-                    <div style="margin-bottom: 15px;">
-                        <label class="checkbox">
-                            <input type="checkbox" id="exportEarnings">
-                            <span>Earnings Report</span>
-                        </label>
-                    </div>
-                    <div style="margin-bottom: 15px;">
-                        <label class="checkbox">
-                            <input type="checkbox" id="exportProfile">
-                            <span>Profile Information</span>
-                        </label>
-                    </div>
-                </div>
-                
-                <div style="margin-bottom: 20px;">
-                    <h4 style="color: #333; margin-bottom: 10px;">Export Format</h4>
-                    <select id="exportFormat" class="form-control" style="margin-bottom: 10px;">
-                        <option value="csv">CSV (Spreadsheet)</option>
-                        <option value="pdf">PDF Document</option>
-                        <option value="json">JSON (Raw Data)</option>
-                    </select>
-                </div>
-                
-                <div style="display: flex; gap: 10px;">
-                    <button onclick="generateExport()" class="btn btn-success" style="flex: 1;">
-                        <i class="fas fa-file-export"></i> Generate Export
-                    </button>
-                    <button onclick="closeModal()" class="btn" style="flex: 1;">
-                        <i class="fas fa-times"></i> Cancel
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        showModal(html);
-        
-        setTimeout(() => {
-            const generateBtn = document.querySelector('.btn-success');
-            if (generateBtn) {
-                generateBtn.addEventListener('click', function() {
-                    const format = document.getElementById('exportFormat').value;
-                    showMessage(`✅ Export generated in ${format.toUpperCase()} format. Download will start shortly.`, 'success');
-                    setTimeout(closeModal, 2000);
-                });
-            }
-        }, 100);
-        
-    }, 1000);
-};
-
-// Helper function for export modal
-window.generateExport = function() {
-    // This would be implemented to actually generate the export
-    showMessage('✅ Export generated successfully!', 'success');
-    closeModal();
-};
-
-// Add a function to simulate manager changing settings (for demo/testing)
-window.simulateManagerSettings = function(scenarioIndex) {
-    const scenarios = [
-        'All periods enabled',
-        'Fortnightly only',
-        'Weekly and Monthly only'
-    ];
-    
-    localStorage.setItem('timesheetScenario', scenarioIndex.toString());
-    
-    showMessage(`🔄 Manager settings updated: ${scenarios[scenarioIndex]}`, 'info');
-    
-    // Reload periods
-    setTimeout(async () => {
-        await loadTimesheetPeriods();
-        showMessage('✅ Timesheet periods updated!', 'success');
-    }, 500);
-};
-
-// Final log
 console.log('🎉 Main script loaded (Employee Version)');
