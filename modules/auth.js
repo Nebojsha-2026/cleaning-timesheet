@@ -411,6 +411,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Export functions to window
 window.auth = {
+    initializeAuth,
     login,
     logout,
     registerManager,
@@ -422,7 +423,8 @@ window.auth = {
     getUserRole,
     hasRole,
     protectRoute,
-    clearAuth
+    clearAuth,
+    loadAuthState,
+    saveAuthState
 };
-
 console.log('✅ Auth module loaded');
