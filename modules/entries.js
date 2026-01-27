@@ -260,35 +260,58 @@ function showCustomDatesPopup() {
     document.querySelector('.cancel-btn').addEventListener('click', closeModal);
 }
 
-// Initialize entry mode UI
+// Initialize entry mode UI - SAFER VERSION
 function initializeEntryModeUI() {
-    handleEntryModeChange({ target: { value: 'daily' } });
+    // Check if the entry mode elements exist before trying to use them
+    const entryModeSelect = document.getElementById('entryMode');
+    const dailySection = document.getElementById('dailyEntrySection');
+    const weeklySection = document.getElementById('weeklyEntrySection');
+    const monthlySection = document.getElementById('monthlyEntrySection');
+    
+    // Only initialize if we have the necessary elements
+    if (entryModeSelect && (dailySection || weeklySection || monthlySection)) {
+        handleEntryModeChange({ target: { value: 'daily' } });
+    } else {
+        console.log('ℹ️ Entry mode UI elements not found - skipping initialization');
+    }
 }
 
-// Handle entry mode change
+// Handle entry mode change - SAFER VERSION
 function handleEntryModeChange(event) {
     const mode = event.target.value;
     currentEntryMode = mode;
     
-    document.getElementById('dailyEntrySection').style.display = 'none';
-    document.getElementById('weeklyEntrySection').style.display = 'none';
-    document.getElementById('monthlyEntrySection').style.display = 'none';
+    // Safely get elements (they might not exist in employee view)
+    const dailySection = document.getElementById('dailyEntrySection');
+    const weeklySection = document.getElementById('weeklyEntrySection');
+    const monthlySection = document.getElementById('monthlyEntrySection');
     
+    // Hide all sections if they exist
+    if (dailySection) dailySection.style.display = 'none';
+    if (weeklySection) weeklySection.style.display = 'none';
+    if (monthlySection) monthlySection.style.display = 'none';
+    
+    // Show the selected section if it exists
     switch(mode) {
         case 'daily':
-            document.getElementById('dailyEntrySection').style.display = 'block';
+            if (dailySection) dailySection.style.display = 'block';
             break;
         case 'weekly':
-            document.getElementById('weeklyEntrySection').style.display = 'block';
-            generateWeekDaySelection();
+            if (weeklySection) {
+                weeklySection.style.display = 'block';
+                generateWeekDaySelection();
+            }
             break;
         case 'monthly':
-            document.getElementById('monthlyEntrySection').style.display = 'block';
-            generateMonthSelection();
+            if (monthlySection) {
+                monthlySection.style.display = 'block';
+                generateMonthSelection();
+            }
             break;
     }
+    
+    console.log(`ℹ️ Entry mode changed to: ${mode} (sections exist: daily=${!!dailySection}, weekly=${!!weeklySection}, monthly=${!!monthlySection})`);
 }
-
 // Generate week day selection
 function generateWeekDaySelection() {
     const container = document.getElementById('weekDaysContainer');
