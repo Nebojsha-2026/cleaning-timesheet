@@ -16,6 +16,46 @@ let appLocations = [];
 let currentEmployeeId = null;
 
 // Initialize App
+// In your script.js file, in the initializeApp() function, add this at the beginning:
+
+async function initializeApp() {
+    console.log('📱 Initializing app...');
+    
+    try {
+        // Initialize auth if available
+        if (typeof auth !== 'undefined' && typeof auth.initializeAuth === 'function') {
+            console.log('🔐 Initializing authentication system...');
+            auth.initializeAuth();
+            
+            // Check if user is authenticated
+            if (auth.isAuthenticated()) {
+                const user = auth.getCurrentUser();
+                const role = auth.getUserRole();
+                console.log(`👤 User authenticated: ${user?.email}, Role: ${role}`);
+                
+                // Redirect based on role
+                if (role === 'manager' && !window.location.href.includes('manager.html')) {
+                    console.log('🔄 Redirecting manager to manager dashboard...');
+                    window.location.href = 'manager.html';
+                    return;
+                }
+                
+                if (role === 'employee' && window.location.href.includes('auth/')) {
+                    console.log('🔄 Redirecting employee to dashboard...');
+                    window.location.href = 'index.html';
+                    return;
+                }
+            } else {
+                // If not authenticated and not on auth pages, redirect to login
+                if (!window.location.href.includes('auth/') && 
+                    !window.location.href.includes('login') &&
+                    !window.location.href.includes('register')) {
+                    console.log('🔄 Not authenticated, but staying on current page for now');
+                    // Don't redirect yet - we'll handle this later
+                }
+            }
+        }
+        
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('✅ DOM Ready');
     
@@ -844,3 +884,4 @@ function formatTime(timeString) {
 }
 
 console.log('🎉 Main script loaded (Employee Version)');
+
