@@ -1690,3 +1690,22 @@ input[type="time"] {
         padding: 8px;
     }
 }
+:root {
+    --primary-color: #667eea;
+    --secondary-color: #764ba2;
+}
+
+/* Critical: update your gradients/buttons etc. */
+.header {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)) !important;
+}
+
+.stat-icon {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+}
+
+.btn-success, .btn-primary, .action-btn {
+    background-color: var(--primary-color) !important;
+}
+
+/* Add for other elements you want dynamic */
