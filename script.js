@@ -39,7 +39,7 @@ async function initializeApp() {
     console.log('📱 Initializing app...');
   
     try {
-        // Set today's date for shift scheduling
+        // Set today's date
         const today = new Date();
         document.getElementById('currentDate').textContent = formatDate(today);
 
@@ -53,7 +53,7 @@ async function initializeApp() {
         if (startDateInput) startDateInput.value = lastWeek.toISOString().split('T')[0];
         if (endDateInput) endDateInput.value = today.toISOString().split('T')[0];
       
-        // Setup form handlers - ONLY IF ELEMENTS EXIST
+        // Setup form handlers - ONLY TIMESHEET FORM (no shift forms for employees)
         const timesheetForm = document.getElementById('timesheetForm');
         
         console.log('Checking forms:', {
@@ -78,7 +78,7 @@ async function initializeApp() {
             timesheetPeriod.addEventListener('change', handleTimesheetPeriodChange);
         }
         
-        // Setup entry mode selector
+        // Setup entry mode selector (for work entries, not shifts)
         const entryMode = document.getElementById('entryMode');
         if (entryMode) {
             entryMode.addEventListener('change', handleEntryModeChange);
@@ -111,14 +111,15 @@ async function initializeApp() {
                 await loadLocations();
                 await loadRecentEntries();
                 
-                // Load employee shifts (instead of staff management)
+                // Load employee shifts
                 try {
                     if (typeof loadMyShifts === 'function') {
-                        await loadMyShifts(); // This is the employee shift loading function
+                        await loadMyShifts(); // Employee shift viewing function
+                    } else {
+                        console.log('⚠️ loadMyShifts function not found - shifts.js might not be loaded');
                     }
                 } catch (error) {
                     console.log('⚠️ Could not load shifts:', error.message);
-                    // If function doesn't exist yet, it's OK - we'll add it in shifts.js
                 }
                 
             }, 500);
