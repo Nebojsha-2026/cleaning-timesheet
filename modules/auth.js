@@ -1,21 +1,6 @@
-// auth.js - Real Supabase Auth
+// auth.js - Real Supabase Authentication
 
 console.log('🔐 Real Auth module loading...');
-// At the very top of auth.js, after console.log('🔐 Real Auth module loading...');
-if (!window.supabase) {
-    console.error('Supabase not loaded yet – waiting...');
-    setTimeout(() => {
-        if (window.supabase) {
-            supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-            window.supabaseClient = supabase;
-        } else {
-            console.error('Supabase failed to load');
-        }
-    }, 500);
-} else {
-    supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-    window.supabaseClient = supabase;
-}
 
 const AUTH_CONFIG = {
     TOKEN_KEY: 'cleaning_timesheet_token',
@@ -29,15 +14,33 @@ let currentToken = null;
 let currentCompanyId = null;
 let userRole = null;
 
-// Initialize auth state on page load
+// Wait for Supabase to be ready
+function waitForSupabase() {
+    if (window.supabase && window.supabase.createClient) {
+        return window.supabase.createClient(
+            'https://hqmtigcjyqckqdzepcdu.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbXRpZ2NqeXFja3FkemVwY2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwODgwMjYsImV4cCI6MjA4NDY2NDAyNn0.Rs6yv54hZyXzqqWQM4m-Z4g3gKqacBeDfHiMfpOuFRw'
+        );
+    }
+    return null;
+}
+
+let supabase = waitForSupabase();
+
+// Initialize auth
 async function initializeAuth() {
-    console.log('Initializing real Supabase Auth...');
+    console.log('Initializing real auth...');
+
+    if (!supabase) {
+        console.error('Supabase not loaded – cannot initialize auth');
+        return;
+    }
 
     // Listen for auth changes
     supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('Auth event:', event, session?.user?.email);
+        console.log('Auth event:', event);
 
-        if (session) {
+        if (session?.user) {
             currentUser = session.user;
             currentToken = session.access_token;
 
@@ -62,30 +65,35 @@ async function initializeAuth() {
             localStorage.setItem(AUTH_CONFIG.COMPANY_KEY, currentCompanyId);
             localStorage.setItem(AUTH_CONFIG.ROLE_KEY, userRole);
 
-            console.log('Logged in as:', currentUser.email, userRole, currentCompanyId);
+            console.log('Logged in:', currentUser.email, userRole, currentCompanyId);
 
             // Redirect based on role
-            if (userRole === 'manager' && !window.location.pathname.includes('manager.html')) {
+            if (userRole === 'manager' && window.location.pathname.includes('index.html')) {
                 window.location.href = 'manager.html';
-            } else if (userRole === 'employee' && window.location.pathname.includes('manager.html')) {
+            } else if (userRole !== 'manager' && window.location.pathname.includes('manager.html')) {
                 window.location.href = 'index.html';
             }
 
         } else {
             clearAuth();
+            if (!window.location.pathname.includes('login.html') && 
+                !window.location.pathname.includes('register.html')) {
+                window.location.href = 'login.html';
+            }
         }
     });
 
-    // Check current session
+    // Check existing session
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
-        // Trigger the change handler manually
         supabase.auth.setSession(session);
     }
 }
 
 // Login
 async function login(email, password) {
+    if (!supabase) throw new Error('Supabase not ready');
+
     try {
         const { data, error } = await supabase.auth.signInWithPassword({
             email,
@@ -94,7 +102,7 @@ async function login(email, password) {
 
         if (error) throw error;
 
-        console.log('Login successful:', data.user.email);
+        console.log('Login success:', data.user.email);
         return { success: true, user: data.user };
     } catch (err) {
         console.error('Login failed:', err.message);
@@ -104,29 +112,37 @@ async function login(email, password) {
 
 // Register manager (creates company + profile)
 async function registerManager(email, password, companyName) {
+    if (!supabase) throw new Error('Supabase not ready');
+
     try {
-        // 1. Sign up user
+        // Sign up
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
             email,
             password,
-            options: {
-                data: { role: 'manager' } // metadata
-            }
+            options: { data: { role: 'manager' } }
         });
 
         if (signUpError) throw signUpError;
-        if (!authData.user) throw new Error('No user returned');
+        if (!authData.user) throw new Error('No user created');
 
-        // 2. Create company
+        // Wait a moment for trigger to create profile
+        await new Promise(r => setTimeout(r, 1000));
+
+        // Create company
         const { data: company, error: companyError } = await supabase
             .from('companies')
-            .insert([{ name: companyName, custom_title: companyName + ' Timesheet' }])
+            .insert([{ 
+                name: companyName, 
+                custom_title: companyName + ' Timesheet',
+                primary_color: '#667eea',
+                secondary_color: '#764ba2'
+            }])
             .select()
             .single();
 
         if (companyError) throw companyError;
 
-        // 3. Update profile with company & role
+        // Update profile
         const { error: profileError } = await supabase
             .from('profiles')
             .update({ 
@@ -148,16 +164,13 @@ async function registerManager(email, password, companyName) {
 
 // Logout
 async function logout() {
-    await supabase.auth.signOut();
+    if (supabase) await supabase.auth.signOut();
     clearAuth();
-    window.location.href = 'login.html'; // or wherever your login page is
+    window.location.href = 'login.html';
 }
 
 function clearAuth() {
-    localStorage.removeItem(AUTH_CONFIG.TOKEN_KEY);
-    localStorage.removeItem(AUTH_CONFIG.USER_KEY);
-    localStorage.removeItem(AUTH_CONFIG.COMPANY_KEY);
-    localStorage.removeItem(AUTH_CONFIG.ROLE_KEY);
+    localStorage.clear();
     currentUser = null;
     currentToken = null;
     currentCompanyId = null;
@@ -165,18 +178,17 @@ function clearAuth() {
 }
 
 function isAuthenticated() {
-    return !!currentUser || !!localStorage.getItem(AUTH_CONFIG.TOKEN_KEY);
+    return !!localStorage.getItem(AUTH_CONFIG.TOKEN_KEY);
 }
 
 function getCurrentCompanyId() {
-    return currentCompanyId || localStorage.getItem(AUTH_CONFIG.COMPANY_KEY);
+    return localStorage.getItem(AUTH_CONFIG.COMPANY_KEY);
 }
 
 function getUserRole() {
-    return userRole || localStorage.getItem(AUTH_CONFIG.ROLE_KEY);
+    return localStorage.getItem(AUTH_CONFIG.ROLE_KEY);
 }
 
-// Protect page (call on manager.html and index.html)
 function protectRoute(requiredRole = null) {
     if (!isAuthenticated()) {
         window.location.href = 'login.html';
@@ -185,7 +197,6 @@ function protectRoute(requiredRole = null) {
 
     const role = getUserRole();
     if (requiredRole && role !== requiredRole) {
-        showMessage('Access denied – insufficient permissions', 'error');
         window.location.href = role === 'manager' ? 'manager.html' : 'index.html';
         return false;
     }
@@ -194,13 +205,10 @@ function protectRoute(requiredRole = null) {
 }
 
 // Auto-init
-if (window.supabaseClient) {
-    initializeAuth();
-}
+setTimeout(initializeAuth, 500); // give time for supabase to load
 
 console.log('✅ Real Auth module loaded');
 
-// Export to window
 window.auth = {
     login,
     registerManager,
