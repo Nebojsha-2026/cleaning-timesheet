@@ -33,13 +33,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     console.log('Detected role:', currentUserRole);
     console.log('Detected company ID:', currentCompanyId);
 
-    // Temporarily disabled strict role check so page can load for testing
-    // if (currentUserRole !== 'manager') {
-    //     alert('Access denied. This is the manager dashboard.');
-    //     window.location.href = 'index.html';
-    //     return;
-    // }
-
     try {
         await loadCompanyBranding();
         await initializeDashboard();
@@ -48,7 +41,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         showMessage('Failed to initialize dashboard. Check console.', 'error');
     }
 
-    // Hide loading screen regardless (safety net)
+    // Hide loading screen
     document.getElementById('loadingScreen').style.display = 'none';
     document.querySelector('.container').style.display = 'block';
 
@@ -60,10 +53,12 @@ document.addEventListener('DOMContentLoaded', async function() {
 async function loadCompanyBranding() {
     try {
         if (!currentCompanyId) {
-            console.log('No company ID in localStorage → using defaults');
-            showMessage('No company selected – using default branding', 'info');
+            console.warn('No company ID in localStorage – skipping branding load');
+            showMessage('No company selected yet (settings will use defaults)', 'info');
             return;
         }
+
+        console.log('Loading branding for company ID:', currentCompanyId);
 
         const { data: company, error } = await supabase
             .from('companies')
@@ -73,37 +68,39 @@ async function loadCompanyBranding() {
 
         if (error) throw error;
         if (!company) {
-            console.log('No company found for ID:', currentCompanyId);
-            showMessage('Company not found – using defaults', 'info');
+            console.warn('No company row found for ID:', currentCompanyId);
+            showMessage('Company data not found – using defaults', 'info');
             return;
         }
 
-        // Apply title
         const title = company.custom_title || 'Cleaning Timesheet';
         document.getElementById('appTitle').textContent = title;
         document.getElementById('footerCompany').textContent = `${company.name || 'Company'} Timesheet Manager • Powered by Supabase`;
         document.getElementById('currentCompanyName').textContent = company.name || 'My Company';
 
-        // Apply logo if exists
         if (company.logo_url) {
             const logo = document.getElementById('companyLogo');
             logo.src = company.logo_url;
             logo.style.display = 'inline-block';
+            console.log('Logo loaded from:', company.logo_url);
+        } else {
+            document.getElementById('companyLogo').style.display = 'none';
         }
 
-        // Apply colors
         if (company.primary_color) {
             document.documentElement.style.setProperty('--primary-color', company.primary_color);
+            console.log('Primary color applied:', company.primary_color);
         }
         if (company.secondary_color) {
             document.documentElement.style.setProperty('--secondary-color', company.secondary_color);
+            console.log('Secondary color applied:', company.secondary_color);
         }
 
-        console.log('✅ Branding applied:', title, company.primary_color, company.secondary_color);
+        showMessage('Company branding loaded: ' + title, 'success');
 
     } catch (err) {
-        console.error('Branding load failed:', err);
-        showMessage('Could not load company branding (using defaults)', 'info');
+        console.error('Branding load failed:', err.message);
+        showMessage('Failed to load branding: ' + (err.message || 'Unknown error'), 'error');
     }
 }
 
@@ -111,17 +108,15 @@ async function loadCompanyBranding() {
 async function initializeDashboard() {
     console.log('Initializing manager dashboard...');
 
-    // Test connection
     const connected = await testConnection();
     if (!connected) {
         showMessage('Connection issues detected – some features limited', 'error');
     }
 
-    // Set current date
     const today = new Date();
     document.getElementById('currentDate').textContent = formatDate(today);
 
-    // Placeholder stats (replace with real data later)
+    // Placeholder stats – replace with real queries later
     document.getElementById('statEmployees').textContent = '8';
     document.getElementById('statUpcomingShifts').textContent = '14';
     document.getElementById('statHours').textContent = '112';
@@ -175,11 +170,6 @@ async function loadCurrentCompanySettings() {
 
         if (error) {
             console.warn('Settings load query failed:', error.message);
-            if (error.code === 'PGRST116') { // No rows
-                showMessage('No company settings row found', 'info');
-            } else if (error.code === '42703') { // Column does not exist
-                showMessage('Database column missing – please add default_pay_frequency', 'error');
-            }
             return;
         }
 
@@ -196,10 +186,10 @@ async function loadCurrentCompanySettings() {
     }
 }
 
-// Save company settings
+// Save company settings – with REAL logo upload to Supabase Storage
 async function saveCompanySettings() {
     if (!currentCompanyId) {
-        showMessage('No company selected – cannot save', 'error');
+        showMessage('No company selected – cannot save settings', 'error');
         return;
     }
 
@@ -210,33 +200,58 @@ async function saveCompanySettings() {
     const file = document.getElementById('logoUpload').files[0];
 
     let logoUrl = null;
-    if (file) {
-        // Placeholder for future real upload
-        showMessage('Logo upload coming soon – using placeholder for now', 'info');
-        logoUrl = 'https://placehold.co/200x60/' + primary.replace('#','') + '/ffffff/png?text=' + encodeURIComponent(title.substring(0,3));
+
+    try {
+        if (file) {
+            showMessage('Uploading logo...', 'info');
+
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${currentCompanyId}-${Date.now()}.${fileExt}`;
+            const filePath = `logos/${fileName}`;
+
+            const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('company-logos')
+                .upload(filePath, file, {
+                    cacheControl: '3600',
+                    upsert: true
+                });
+
+            if (uploadError) throw uploadError;
+
+            const { data: publicUrlData } = supabase.storage
+                .from('company-logos')
+                .getPublicUrl(filePath);
+
+            logoUrl = publicUrlData.publicUrl;
+            console.log('Logo uploaded to:', logoUrl);
+
+            showMessage('Logo uploaded successfully!', 'success');
+        }
+
+        const updates = {
+            custom_title: title || 'Cleaning Timesheet',
+            primary_color: primary,
+            secondary_color: secondary,
+            default_pay_frequency: payFreq,
+            ...(logoUrl && { logo_url: logoUrl })
+        };
+
+        const { error: updateError } = await supabase
+            .from('companies')
+            .update(updates)
+            .eq('id', currentCompanyId);
+
+        if (updateError) throw updateError;
+
+        showMessage('Company settings saved! Reloading to apply changes...', 'success');
+
+        // Reload page to show new logo + branding
+        setTimeout(() => location.reload(), 1500);
+
+    } catch (err) {
+        console.error('Save failed:', err);
+        showMessage('Error saving settings: ' + (err.message || 'Unknown error'), 'error');
     }
-
-    const updates = {
-        custom_title: title || 'Cleaning Timesheet',
-        primary_color: primary,
-        secondary_color: secondary,
-        default_pay_frequency: payFreq,
-        ...(logoUrl && { logo_url: logoUrl })
-    };
-
-    const { error } = await supabase
-        .from('companies')
-        .update(updates)
-        .eq('id', currentCompanyId);
-
-    if (error) {
-        showMessage('Save failed: ' + error.message, 'error');
-        console.error('Save error:', error);
-        return;
-    }
-
-    showMessage('Settings saved successfully!', 'success');
-    await loadCompanyBranding(); // Re-apply live changes
 }
 
 // Preview button handler
@@ -249,7 +264,7 @@ function previewBrandingChanges() {
     document.documentElement.style.setProperty('--secondary-color', secondary);
     document.getElementById('appTitle').textContent = title;
 
-    showMessage('Preview applied! Save to keep changes.', 'info');
+    showMessage('Preview applied! Click "Save Settings" to keep changes.', 'info');
 }
 
 // Placeholder action functions
@@ -266,5 +281,3 @@ function showCompanySettings() {
 function refreshShifts() { showMessage('Refreshing shifts...', 'info'); }
 
 console.log('🎉 Manager dashboard script fully loaded');
-
-
