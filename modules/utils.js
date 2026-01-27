@@ -1,6 +1,6 @@
 // Utility functions shared across modules
 
-// Helper function to escape HTML
+// Helper function to escape HTML to prevent XSS
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
@@ -8,7 +8,7 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Format date for display
+// Format date for display (Australian style)
 function formatDate(dateString) {
     try {
         const date = new Date(dateString);
@@ -16,6 +16,16 @@ function formatDate(dateString) {
     } catch {
         return dateString;
     }
+}
+
+// Format time (e.g. 14:30 → 2:30 PM)
+function formatTime(timeString) {
+    if (!timeString) return '';
+    const [hours, minutes] = timeString.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${minutes} ${ampm}`;
 }
 
 // Get start of week (Monday)
@@ -44,38 +54,53 @@ function getEndOfMonth(date = new Date()) {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0);
 }
 
-// Get start of fortnight (2 weeks from Monday)
-function getStartOfFortnight(date = new Date()) {
-    return getStartOfWeek(date);
-}
-
-// Get end of fortnight (2 weeks from Sunday)
-function getEndOfFortnight(date = new Date()) {
-    const start = getStartOfFortnight(date);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 13);
-    return end;
-}
-
-// Show message to user
+// Show message to user (improved version - works on any page)
 function showMessage(text, type = 'info') {
-    let messageDiv = document.getElementById('formMessage');
-    if (!messageDiv) {
-        const form = document.getElementById('entryForm');
-        if (form) {
-            messageDiv = document.createElement('div');
-            messageDiv.id = 'formMessage';
-            form.parentNode.insertBefore(messageDiv, form.nextSibling);
-        }
+    // Remove any existing message first to avoid stacking
+    const existing = document.getElementById('globalMessage');
+    if (existing) existing.remove();
+
+    const container = document.createElement('div');
+    container.id = 'globalMessage';
+    container.className = `message ${type}`;
+    container.textContent = text;
+
+    // Styling
+    container.style.position = 'fixed';
+    container.style.top = '20px';
+    container.style.left = '50%';
+    container.style.transform = 'translateX(-50%)';
+    container.style.zIndex = '9999';
+    container.style.padding = '12px 24px';
+    container.style.borderRadius = '8px';
+    container.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+    container.style.maxWidth = '90%';
+    container.style.textAlign = 'center';
+    container.style.fontWeight = '500';
+
+    // Colors based on type
+    if (type === 'success') {
+        container.style.background = '#d4edda';
+        container.style.color = '#155724';
+        container.style.border = '1px solid #c3e6cb';
+    } else if (type === 'error') {
+        container.style.background = '#f8d7da';
+        container.style.color = '#721c24';
+        container.style.border = '1px solid #f5c6cb';
+    } else {
+        container.style.background = '#fff3cd';
+        container.style.color = '#856404';
+        container.style.border = '1px solid #ffeeba';
     }
-    if (messageDiv) {
-        messageDiv.textContent = text;
-        messageDiv.className = `message ${type}`;
-        messageDiv.style.display = 'block';
-        if (type === 'success' || type === 'info') {
-            setTimeout(() => { messageDiv.style.display = 'none'; }, 5000);
-        }
-    }
+
+    document.body.appendChild(container);
+
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        container.style.opacity = '0';
+        container.style.transition = 'opacity 0.5s';
+        setTimeout(() => container.remove(), 500);
+    }, 5000);
 }
 
 // Update connection status display
@@ -150,31 +175,14 @@ async function testConnection() {
         if (error) throw error;
       
         console.log('✅ Database connection successful');
+        updateConnectionStatus(true);
         return true;
     } catch (error) {
         console.error('❌ Database connection failed:', error);
+        updateConnectionStatus(false);
+        showError('Cannot connect to database: ' + error.message);
         return false;
     }
 }
-// ... your existing utils.js content ...
 
-// Add these at the bottom if missing
-
-function showMessage(text, type = 'info') {
-    let container = document.getElementById('formMessage') || document.createElement('div');
-    container.id = 'formMessage';
-    container.className = `message ${type}`;
-    container.textContent = text;
-    container.style.padding = '12px';
-    container.style.margin = '12px 0';
-    container.style.borderRadius = '6px';
-    container.style.background = type === 'success' ? '#d4edda' : type === 'error' ? '#f8d7da' : '#e2e3e5';
-    container.style.color = type === 'success' ? '#155724' : type === 'error' ? '#721c24' : '#333';
-
-    const target = document.querySelector('.container') || document.body;
-    target.insertBefore(container, target.firstChild);
-
-    setTimeout(() => container.remove(), 5000);
-}
-
-console.log('Utils → message helper added');
+console.log('✅ Utils module loaded');
