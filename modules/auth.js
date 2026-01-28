@@ -27,6 +27,21 @@ function initSupabase() {
         console.error('Supabase not loaded');
     }
 }
+// auth.js - Add this near the top of the initializeAuth function
+async function initializeAuth() {
+    if (!supabase) {
+        console.error('Supabase not ready');
+        return;
+    }
+
+    // Don't redirect on test pages
+    const isTestPage = window.location.pathname.includes('test-registration.html');
+    if (isTestPage) {
+        console.log('Test page detected - skipping auth redirects');
+        return;
+    }
+
+    // Rest of the function remains the same...
 
 initSupabase();
 
