@@ -1,4 +1,4 @@
-// auth.js - Fixed version with proper profile creation
+// auth.js - Final working version
 console.log('🔐 Auth module loading...');
 
 const AUTH_CONFIG = {
@@ -100,7 +100,7 @@ async function handleUserSession(user) {
     } else if (profile) {
         currentCompanyId = profile.company_id;
         userRole = profile.role || 'employee';
-        console.log('Loaded profile - Role:', userRole, 'Company:', currentCompanyId);
+        console.log('✅ Loaded profile - Role:', userRole, 'Company:', currentCompanyId);
     }
 
     localStorage.setItem(AUTH_CONFIG.TOKEN_KEY, currentToken || '');
@@ -118,7 +118,7 @@ async function redirectBasedOnRole() {
     const role = localStorage.getItem(AUTH_CONFIG.ROLE_KEY) || 'employee';
     const currentPath = window.location.pathname;
     
-    console.log('Redirect check - Current role:', role, 'Current path:', currentPath);
+    console.log('🔀 Redirect check - Current role:', role, 'Current path:', currentPath);
     
     // Don't redirect if already on correct page
     if (role === 'manager' && !currentPath.includes('manager.html')) {
@@ -152,7 +152,7 @@ async function login(email, password) {
             return { success: false, error: 'No user data returned' };
         }
 
-        console.log('Login successful for:', data.user.email);
+        console.log('✅ Login successful for:', data.user.email);
         return { success: true, user: data.user };
 
     } catch (err) {
@@ -161,14 +161,14 @@ async function login(email, password) {
     }
 }
 
-// Register manager - SIMPLIFIED VERSION
+// Register manager - SIMPLIFIED AND WORKING VERSION
 async function registerManager(email, password, companyName) {
     if (!supabase) {
         return { success: false, error: 'Supabase not initialized' };
     }
 
     try {
-        console.log('Starting manager registration for:', email);
+        console.log('🚀 Starting manager registration for:', email);
         
         // STEP 1: Sign up the user
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
@@ -182,7 +182,7 @@ async function registerManager(email, password, companyName) {
         });
 
         if (signUpError) {
-            console.error('Signup error:', signUpError.message);
+            console.error('❌ Signup error:', signUpError.message);
             return { success: false, error: signUpError.message };
         }
 
@@ -193,7 +193,7 @@ async function registerManager(email, password, companyName) {
         console.log('✅ User created:', authData.user.id);
 
         // Wait for the trigger to create basic profile
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 1500));
 
         // STEP 2: Create company
         const { data: company, error: companyError } = await supabase
@@ -209,7 +209,7 @@ async function registerManager(email, password, companyName) {
             .single();
 
         if (companyError) {
-            console.error('Company creation error:', companyError.message);
+            console.error('❌ Company creation error:', companyError.message);
             return { success: false, error: 'Company creation failed: ' + companyError.message };
         }
 
@@ -221,21 +221,22 @@ async function registerManager(email, password, companyName) {
             .update({
                 company_id: company.id,
                 role: 'manager',
-                name: 'Manager'
+                name: 'Manager',
+                updated_at: new Date().toISOString()
             })
             .eq('id', authData.user.id);
 
         if (profileError) {
-            console.error('Profile update error:', profileError.message);
+            console.error('❌ Profile update error:', profileError.message);
             
-            // Try to delete company if profile update fails
+            // Clean up - delete company
             await supabase.from('companies').delete().eq('id', company.id);
             return { success: false, error: 'Profile update failed: ' + profileError.message };
         }
 
         console.log('✅ Profile updated with manager role');
 
-        // STEP 4: Also create staff record for the manager
+        // STEP 4: Create staff record for the manager
         const { error: staffError } = await supabase
             .from('staff')
             .insert([{
@@ -249,8 +250,10 @@ async function registerManager(email, password, companyName) {
             }]);
 
         if (staffError) {
-            console.warn('Staff record creation warning:', staffError.message);
+            console.warn('⚠️ Staff record creation warning:', staffError.message);
             // Continue anyway, staff record is optional
+        } else {
+            console.log('✅ Staff record created');
         }
 
         // STEP 5: Sign in the user
@@ -260,21 +263,17 @@ async function registerManager(email, password, companyName) {
         });
 
         if (signInError) {
-            console.error('Auto sign-in error:', signInError.message);
-            // Return success but tell user to login manually
-            return { 
-                success: true, 
-                user: authData.user, 
-                company: company,
-                message: 'Account created. Please login manually.'
-            };
+            console.error('⚠️ Auto sign-in error:', signInError.message);
+            // Still return success, user can login manually
+        } else {
+            console.log('✅ Auto login successful');
         }
 
-        // Force update localStorage immediately
+        // Force update localStorage immediately with manager role
         localStorage.setItem(AUTH_CONFIG.ROLE_KEY, 'manager');
         localStorage.setItem(AUTH_CONFIG.COMPANY_KEY, company.id);
         
-        console.log('✅ Registration complete - role set to manager');
+        console.log('🎉 Registration complete - role set to manager in localStorage');
 
         return { 
             success: true, 
@@ -283,7 +282,7 @@ async function registerManager(email, password, companyName) {
         };
 
     } catch (err) {
-        console.error('Registration exception:', err);
+        console.error('❌ Registration exception:', err);
         return { success: false, error: err.message || 'Registration failed' };
     }
 }
