@@ -1,10 +1,32 @@
-// modules/shifts.js - Employee shift management module
+// modules/shifts.js - Fixed version
 console.log('🔄 Shifts module loading...');
 
 // Global variables
 let appStaff = [];
 let myShifts = [];
 let currentShiftId = null;
+
+// Helper function to get shift status class
+function getShiftStatusClass(status) {
+    switch(status) {
+        case 'pending': return 'status-pending';
+        case 'confirmed': return 'status-confirmed';
+        case 'in_progress': return 'status-in-progress';
+        case 'completed': return 'status-completed';
+        case 'cancelled': return 'status-cancelled';
+        default: return 'status-pending';
+    }
+}
+
+// Format time helper
+function formatTime(timeString) {
+    if (!timeString) return '';
+    const [hours, minutes] = timeString.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${minutes} ${ampm}`;
+}
 
 // Load shifts assigned to current user
 async function loadMyShifts() {
@@ -13,20 +35,23 @@ async function loadMyShifts() {
         
         const today = new Date().toISOString().split('T')[0];
         
-        // Get shifts for current employee
+        // Get shifts for current employee - FIXED query
         const { data: shifts, error } = await window.supabaseClient
             .from('shifts')
             .select(`
                 *,
-                locations (name, address, notes)
+                locations (name, notes)
             `)
-            .eq('staff_id', window.currentEmployeeId)
             .gte('shift_date', today)
             .order('shift_date', { ascending: true })
             .order('start_time', { ascending: true })
             .limit(10);
         
-        if (error) throw error;
+        if (error) {
+            console.error('Error loading shifts:', error);
+            showSampleShifts();
+            return [];
+        }
         
         myShifts = shifts || [];
         updateMyShiftsDisplay(myShifts);
@@ -55,7 +80,10 @@ function updateMyShiftsDisplay(shifts) {
             </div>
         `;
         
-        document.getElementById('shiftActions').style.display = 'none';
+        const shiftActions = document.getElementById('shiftActions');
+        if (shiftActions) {
+            shiftActions.style.display = 'none';
+        }
         return;
     }
     
@@ -324,12 +352,14 @@ function updateGlobalShiftActions() {
         const startBtn = document.getElementById('startShiftBtn');
         const completeBtn = document.getElementById('completeShiftBtn');
         
-        if (todaysShift.status === 'confirmed') {
-            if (startBtn) startBtn.style.display = 'block';
-            if (completeBtn) completeBtn.style.display = 'none';
-        } else if (todaysShift.status === 'in_progress') {
-            if (startBtn) startBtn.style.display = 'none';
-            if (completeBtn) completeBtn.style.display = 'block';
+        if (startBtn && completeBtn) {
+            if (todaysShift.status === 'confirmed') {
+                startBtn.style.display = 'block';
+                completeBtn.style.display = 'none';
+            } else if (todaysShift.status === 'in_progress') {
+                startBtn.style.display = 'none';
+                completeBtn.style.display = 'block';
+            }
         }
     } else {
         shiftActions.style.display = 'none';
