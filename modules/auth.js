@@ -148,6 +148,25 @@ async function redirectBasedOnRole() {
     }
 }
 
+async function ensureManagerProfile(user, displayName) {
+    const name = displayName || user.email.split('@')[0];
+
+    const { error } = await supabase
+        .from('profiles')
+        .upsert([{
+            id: user.id,
+            role: 'manager',
+            name: name
+        }], { onConflict: 'id' });
+
+    if (error) {
+        console.error('❌ Profile upsert error:', error.message);
+        return { success: false, error };
+    }
+
+    return { success: true };
+}
+
 // Login function
 async function login(email, password) {
     if (!supabase) {
@@ -171,6 +190,7 @@ async function login(email, password) {
         }
 
         console.log('✅ Login successful for:', data.user.email);
+        await handleUserSession(data.user);
         return { success: true, user: data.user };
 
     } catch (err) {
@@ -210,10 +230,27 @@ async function registerManager(email, password, companyName) {
 
         console.log('✅ User created:', authData.user.id);
 
-        // Wait for the trigger to create basic profile
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        // STEP 2: Ensure we have an active session
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (!sessionData?.session || sessionError) {
+            const { error: signInError } = await supabase.auth.signInWithPassword({
+                email: email.trim(),
+                password: password
+            });
 
-        // STEP 2: Create company
+            if (signInError) {
+                console.error('❌ Auto sign-in error:', signInError.message);
+                return { success: false, error: 'Unable to start session after sign-up' };
+            }
+        }
+
+        // STEP 3: Create/upgrade profile to manager before company insert
+        const profileResult = await ensureManagerProfile(authData.user, 'Manager');
+        if (!profileResult.success) {
+            return { success: false, error: 'Profile setup failed: ' + profileResult.error.message };
+        }
+
+        // STEP 4: Create company
         const { data: company, error: companyError } = await supabase
             .from('companies')
             .insert([{ 
@@ -233,7 +270,7 @@ async function registerManager(email, password, companyName) {
 
         console.log('✅ Company created:', company.id);
 
-        // STEP 3: Update profile with company and manager role
+        // STEP 5: Update profile with company and manager role
         const { error: profileError } = await supabase
             .from('profiles')
             .update({
@@ -254,7 +291,7 @@ async function registerManager(email, password, companyName) {
 
         console.log('✅ Profile updated with manager role');
 
-        // STEP 4: Create staff record for the manager
+        // STEP 6: Create staff record for the manager
         const { error: staffError } = await supabase
             .from('staff')
             .insert([{
@@ -274,7 +311,7 @@ async function registerManager(email, password, companyName) {
             console.log('✅ Staff record created');
         }
 
-        // STEP 5: Sign in the user
+        // STEP 7: Sign in the user
         const { error: signInError } = await supabase.auth.signInWithPassword({
             email: email.trim(),
             password: password
@@ -285,6 +322,7 @@ async function registerManager(email, password, companyName) {
             // Still return success, user can login manually
         } else {
             console.log('✅ Auto login successful');
+            await handleUserSession(authData.user);
         }
 
         // Force update localStorage immediately with manager role
