@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Timesheet Manager</title>
+    <title>Login - Worklynx Timesheet</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -12,7 +12,7 @@
     <div id="loadingScreen" class="loading-screen">
         <div class="loading-content">
             <div class="spinner"></div>
-            <h2>Connecting to Timesheet Manager</h2>
+            <h2>Connecting to Worklynx</h2>
             <p>Please wait...</p>
         </div>
     </div>
@@ -34,7 +34,7 @@
                         <input type="password" id="password" placeholder="••••••••" required>
                     </div>
 
-                    <button type="submit" class="btn btn-primary btn-block">
+                    <button type="submit" class="btn btn-primary btn-block" id="loginBtn">
                         <i class="fas fa-sign-in-alt"></i> Login
                     </button>
 
@@ -64,16 +64,18 @@
             if (token) {
                 // Get role and redirect
                 const role = localStorage.getItem('cleaning_timesheet_role') || 'employee';
+                console.log('Already logged in as:', role);
                 if (role === 'manager') {
                     window.location.href = 'manager.html';
                 } else {
-                    window.location.href = 'index.html';
+                    window.location.href = 'employee.html';
                 }
                 return;
             }
 
             const form = document.getElementById('loginForm');
             const messageDiv = document.getElementById('loginMessage');
+            const loginBtn = document.getElementById('loginBtn');
 
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
@@ -91,26 +93,31 @@
                 messageDiv.textContent = 'Logging in...';
                 messageDiv.className = 'message info';
                 messageDiv.style.display = 'block';
+                loginBtn.disabled = true;
+                loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
 
                 const result = await auth.login(email, password);
 
                 if (result.success) {
-                    messageDiv.textContent = 'Success! Redirecting...';
+                    messageDiv.textContent = '✅ Success! Redirecting...';
                     messageDiv.className = 'message success';
 
                     // Wait for auth state change to handle redirect
                     setTimeout(() => {
                         // Force check after login
                         const role = localStorage.getItem('cleaning_timesheet_role') || 'employee';
+                        console.log('Login successful, role detected:', role);
                         if (role === 'manager') {
                             window.location.href = 'manager.html';
                         } else {
-                            window.location.href = 'index.html';
+                            window.location.href = 'employee.html';
                         }
-                    }, 1500);
+                    }, 1000);
                 } else {
-                    messageDiv.textContent = result.error || 'Login failed';
+                    messageDiv.textContent = '❌ ' + (result.error || 'Login failed');
                     messageDiv.className = 'message error';
+                    loginBtn.disabled = false;
+                    loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
                 }
             });
         });
