@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // If not authenticated and on dashboard page, redirect to login
     const isDashboardPage = window.location.pathname.includes('manager.html') || 
-                          window.location.pathname.includes('index.html');
+                          window.location.pathname.includes('employee.html');
     
     const isAuthPage = window.location.pathname.includes('login.html') || 
                       window.location.pathname.includes('register.html');
@@ -449,3 +449,4 @@ function refreshShifts() {
 }
 
 console.log('🎉 Script loaded');
+
