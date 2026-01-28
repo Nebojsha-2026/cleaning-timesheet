@@ -21,30 +21,28 @@
         <!-- Header -->
         <header class="header" id="mainHeader">
             <div class="header-content">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <img id="companyLogo" src="" alt="Company Logo" style="max-height: 48px; display: none;">
-                    <h1 id="appTitle"><i class="fas fa-broom"></i> Cleaning Timesheet</h1>
+                <div class="logo-section">
+                    <img id="companyLogo" class="company-logo" style="display:none;" alt="Company Logo">
+                    <div class="title-section">
+                        <h1 id="appTitle"><i class="fas fa-clipboard-check"></i> Cleaning Timesheet</h1>
+                        <p id="currentCompanyName" class="company-name">Your Company</p>
+                    </div>
                 </div>
-                <p class="subtitle">Manager Dashboard • Manage your team & schedule</p>
-                <div class="header-stats">
-                    <div class="stat-badge">
-                        <i class="fas fa-users"></i>
-                        <span id="currentCompanyName">Company loading...</span>
+                
+                <div class="header-actions">
+                    <div class="date-display">
+                        <i class="far fa-calendar"></i>
+                        <span id="currentDate"></span>
                     </div>
-                    <div class="stat-badge">
-                        <i class="fas fa-calendar"></i>
-                        <span id="currentDate">Today</span>
-                    </div>
-                    <div class="stat-badge" id="connectionStatus">
-                        <i class="fas fa-wifi"></i>
-                        <span>Connecting...</span>
-                    </div>
+                    <button class="logout-btn" onclick="auth.logout()">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
                 </div>
             </div>
         </header>
 
-        <!-- Stats Row -->
-        <div class="stats-row">
+        <!-- Stats Overview -->
+        <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-icon"><i class="fas fa-users"></i></div>
                 <div class="stat-info">
@@ -62,7 +60,7 @@
             <div class="stat-card">
                 <div class="stat-icon"><i class="fas fa-clock"></i></div>
                 <div class="stat-info">
-                    <h3>Scheduled Hours (30d)</h3>
+                    <h3>Hours (30 days)</h3>
                     <div class="stat-value" id="statHours">0</div>
                 </div>
             </div>
@@ -93,19 +91,6 @@
                         </div>
                     </div>
                 </div>
-
-                <div class="card">
-                    <div class="card-header">
-                        <h2><i class="fas fa-history"></i> Recent Activity</h2>
-                    </div>
-                    <div class="card-body">
-                        <div id="activityFeed">
-                            <p style="text-align:center; color:#666; padding:30px 0;">
-                                Activity log coming soon...
-                            </p>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <!-- Right Column -->
@@ -128,38 +113,43 @@
                                 <i class="fas fa-file-invoice-dollar"></i>
                                 <span>Timesheets</span>
                             </button>
+                            <button class="action-btn" onclick="viewLocations()">
+                                <i class="fas fa-map-marker-alt"></i>
+                                <span>Locations</span>
+                            </button>
                             <button class="action-btn" onclick="showCompanySettings()">
-                                <i class="fas fa-cog"></i>
+                                <i class="fas fa-building"></i>
                                 <span>Company Settings</span>
+                            </button>
+                            <button class="action-btn" onclick="showHelp()">
+                                <i class="fas fa-question-circle"></i>
+                                <span>Help</span>
                             </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Company Settings Card -->
+                <!-- Company Settings -->
                 <div class="card" id="companySettingsCard" style="display:none;">
                     <div class="card-header">
-                        <h2><i class="fas fa-building"></i> Company Settings</h2>
+                        <h2><i class="fas fa-paint-brush"></i> Company Branding</h2>
                     </div>
                     <div class="card-body">
                         <form id="companySettingsForm">
                             <div class="form-group">
-                                <label for="companyTitle">Company / App Title</label>
-                                <input type="text" id="companyTitle" placeholder="Cleaning Timesheet" required>
+                                <label for="companyTitle">Custom App Title</label>
+                                <input type="text" id="companyTitle" placeholder="e.g. Worklynx Timesheets">
                             </div>
-
                             <div class="form-group">
-                                <label>Primary Color</label>
+                                <label for="primaryColor">Primary Color</label>
                                 <input type="color" id="primaryColor" value="#667eea">
                             </div>
-
                             <div class="form-group">
-                                <label>Secondary Color</label>
+                                <label for="secondaryColor">Secondary Color</label>
                                 <input type="color" id="secondaryColor" value="#764ba2">
                             </div>
-
                             <div class="form-group">
-                                <label>Default Pay Frequency</label>
+                                <label for="defaultPayFrequency">Default Pay Frequency</label>
                                 <select id="defaultPayFrequency">
                                     <option value="weekly">Weekly</option>
                                     <option value="fortnightly">Fortnightly</option>
@@ -168,37 +158,27 @@
                             </div>
 
                             <div class="form-group">
-                                <label>Company Logo</label>
+                                <label for="logoUpload">Company Logo (Preview Only For Now)</label>
                                 <input type="file" id="logoUpload" accept="image/*">
-                                <div id="logoPreview" style="margin-top:10px; max-height:80px;"></div>
+                                <div id="logoPreview" style="margin-top: 10px;"></div>
                             </div>
 
-                            <div style="margin-top:20px; display:flex; gap:12px;">
-                                <button type="button" class="btn btn-primary" onclick="previewBrandingChanges()">
-                                    <i class="fas fa-eye"></i> Preview Changes
-                                </button>
-                                <button type="submit" class="btn btn-success">
-                                    <i class="fas fa-save"></i> Save Settings
-                                </button>
-                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Settings
+                            </button>
                         </form>
                     </div>
                 </div>
+
             </div>
         </div>
 
         <!-- Footer -->
         <footer class="footer">
-            <p id="footerCompany">Company Timesheet Manager • Powered by Supabase</p>
-            <p class="footer-links">
-                <a href="#" onclick="showHelp()">Help</a> •
-                <span id="version">v1.2.0</span>
-            </p>
+            <p id="footerCompany">Cleaning Timesheet Manager • Powered by Supabase</p>
+            <p class="version-info">Version <span id="versionNumber">1.0</span></p>
         </footer>
     </div>
-
-    <!-- Modals Container -->
-    <div id="modalsContainer"></div>
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
@@ -208,7 +188,10 @@
     <script src="modules/timesheets.js"></script>
     <script src="modules/locations.js"></script>
     <script src="modules/entries.js"></script>
-    <!-- manager specific code will go into script.js for now -->
+
+    <!-- ✅ ADD THIS -->
+    <script src="modules/employee-management.js"></script>
+
     <script src="script.js"></script>
 </body>
 </html>
