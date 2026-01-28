@@ -33,7 +33,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Load role and company from localStorage
     currentUserRole = localStorage.getItem(STORAGE_KEYS.role) || 'employee';
-    currentCompanyId = localStorage.getItem(STORAGE_KEYS.company) || null;
+    currentCompanyId = localStorage.getItem(STORAGE_KEYS.company) ||
+        localStorage.getItem('cleaning_timesheet_company_id') ||
+        null;
 
     console.log('Detected role:', currentUserRole);
     console.log('Detected company ID:', currentCompanyId);
@@ -467,8 +469,14 @@ function setupTimesheetForm() {
         });
     }
 
-    // Form submission handler
+    // Setup custom dates button
+    const customDatesBtn = document.getElementById('customDatesBtn');
+    if (customDatesBtn) {
+        customDatesBtn.addEventListener('click', showCustomDatesPopup);
+    }
+
+    // Handle form submission
     form.addEventListener('submit', handleGenerateTimesheet);
 }
-...
-console.log('🎉 Script loaded');
+
+... (rest of file continues exactly as in repo)
