@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         if (currentUserRole === 'manager') {
             window.location.href = 'manager.html';
         } else {
-            window.location.href = 'index.html';
+            window.location.href = 'employee.html';
         }
         return;
     }
@@ -158,6 +158,13 @@ async function initializeDashboard() {
         showMessage('Connection issues – limited functionality', 'error');
     }
 
+    // Hide loading screen and show container
+    const loading = document.getElementById('loadingScreen');
+    const container = document.querySelector('.container');
+    
+    if (loading) loading.style.display = 'none';
+    if (container) container.style.display = 'block';
+
     // Load initial data based on user role
     if (currentUserRole === 'manager') {
         await loadManagerDashboard();
@@ -205,28 +212,19 @@ async function loadManagerDashboard() {
 async function loadEmployeeDashboard() {
     console.log('Loading employee dashboard...');
     
-    // Get current user's employee profile
     try {
-        const { data: profile } = await supabase.auth.getUser();
+        // Get current user
+        const { data: { user } } = await supabase.auth.getUser();
         
-        if (profile?.user?.id) {
-            // Get employee details from profiles table
-            const { data: employeeProfile } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', profile.user.id)
-                .single();
-
-            if (employeeProfile) {
-                currentEmployeeId = employeeProfile.id;
-                
-                // Update stats
-                updateEmployeeStats();
-                
-                // Load shifts
-                if (typeof loadMyShifts === 'function') {
-                    await loadMyShifts();
-                }
+        if (user?.id) {
+            currentEmployeeId = user.id;
+            
+            // Update stats
+            await updateEmployeeStats();
+            
+            // Load shifts
+            if (typeof loadMyShifts === 'function') {
+                await loadMyShifts();
             }
         }
     } catch (err) {
@@ -240,13 +238,13 @@ async function updateEmployeeStats() {
         const { count: completedShifts } = await supabase
             .from('shifts')
             .select('*', { count: 'exact', head: true })
-            .eq('staff_id', currentEmployeeId)
             .eq('status', 'completed');
 
         // Get locations count
         const { count: locationCount } = await supabase
             .from('locations')
-            .select('*', { count: 'exact', head: true });
+            .select('*', { count: 'exact', head: true })
+            .eq('is_active', true);
 
         // Get timesheets count
         const { count: timesheetCount } = await supabase
@@ -449,4 +447,3 @@ function refreshShifts() {
 }
 
 console.log('🎉 Script loaded');
-
