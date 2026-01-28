@@ -1,295 +1,121 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test Registration - No Redirect</title>
-    <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
-        input { padding: 10px; margin: 5px; width: 320px; max-width: 100%; }
-        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        #result { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px; white-space: pre-wrap; }
-        .success { color: #28a745; }
-        .error { color: #dc3545; }
-        .info { color: #17a2b8; }
-        .warn { color: #ff8800; }
-        code { background: #eee; padding: 2px 6px; border-radius: 4px; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Test Registration (RPC)</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
+    input { padding: 10px; margin: 5px; width: 320px; max-width: 100%; }
+    button { padding: 10px 20px; margin: 5px; background: #007bff; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    #result { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px; white-space: pre-wrap; }
+    .success { color: #28a745; }
+    .error { color: #dc3545; }
+    .info { color: #17a2b8; }
+    .warn { color: #ff8800; }
+  </style>
 </head>
 <body>
-    <h1>🔧 Registration Test (RLS-safe, No Auto-Redirect)</h1>
+  <h1>🔧 Manager Registration Test (RPC bootstrap)</h1>
 
-    <div class="test-section">
-        <h2>Test 1: Quick Registration</h2>
-        <button onclick="testQuickRegistration()">Test Quick Registration</button>
-        <p>Creates a test account with random email</p>
-    </div>
+  <div class="test-section">
+    <h2>Quick Registration</h2>
+    <button onclick="testQuick()">Test Quick Registration</button>
+  </div>
 
-    <div class="test-section">
-        <h2>Test 2: Custom Registration</h2>
-        <div>
-            <input type="text" id="companyName" placeholder="Company Name" value="Test Company">
-        </div>
-        <div>
-            <input type="email" id="email" placeholder="Email" value="test@example.com">
-        </div>
-        <div>
-            <input type="password" id="password" placeholder="Password" value="password123">
-        </div>
-        <button onclick="testCustomRegistration()">Test Custom Registration</button>
-    </div>
+  <div class="test-section">
+    <h2>Custom Registration</h2>
+    <input id="companyName" placeholder="Company Name" value="Test Company" />
+    <input id="email" placeholder="Email" value="test@example.com" />
+    <input id="password" placeholder="Password" value="password123" />
+    <button onclick="testCustom()">Test Custom Registration</button>
+  </div>
 
-    <div class="test-section">
-        <h2>Test 3: Check / Reset</h2>
-        <button onclick="checkDatabase()">Check Database Tables</button>
-        <button onclick="clearLocalStorage()">Clear LocalStorage</button>
-        <button onclick="signOut()">Sign Out (Supabase)</button>
-    </div>
+  <div class="test-section">
+    <button onclick="clearLocal()">Clear LocalStorage</button>
+    <button onclick="signOut()">Sign Out</button>
+  </div>
 
-    <div id="result"></div>
+  <div id="result"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
-    <script>
-        // Initialize Supabase directly (bypassing auth.js)
-        const supabase = window.supabase.createClient(
-            'https://hqmtigcjyqckqdzepcdu.supabase.co',
-            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbXRpZ2NqeXFja3FkemVwY2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwODgwMjYsImV4cCI6MjA4NDY2NDAyNn0.Rs6yv54hZyXzqqWQM4m-Z4g3gKqacBeDfHiMfpOuFRw'
-        );
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
+  <script>
+    const supabase = window.supabase.createClient(
+      'https://hqmtigcjyqckqdzepcdu.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbXRpZ2NqeXFja3FkemVwY2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwODgwMjYsImV4cCI6MjA4NDY2NDAyNn0.Rs6yv54hZyXzqqWQM4m-Z4g3gKqacBeDfHiMfpOuFRw'
+    );
 
-        function showResult(message, type = 'info') {
-            const resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = `<div class="${type}">${message}</div>`;
-            console.log(message);
-        }
+    function show(message, type='info') {
+      document.getElementById('result').innerHTML = `<div class="${type}">${message}</div>`;
+      console.log(message);
+    }
 
-        async function signOut() {
-            await supabase.auth.signOut();
-            showResult('✅ Signed out from Supabase auth session', 'success');
-        }
+    async function signOut() {
+      await supabase.auth.signOut();
+      show('✅ Signed out', 'success');
+    }
 
-        async function testQuickRegistration() {
-            const timestamp = Date.now();
-            const email = `test${timestamp}@example.com`;
-            const companyName = `Test Company ${timestamp}`;
-            const password = 'password123';
-            await testRegistration(email, password, companyName);
-        }
+    function clearLocal() {
+      localStorage.clear();
+      show('✅ LocalStorage cleared', 'success');
+    }
 
-        async function testCustomRegistration() {
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value;
-            const companyName = document.getElementById('companyName').value.trim();
+    async function ensureSession(email, password) {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.access_token) return data.session;
 
-            if (!email || !password || !companyName) {
-                showResult('Please fill in all fields', 'error');
-                return;
-            }
+      const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw new Error('Sign-in failed: ' + error.message);
+      return signInData.session;
+    }
 
-            await testRegistration(email, password, companyName);
-        }
+    async function testQuick() {
+      const t = Date.now();
+      await testRegistration(`test${t}@example.com`, 'password123', `Test Company ${t}`);
+    }
 
-        async function ensureSession(email, password) {
-            // If signUp returned a session, this may already exist — but we enforce it.
-            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-            if (sessionError) {
-                throw new Error('Session check failed: ' + sessionError.message);
-            }
+    async function testCustom() {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const companyName = document.getElementById('companyName').value.trim();
+      if (!email || !password || !companyName) return show('Fill all fields', 'error');
+      await testRegistration(email, password, companyName);
+    }
 
-            if (sessionData?.session?.access_token) {
-                return sessionData.session;
-            }
+    async function testRegistration(email, password, companyName) {
+      try {
+        show('Step 1: signUp...', 'info');
+        const { data: authData, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { role: 'manager' } }
+        });
+        if (signUpError) throw new Error(signUpError.message);
+        show(`✅ User created: ${authData.user.id}`, 'success');
 
-            // No session exists yet => sign in
-            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-                email,
-                password
-            });
+        show('Step 2: ensure session...', 'info');
+        const session = await ensureSession(email, password);
+        show('✅ Session active. JWT present: ' + (session?.access_token ? 'YES' : 'NO'), 'success');
 
-            if (signInError) {
-                throw new Error('Auto sign-in failed: ' + signInError.message);
-            }
+        show('Step 3: bootstrap company/profile/staff via RPC...', 'info');
+        const { data: companyId, error: rpcError } = await supabase.rpc('bootstrap_manager_company', {
+          company_name: companyName
+        });
+        if (rpcError) throw new Error('RPC failed: ' + rpcError.message);
 
-            if (!signInData?.session?.access_token) {
-                // Rare, but handle it explicitly
-                const { data: sessionData2 } = await supabase.auth.getSession();
-                if (!sessionData2?.session?.access_token) {
-                    throw new Error('Signed in but no session token available (unexpected)');
-                }
-                return sessionData2.session;
-            }
+        show(`🎉 DONE!\nCompany ID: ${companyId}\nEmail: ${email}\nNow open manager.html`, 'success');
 
-            return signInData.session;
-        }
+        // emulate app local storage
+        localStorage.setItem('cleaning_timesheet_role', 'manager');
+        localStorage.setItem('cleaning_timesheet_company_id', companyId);
 
-        async function testRegistration(email, password, companyName) {
-            showResult('Starting registration...', 'info');
-
-            try {
-                // Step 1: Sign up user
-                showResult('Step 1: Creating user (signUp)...', 'info');
-                const { data: authData, error: signUpError } = await supabase.auth.signUp({
-                    email,
-                    password,
-                    options: { data: { role: 'manager' } }
-                });
-
-                if (signUpError) throw new Error('Signup failed: ' + signUpError.message);
-                if (!authData.user) throw new Error('No user created');
-
-                showResult('✅ User created: ' + authData.user.id, 'success');
-
-                // Step 2: Ensure we are AUTHENTICATED before any inserts (RLS-safe)
-                showResult('Step 2: Ensuring session (signIn if needed) BEFORE company insert...', 'info');
-                const session = await ensureSession(email, password);
-                showResult('✅ Session active. JWT present: ' + (session?.access_token ? 'YES' : 'NO'), 'success');
-
-                // Optional: quick debug so you can SEE what role is being used
-                const { data: u } = await supabase.auth.getUser();
-                showResult('ℹ️ Current auth user: ' + (u?.user?.id || 'NONE'), u?.user?.id ? 'info' : 'warn');
-
-                // Step 3: Create company (now authenticated, so RLS policies can pass)
-                showResult('Step 3: Creating company...', 'info');
-                const { data: company, error: companyError } = await supabase
-                    .from('companies')
-                    .insert([{
-                        name: companyName,
-                        custom_title: companyName + ' Timesheet',
-                        primary_color: '#667eea',
-                        secondary_color: '#764ba2'
-                    }])
-                    .select()
-                    .single();
-
-                if (companyError) throw new Error('Company creation failed: ' + companyError.message);
-                showResult('✅ Company created: ' + company.id, 'success');
-
-                // Step 4: Update profile
-                showResult('Step 4: Updating profile...', 'info');
-                const { error: profileError } = await supabase
-                    .from('profiles')
-                    .update({
-                        company_id: company.id,
-                        role: 'manager',
-                        name: 'Manager',
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', authData.user.id);
-
-                if (profileError) throw new Error('Profile update failed: ' + profileError.message);
-                showResult('✅ Profile updated with manager role', 'success');
-
-                // Step 5: Create staff record
-                showResult('Step 5: Creating staff record...', 'info');
-                const { error: staffError } = await supabase
-                    .from('staff')
-                    .insert([{
-                        user_id: authData.user.id,
-                        company_id: company.id,
-                        name: 'Manager',
-                        email: email,
-                        role: 'manager'
-                    }]);
-
-                if (staffError) {
-                    showResult('⚠️ Staff record warning: ' + staffError.message, 'warn');
-                } else {
-                    showResult('✅ Staff record created', 'success');
-                }
-
-                // Step 6: Set localStorage manually (for your app pages)
-                const { data: sessionNow } = await supabase.auth.getSession();
-                localStorage.setItem('cleaning_timesheet_role', 'manager');
-                localStorage.setItem('cleaning_timesheet_company_id', company.id);
-                localStorage.setItem('cleaning_timesheet_token', sessionNow?.session?.access_token || '');
-                localStorage.setItem('cleaning_timesheet_user', JSON.stringify(authData.user));
-
-                showResult(
-`🎉 REGISTRATION COMPLETE!
-
-Email: ${email}
-Company: ${companyName}
-User ID: ${authData.user.id}
-Company ID: ${company.id}
-Role in localStorage: ${localStorage.getItem('cleaning_timesheet_role')}
-
-Next:
-- Click Manager Dashboard (should load as manager)
-- If it still goes to employee, the redirect logic is wrong (we’ll fix that next).
-
-`, 'success'
-                );
-
-                // Buttons rendered after message
-                const resultDiv = document.getElementById('result');
-                resultDiv.innerHTML += `
-                    <button onclick="window.location.href='manager.html'">Go to Manager Dashboard</button>
-                    <button onclick="window.location.href='employee.html'">Go to Employee Dashboard</button>
-                `;
-
-            } catch (error) {
-                showResult('❌ ERROR: ' + error.message, 'error');
-                console.error('Test registration error:', error);
-            }
-        }
-
-        async function checkDatabase() {
-            showResult('Checking database tables...', 'info');
-
-            try {
-                const { data: companies, error: companiesError } = await supabase
-                    .from('companies')
-                    .select('id, name, created_at')
-                    .order('created_at', { ascending: false })
-                    .limit(5);
-
-                if (companiesError) throw companiesError;
-
-                const { data: profiles, error: profilesError } = await supabase
-                    .from('profiles')
-                    .select('id, role, company_id, created_at')
-                    .order('created_at', { ascending: false })
-                    .limit(5);
-
-                if (profilesError) throw profilesError;
-
-                const { data: staff, error: staffError } = await supabase
-                    .from('staff')
-                    .select('id, name, email, role, company_id')
-                    .order('created_at', { ascending: false })
-                    .limit(5);
-
-                if (staffError) throw staffError;
-
-                let resultHtml = '<h3>Database Status:</h3>';
-
-                resultHtml += '<h4>Recent Companies:</h4>';
-                resultHtml += (companies?.length)
-                    ? '<ul>' + companies.map(c => `<li>${c.name} (ID: ${c.id}) - ${new Date(c.created_at).toLocaleString()}</li>`).join('') + '</ul>'
-                    : '<p>No companies found</p>';
-
-                resultHtml += '<h4>Recent Profiles:</h4>';
-                resultHtml += (profiles?.length)
-                    ? '<ul>' + profiles.map(p => `<li>${p.role} (Company: ${p.company_id || 'null'}) - ${new Date(p.created_at).toLocaleString()}</li>`).join('') + '</ul>'
-                    : '<p>No profiles found</p>';
-
-                resultHtml += '<h4>Recent Staff:</h4>';
-                resultHtml += (staff?.length)
-                    ? '<ul>' + staff.map(s => `<li>${s.name} (${s.email}) - ${s.role}</li>`).join('') + '</ul>'
-                    : '<p>No staff found</p>';
-
-                showResult(resultHtml, 'success');
-
-            } catch (error) {
-                showResult('❌ Database check error: ' + error.message, 'error');
-            }
-        }
-
-        function clearLocalStorage() {
-            localStorage.clear();
-            showResult('✅ LocalStorage cleared', 'success');
-        }
-    </script>
+      } catch (e) {
+        show('❌ ERROR: ' + e.message, 'error');
+        console.error(e);
+      }
+    }
+  </script>
 </body>
 </html>
