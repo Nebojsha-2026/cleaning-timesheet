@@ -44,7 +44,7 @@
                         <input type="password" id="passwordConfirm" placeholder="••••••••" required>
                     </div>
 
-                    <button type="submit" class="btn btn-primary btn-block">
+                    <button type="submit" class="btn btn-primary btn-block" id="registerBtn">
                         <i class="fas fa-user-plus"></i> Create Manager Account
                     </button>
 
@@ -76,13 +76,14 @@
                 if (role === 'manager') {
                     window.location.href = 'manager.html';
                 } else {
-                    window.location.href = 'index.html';
+                    window.location.href = 'employee.html';
                 }
                 return;
             }
 
             const form = document.getElementById('registerForm');
             const messageDiv = document.getElementById('registerMessage');
+            const registerBtn = document.getElementById('registerBtn');
 
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
@@ -116,20 +117,29 @@
                 messageDiv.textContent = 'Creating account...';
                 messageDiv.className = 'message info';
                 messageDiv.style.display = 'block';
+                
+                // Disable button to prevent double submission
+                registerBtn.disabled = true;
+                registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
 
                 const result = await auth.registerManager(email, password, companyName);
 
                 if (result.success) {
-                    messageDiv.textContent = 'Account created! Redirecting to dashboard...';
+                    messageDiv.textContent = 'Account created! Setting up dashboard...';
                     messageDiv.className = 'message success';
-
+                    
+                    // Force set manager role in localStorage
+                    localStorage.setItem('cleaning_timesheet_role', 'manager');
+                    
                     // Wait a moment then redirect to manager dashboard
                     setTimeout(() => {
                         window.location.href = 'manager.html';
-                    }, 2000);
+                    }, 1500);
                 } else {
                     messageDiv.textContent = result.error || 'Registration failed';
                     messageDiv.className = 'message error';
+                    registerBtn.disabled = false;
+                    registerBtn.innerHTML = '<i class="fas fa-user-plus"></i> Create Manager Account';
                 }
             });
         });
