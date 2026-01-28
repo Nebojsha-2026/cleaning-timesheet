@@ -1,4 +1,4 @@
-// auth.js - Final working version
+// auth.js - Complete working version with test page support
 console.log('🔐 Auth module loading...');
 
 const AUTH_CONFIG = {
@@ -27,28 +27,25 @@ function initSupabase() {
         console.error('Supabase not loaded');
     }
 }
-// auth.js - Add this near the top of the initializeAuth function
-async function initializeAuth() {
-    if (!supabase) {
-        console.error('Supabase not ready');
-        return;
-    }
-
-    // Don't redirect on test pages
-    const isTestPage = window.location.pathname.includes('test-registration.html');
-    if (isTestPage) {
-        console.log('Test page detected - skipping auth redirects');
-        return;
-    }
-
-    // Rest of the function remains the same...
 
 initSupabase();
+
+// Check if current page is a test page
+function isTestPage() {
+    return window.location.pathname.includes('test-registration.html') ||
+           window.location.pathname.includes('test-registration2.html');
+}
 
 // Initialize auth state
 async function initializeAuth() {
     if (!supabase) {
         console.error('Supabase not ready');
+        return;
+    }
+
+    // Skip auth checks on test pages
+    if (isTestPage()) {
+        console.log('Test page detected - skipping auth initialization');
         return;
     }
 
@@ -63,6 +60,9 @@ async function initializeAuth() {
     // Listen for auth changes
     supabase.auth.onAuthStateChange(async (event, session) => {
         console.log('Auth event:', event, session ? 'has session' : 'no session');
+
+        // Skip on test pages
+        if (isTestPage()) return;
 
         if (session?.user) {
             await handleUserSession(session.user);
@@ -130,6 +130,9 @@ async function handleUserSession(user) {
 }
 
 async function redirectBasedOnRole() {
+    // Skip on test pages
+    if (isTestPage()) return;
+
     const role = localStorage.getItem(AUTH_CONFIG.ROLE_KEY) || 'employee';
     const currentPath = window.location.pathname;
     
@@ -287,6 +290,7 @@ async function registerManager(email, password, companyName) {
         // Force update localStorage immediately with manager role
         localStorage.setItem(AUTH_CONFIG.ROLE_KEY, 'manager');
         localStorage.setItem(AUTH_CONFIG.COMPANY_KEY, company.id);
+        localStorage.setItem(AUTH_CONFIG.TOKEN_KEY, (await supabase.auth.getSession()).data.session?.access_token || '');
         
         console.log('🎉 Registration complete - role set to manager in localStorage');
 
