@@ -65,8 +65,21 @@
     <script src="modules/auth.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // Hide loading screen
             document.getElementById('loadingScreen').style.display = 'none';
             document.querySelector('.container').style.display = 'block';
+
+            // Check if already logged in
+            const token = localStorage.getItem('cleaning_timesheet_token');
+            if (token) {
+                const role = localStorage.getItem('cleaning_timesheet_role') || 'employee';
+                if (role === 'manager') {
+                    window.location.href = 'manager.html';
+                } else {
+                    window.location.href = 'index.html';
+                }
+                return;
+            }
 
             const form = document.getElementById('registerForm');
             const messageDiv = document.getElementById('registerMessage');
@@ -110,10 +123,10 @@
                     messageDiv.textContent = 'Account created! Redirecting to dashboard...';
                     messageDiv.className = 'message success';
 
-                    // Force redirect to manager dashboard
+                    // Wait a moment then redirect to manager dashboard
                     setTimeout(() => {
                         window.location.href = 'manager.html';
-                    }, 1500);
+                    }, 2000);
                 } else {
                     messageDiv.textContent = result.error || 'Registration failed';
                     messageDiv.className = 'message error';
