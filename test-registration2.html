@@ -7,39 +7,49 @@
     <style>
         body { font-family: Arial, sans-serif; padding: 20px; }
         .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
+        input { padding: 10px; margin: 5px; width: 320px; max-width: 100%; }
         button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
         button:hover { background: #0056b3; }
-        #result { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px; }
+        #result { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px; white-space: pre-wrap; }
         .success { color: #28a745; }
         .error { color: #dc3545; }
         .info { color: #17a2b8; }
+        .warn { color: #ff8800; }
+        code { background: #eee; padding: 2px 6px; border-radius: 4px; }
     </style>
 </head>
 <body>
-    <h1>🔧 Registration Test (No Auto-Redirect)</h1>
-    
+    <h1>🔧 Registration Test (RLS-safe, No Auto-Redirect)</h1>
+
     <div class="test-section">
         <h2>Test 1: Quick Registration</h2>
         <button onclick="testQuickRegistration()">Test Quick Registration</button>
         <p>Creates a test account with random email</p>
     </div>
-    
+
     <div class="test-section">
         <h2>Test 2: Custom Registration</h2>
-        <input type="text" id="companyName" placeholder="Company Name" value="Test Company">
-        <input type="email" id="email" placeholder="Email" value="test@example.com">
-        <input type="password" id="password" placeholder="Password" value="password123">
+        <div>
+            <input type="text" id="companyName" placeholder="Company Name" value="Test Company">
+        </div>
+        <div>
+            <input type="email" id="email" placeholder="Email" value="test@example.com">
+        </div>
+        <div>
+            <input type="password" id="password" placeholder="Password" value="password123">
+        </div>
         <button onclick="testCustomRegistration()">Test Custom Registration</button>
     </div>
-    
+
     <div class="test-section">
-        <h2>Test 3: Check Database</h2>
+        <h2>Test 3: Check / Reset</h2>
         <button onclick="checkDatabase()">Check Database Tables</button>
         <button onclick="clearLocalStorage()">Clear LocalStorage</button>
+        <button onclick="signOut()">Sign Out (Supabase)</button>
     </div>
-    
+
     <div id="result"></div>
-    
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
     <script>
         // Initialize Supabase directly (bypassing auth.js)
@@ -47,68 +57,116 @@
             'https://hqmtigcjyqckqdzepcdu.supabase.co',
             'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbXRpZ2NqeXFja3FkemVwY2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwODgwMjYsImV4cCI6MjA4NDY2NDAyNn0.Rs6yv54hZyXzqqWQM4m-Z4g3gKqacBeDfHiMfpOuFRw'
         );
-        
+
+        function showResult(message, type = 'info') {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `<div class="${type}">${message}</div>`;
+            console.log(message);
+        }
+
+        async function signOut() {
+            await supabase.auth.signOut();
+            showResult('✅ Signed out from Supabase auth session', 'success');
+        }
+
         async function testQuickRegistration() {
             const timestamp = Date.now();
             const email = `test${timestamp}@example.com`;
             const companyName = `Test Company ${timestamp}`;
             const password = 'password123';
-            
             await testRegistration(email, password, companyName);
         }
-        
+
         async function testCustomRegistration() {
-            const email = document.getElementById('email').value;
+            const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
-            const companyName = document.getElementById('companyName').value;
-            
+            const companyName = document.getElementById('companyName').value.trim();
+
             if (!email || !password || !companyName) {
                 showResult('Please fill in all fields', 'error');
                 return;
             }
-            
+
             await testRegistration(email, password, companyName);
         }
-        
+
+        async function ensureSession(email, password) {
+            // If signUp returned a session, this may already exist — but we enforce it.
+            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError) {
+                throw new Error('Session check failed: ' + sessionError.message);
+            }
+
+            if (sessionData?.session?.access_token) {
+                return sessionData.session;
+            }
+
+            // No session exists yet => sign in
+            const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+                email,
+                password
+            });
+
+            if (signInError) {
+                throw new Error('Auto sign-in failed: ' + signInError.message);
+            }
+
+            if (!signInData?.session?.access_token) {
+                // Rare, but handle it explicitly
+                const { data: sessionData2 } = await supabase.auth.getSession();
+                if (!sessionData2?.session?.access_token) {
+                    throw new Error('Signed in but no session token available (unexpected)');
+                }
+                return sessionData2.session;
+            }
+
+            return signInData.session;
+        }
+
         async function testRegistration(email, password, companyName) {
             showResult('Starting registration...', 'info');
-            
+
             try {
                 // Step 1: Sign up user
-                showResult('Step 1: Creating user...', 'info');
+                showResult('Step 1: Creating user (signUp)...', 'info');
                 const { data: authData, error: signUpError } = await supabase.auth.signUp({
-                    email: email,
-                    password: password,
+                    email,
+                    password,
                     options: { data: { role: 'manager' } }
                 });
-                
+
                 if (signUpError) throw new Error('Signup failed: ' + signUpError.message);
                 if (!authData.user) throw new Error('No user created');
-                
+
                 showResult('✅ User created: ' + authData.user.id, 'success');
-                
-                // Wait for profile creation
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
-                // Step 2: Create company
-                showResult('Step 2: Creating company...', 'info');
+
+                // Step 2: Ensure we are AUTHENTICATED before any inserts (RLS-safe)
+                showResult('Step 2: Ensuring session (signIn if needed) BEFORE company insert...', 'info');
+                const session = await ensureSession(email, password);
+                showResult('✅ Session active. JWT present: ' + (session?.access_token ? 'YES' : 'NO'), 'success');
+
+                // Optional: quick debug so you can SEE what role is being used
+                const { data: u } = await supabase.auth.getUser();
+                showResult('ℹ️ Current auth user: ' + (u?.user?.id || 'NONE'), u?.user?.id ? 'info' : 'warn');
+
+                // Step 3: Create company (now authenticated, so RLS policies can pass)
+                showResult('Step 3: Creating company...', 'info');
                 const { data: company, error: companyError } = await supabase
                     .from('companies')
-                    .insert([{ 
-                        name: companyName, 
+                    .insert([{
+                        name: companyName,
                         custom_title: companyName + ' Timesheet',
                         primary_color: '#667eea',
                         secondary_color: '#764ba2'
                     }])
                     .select()
                     .single();
-                    
+
                 if (companyError) throw new Error('Company creation failed: ' + companyError.message);
-                
                 showResult('✅ Company created: ' + company.id, 'success');
-                
-                // Step 3: Update profile
-                showResult('Step 3: Updating profile...', 'info');
+
+                // Step 4: Update profile
+                showResult('Step 4: Updating profile...', 'info');
                 const { error: profileError } = await supabase
                     .from('profiles')
                     .update({
@@ -118,13 +176,12 @@
                         updated_at: new Date().toISOString()
                     })
                     .eq('id', authData.user.id);
-                    
+
                 if (profileError) throw new Error('Profile update failed: ' + profileError.message);
-                
                 showResult('✅ Profile updated with manager role', 'success');
-                
-                // Step 4: Create staff record
-                showResult('Step 4: Creating staff record...', 'info');
+
+                // Step 5: Create staff record
+                showResult('Step 5: Creating staff record...', 'info');
                 const { error: staffError } = await supabase
                     .from('staff')
                     .insert([{
@@ -134,132 +191,104 @@
                         email: email,
                         role: 'manager'
                     }]);
-                    
+
                 if (staffError) {
-                    showResult('⚠️ Staff record warning: ' + staffError.message, 'info');
+                    showResult('⚠️ Staff record warning: ' + staffError.message, 'warn');
                 } else {
                     showResult('✅ Staff record created', 'success');
                 }
-                
-                // Step 5: Sign in
-                showResult('Step 5: Signing in...', 'info');
-                const { error: signInError } = await supabase.auth.signInWithPassword({
-                    email: email,
-                    password: password
-                });
-                
-                if (signInError) {
-                    showResult('⚠️ Auto login warning: ' + signInError.message, 'info');
-                } else {
-                    showResult('✅ Auto login successful', 'success');
-                }
-                
-                // Set localStorage manually
+
+                // Step 6: Set localStorage manually (for your app pages)
+                const { data: sessionNow } = await supabase.auth.getSession();
                 localStorage.setItem('cleaning_timesheet_role', 'manager');
                 localStorage.setItem('cleaning_timesheet_company_id', company.id);
-                localStorage.setItem('cleaning_timesheet_token', (await supabase.auth.getSession()).data.session?.access_token || '');
+                localStorage.setItem('cleaning_timesheet_token', sessionNow?.session?.access_token || '');
                 localStorage.setItem('cleaning_timesheet_user', JSON.stringify(authData.user));
-                
-                showResult(`
-                    🎉 REGISTRATION COMPLETE!
-                    Email: ${email}
-                    Company: ${companyName}
-                    User ID: ${authData.user.id}
-                    Company ID: ${company.id}
-                    Role in localStorage: ${localStorage.getItem('cleaning_timesheet_role')}
-                    
+
+                showResult(
+`🎉 REGISTRATION COMPLETE!
+
+Email: ${email}
+Company: ${companyName}
+User ID: ${authData.user.id}
+Company ID: ${company.id}
+Role in localStorage: ${localStorage.getItem('cleaning_timesheet_role')}
+
+Next:
+- Click Manager Dashboard (should load as manager)
+- If it still goes to employee, the redirect logic is wrong (we’ll fix that next).
+
+`, 'success'
+                );
+
+                // Buttons rendered after message
+                const resultDiv = document.getElementById('result');
+                resultDiv.innerHTML += `
                     <button onclick="window.location.href='manager.html'">Go to Manager Dashboard</button>
                     <button onclick="window.location.href='employee.html'">Go to Employee Dashboard</button>
-                `, 'success');
-                
+                `;
+
             } catch (error) {
                 showResult('❌ ERROR: ' + error.message, 'error');
                 console.error('Test registration error:', error);
             }
         }
-        
+
         async function checkDatabase() {
             showResult('Checking database tables...', 'info');
-            
+
             try {
-                // Check companies
                 const { data: companies, error: companiesError } = await supabase
                     .from('companies')
                     .select('id, name, created_at')
                     .order('created_at', { ascending: false })
                     .limit(5);
-                    
+
                 if (companiesError) throw companiesError;
-                
-                // Check profiles
+
                 const { data: profiles, error: profilesError } = await supabase
                     .from('profiles')
                     .select('id, role, company_id, created_at')
                     .order('created_at', { ascending: false })
                     .limit(5);
-                    
+
                 if (profilesError) throw profilesError;
-                
-                // Check staff
+
                 const { data: staff, error: staffError } = await supabase
                     .from('staff')
                     .select('id, name, email, role, company_id')
                     .order('created_at', { ascending: false })
                     .limit(5);
-                    
+
                 if (staffError) throw staffError;
-                
+
                 let resultHtml = '<h3>Database Status:</h3>';
-                
+
                 resultHtml += '<h4>Recent Companies:</h4>';
-                if (companies.length > 0) {
-                    resultHtml += '<ul>';
-                    companies.forEach(company => {
-                        resultHtml += `<li>${company.name} (ID: ${company.id}) - ${new Date(company.created_at).toLocaleString()}</li>`;
-                    });
-                    resultHtml += '</ul>';
-                } else {
-                    resultHtml += '<p>No companies found</p>';
-                }
-                
+                resultHtml += (companies?.length)
+                    ? '<ul>' + companies.map(c => `<li>${c.name} (ID: ${c.id}) - ${new Date(c.created_at).toLocaleString()}</li>`).join('') + '</ul>'
+                    : '<p>No companies found</p>';
+
                 resultHtml += '<h4>Recent Profiles:</h4>';
-                if (profiles.length > 0) {
-                    resultHtml += '<ul>';
-                    profiles.forEach(profile => {
-                        resultHtml += `<li>${profile.role} (Company: ${profile.company_id}) - ${new Date(profile.created_at).toLocaleString()}</li>`;
-                    });
-                    resultHtml += '</ul>';
-                } else {
-                    resultHtml += '<p>No profiles found</p>';
-                }
-                
+                resultHtml += (profiles?.length)
+                    ? '<ul>' + profiles.map(p => `<li>${p.role} (Company: ${p.company_id || 'null'}) - ${new Date(p.created_at).toLocaleString()}</li>`).join('') + '</ul>'
+                    : '<p>No profiles found</p>';
+
                 resultHtml += '<h4>Recent Staff:</h4>';
-                if (staff.length > 0) {
-                    resultHtml += '<ul>';
-                    staff.forEach(s => {
-                        resultHtml += `<li>${s.name} (${s.email}) - ${s.role}</li>`;
-                    });
-                    resultHtml += '</ul>';
-                } else {
-                    resultHtml += '<p>No staff found</p>';
-                }
-                
+                resultHtml += (staff?.length)
+                    ? '<ul>' + staff.map(s => `<li>${s.name} (${s.email}) - ${s.role}</li>`).join('') + '</ul>'
+                    : '<p>No staff found</p>';
+
                 showResult(resultHtml, 'success');
-                
+
             } catch (error) {
                 showResult('❌ Database check error: ' + error.message, 'error');
             }
         }
-        
+
         function clearLocalStorage() {
             localStorage.clear();
             showResult('✅ LocalStorage cleared', 'success');
-        }
-        
-        function showResult(message, type) {
-            const resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = `<div class="${type}">${message}</div>`;
-            console.log(message);
         }
     </script>
 </body>
