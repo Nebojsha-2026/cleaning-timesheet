@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Register - Timesheet Manager</title>
+    <title>Register - Worklynx Timesheet</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -114,7 +114,7 @@
                     return;
                 }
 
-                messageDiv.textContent = 'Creating account...';
+                messageDiv.textContent = 'Creating account and company...';
                 messageDiv.className = 'message info';
                 messageDiv.style.display = 'block';
                 
@@ -125,18 +125,16 @@
                 const result = await auth.registerManager(email, password, companyName);
 
                 if (result.success) {
-                    messageDiv.textContent = 'Account created! Setting up dashboard...';
+                    messageDiv.textContent = '✅ Account created! Redirecting to manager dashboard...';
                     messageDiv.className = 'message success';
                     
-                    // Force set manager role in localStorage
-                    localStorage.setItem('cleaning_timesheet_role', 'manager');
-                    
-                    // Wait a moment then redirect to manager dashboard
+                    // Wait a moment then force redirect to manager dashboard
                     setTimeout(() => {
+                        console.log('Force redirecting to manager.html');
                         window.location.href = 'manager.html';
                     }, 1500);
                 } else {
-                    messageDiv.textContent = result.error || 'Registration failed';
+                    messageDiv.textContent = '❌ ' + (result.error || 'Registration failed');
                     messageDiv.className = 'message error';
                     registerBtn.disabled = false;
                     registerBtn.innerHTML = '<i class="fas fa-user-plus"></i> Create Manager Account';
