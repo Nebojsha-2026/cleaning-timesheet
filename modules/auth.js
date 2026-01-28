@@ -1,4 +1,4 @@
-// auth.js - Fixed version with proper Supabase auth flow
+// auth.js - Fixed version with better role detection
 console.log('🔐 Auth module loading...');
 
 const AUTH_CONFIG = {
@@ -79,26 +79,24 @@ async function handleUserSession(user) {
     if (error) {
         console.warn('Profile load error:', error.message);
         
-        // If profile doesn't exist, create one with default role
+        // If profile doesn't exist, check if this is a new manager
         if (error.code === 'PGRST116') {
-            const { error: createError } = await supabase
-                .from('profiles')
-                .insert([{
-                    id: currentUser.id,
-                    role: 'employee',
-                    name: currentUser.email.split('@')[0]
-                }]);
+            // Check if user was just registered (look for metadata)
+            const userMetadata = currentUser.user_metadata;
+            console.log('User metadata:', userMetadata);
             
-            if (createError) {
-                console.error('Failed to create profile:', createError);
+            if (userMetadata?.role === 'manager') {
+                // This is a manager who needs a profile
+                console.log('Creating profile for new manager');
+                userRole = 'manager';
             } else {
                 userRole = 'employee';
-                showMessage('Profile created', 'info');
             }
         }
     } else if (profile) {
         currentCompanyId = profile.company_id;
         userRole = profile.role || 'employee';
+        console.log('Loaded profile - Role:', userRole, 'Company:', currentCompanyId);
     }
 
     localStorage.setItem(AUTH_CONFIG.TOKEN_KEY, currentToken || '');
@@ -116,13 +114,15 @@ async function redirectBasedOnRole() {
     const role = localStorage.getItem(AUTH_CONFIG.ROLE_KEY) || 'employee';
     const currentPath = window.location.pathname;
     
+    console.log('Redirect check - Current role:', role, 'Current path:', currentPath);
+    
     // Don't redirect if already on correct page
     if (role === 'manager' && !currentPath.includes('manager.html')) {
         console.log('Redirecting manager to manager.html');
         window.location.href = 'manager.html';
-    } else if (role === 'employee' && !currentPath.includes('index.html')) {
-        console.log('Redirecting employee to index.html');
-        window.location.href = 'index.html';
+    } else if (role !== 'manager' && !currentPath.includes('employee.html')) {
+        console.log('Redirecting employee to employee.html');
+        window.location.href = 'employee.html';
     }
 }
 
@@ -157,20 +157,23 @@ async function login(email, password) {
     }
 }
 
-// Register manager
+// Register manager - FIXED VERSION
 async function registerManager(email, password, companyName) {
     if (!supabase) {
         return { success: false, error: 'Supabase not initialized' };
     }
 
     try {
-        // Sign up the user
+        console.log('Starting manager registration for:', email);
+        
+        // Sign up the user with manager metadata
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
             email: email.trim(),
             password: password,
             options: {
                 data: {
-                    role: 'manager'
+                    role: 'manager',
+                    company_name: companyName
                 }
             }
         });
@@ -185,6 +188,9 @@ async function registerManager(email, password, companyName) {
         }
 
         console.log('User created:', authData.user.id);
+
+        // Wait a moment for the user to be fully created
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         // Create company
         const { data: company, error: companyError } = await supabase
@@ -202,7 +208,11 @@ async function registerManager(email, password, companyName) {
         if (companyError) {
             console.error('Company creation error:', companyError.message);
             // Try to delete the user if company creation fails
-            await supabase.auth.admin.deleteUser(authData.user.id);
+            try {
+                await supabase.auth.admin.deleteUser(authData.user.id);
+            } catch (deleteError) {
+                console.error('Failed to delete user:', deleteError);
+            }
             return { success: false, error: 'Company creation failed: ' + companyError.message };
         }
 
@@ -222,8 +232,12 @@ async function registerManager(email, password, companyName) {
             console.error('Profile creation error:', profileError.message);
             // Clean up company if profile fails
             await supabase.from('companies').delete().eq('id', company.id);
-            await supabase.auth.admin.deleteUser(authData.user.id);
-            return { success: false, error: 'Profile creation failed' };
+            try {
+                await supabase.auth.admin.deleteUser(authData.user.id);
+            } catch (deleteError) {
+                console.error('Failed to delete user:', deleteError);
+            }
+            return { success: false, error: 'Profile creation failed: ' + profileError.message };
         }
 
         console.log('Profile created for manager');
@@ -236,8 +250,18 @@ async function registerManager(email, password, companyName) {
 
         if (signInError) {
             console.error('Auto sign-in error:', signInError.message);
-            return { success: false, error: 'Registration complete but auto-login failed' };
+            // Still success, user can login manually
+            return { 
+                success: true, 
+                user: authData.user, 
+                company: company,
+                message: 'Account created. Please login manually.'
+            };
         }
+
+        // Update localStorage with manager role immediately
+        localStorage.setItem(AUTH_CONFIG.ROLE_KEY, 'manager');
+        localStorage.setItem(AUTH_CONFIG.COMPANY_KEY, company.id);
 
         return { 
             success: true, 
@@ -288,7 +312,7 @@ function protectRoute(requiredRole = null) {
 
     const role = getUserRole();
     if (requiredRole && role !== requiredRole) {
-        window.location.href = role === 'manager' ? 'manager.html' : 'index.html';
+        window.location.href = role === 'manager' ? 'manager.html' : 'employee.html';
         return false;
     }
 
