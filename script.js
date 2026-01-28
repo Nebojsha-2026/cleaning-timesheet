@@ -110,15 +110,27 @@ async function loadCompanyBranding() {
 
         // Apply branding
         const title = company.custom_title || 'Cleaning Timesheet';
+        
+        // Update app title
         const appTitle = document.getElementById('appTitle');
-        if (appTitle) appTitle.textContent = title;
+        if (appTitle) {
+            const icon = appTitle.querySelector('i');
+            if (icon) {
+                appTitle.innerHTML = `<i class="${icon.className}"></i> ${title}`;
+            } else {
+                appTitle.textContent = title;
+            }
+        }
 
+        // Update footer
         const footer = document.getElementById('footerCompany');
         if (footer) footer.textContent = `${company.name || 'Company'} Timesheet Manager • Powered by Supabase`;
 
+        // Update company name in header
         const companyNameEl = document.getElementById('currentCompanyName');
         if (companyNameEl) companyNameEl.textContent = company.name || 'My Company';
 
+        // Update logo
         if (company.logo_url) {
             const logo = document.getElementById('companyLogo');
             if (logo) {
@@ -127,6 +139,7 @@ async function loadCompanyBranding() {
             }
         }
 
+        // Update colors
         if (company.primary_color) {
             document.documentElement.style.setProperty('--primary-color', company.primary_color);
         }
@@ -134,10 +147,10 @@ async function loadCompanyBranding() {
             document.documentElement.style.setProperty('--secondary-color', company.secondary_color);
         }
 
-        console.log('Branding applied:', title);
+        console.log('✅ Branding applied:', title);
 
     } catch (err) {
-        console.error('Branding load failed:', err);
+        console.error('❌ Branding load failed:', err);
     }
 }
 
@@ -189,6 +202,7 @@ async function loadManagerDashboard() {
         const { count: shiftCount } = await supabase
             .from('shifts')
             .select('*', { count: 'exact', head: true })
+            .eq('company_id', currentCompanyId)
             .gte('shift_date', new Date().toISOString().split('T')[0]);
 
         // Update UI
@@ -222,9 +236,14 @@ async function loadEmployeeDashboard() {
             // Update stats
             await updateEmployeeStats();
             
-            // Load shifts
+            // Load shifts if function exists
             if (typeof loadMyShifts === 'function') {
                 await loadMyShifts();
+            }
+            
+            // Load locations if function exists
+            if (typeof loadLocations === 'function') {
+                await loadLocations();
             }
         }
     } catch (err) {
@@ -234,10 +253,27 @@ async function loadEmployeeDashboard() {
 
 async function updateEmployeeStats() {
     try {
+        // Get current user
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        
+        // Get staff record
+        const { data: staff, error: staffError } = await supabase
+            .from('staff')
+            .select('id')
+            .eq('user_id', user.id)
+            .single();
+        
+        if (staffError) {
+            console.warn('No staff record found:', staffError.message);
+            return;
+        }
+        
         // Get completed shifts count
         const { count: completedShifts } = await supabase
             .from('shifts')
             .select('*', { count: 'exact', head: true })
+            .eq('staff_id', staff.id)
             .eq('status', 'completed');
 
         // Get locations count
@@ -416,7 +452,14 @@ function previewBrandingChanges() {
     document.documentElement.style.setProperty('--secondary-color', secondary);
     
     const appTitle = document.getElementById('appTitle');
-    if (appTitle) appTitle.textContent = title;
+    if (appTitle) {
+        const icon = appTitle.querySelector('i');
+        if (icon) {
+            appTitle.innerHTML = `<i class="${icon.className}"></i> ${title}`;
+        } else {
+            appTitle.textContent = title;
+        }
+    }
 
     showMessage('Preview applied!', 'info');
 }
