@@ -1,9 +1,10 @@
-// modules/shifts.js - Fixed version
+// modules/shifts.js - Employee shift management module
 console.log('🔄 Shifts module loading...');
 
 // Global variables
 let appStaff = [];
 let myShifts = [];
+let pastShifts = [];
 let currentShiftId = null;
 
 // Helper function to get shift status class
@@ -35,13 +36,35 @@ async function loadMyShifts() {
         
         const today = new Date().toISOString().split('T')[0];
         
-        // Get shifts for current employee - FIXED query
+        // Get current user ID
+        const { data: { user } } = await window.supabaseClient.auth.getUser();
+        if (!user) {
+            console.log('No user logged in');
+            showSampleShifts();
+            return [];
+        }
+        
+        // Get staff record for current user
+        const { data: staff, error: staffError } = await window.supabaseClient
+            .from('staff')
+            .select('id')
+            .eq('user_id', user.id)
+            .single();
+        
+        if (staffError) {
+            console.warn('No staff record found:', staffError.message);
+            showSampleShifts();
+            return [];
+        }
+        
+        // Get shifts for current employee
         const { data: shifts, error } = await window.supabaseClient
             .from('shifts')
             .select(`
                 *,
                 locations (name, notes)
             `)
+            .eq('staff_id', staff.id)
             .gte('shift_date', today)
             .order('shift_date', { ascending: true })
             .order('start_time', { ascending: true })
@@ -57,12 +80,61 @@ async function loadMyShifts() {
         updateMyShiftsDisplay(myShifts);
         console.log('✅ My shifts loaded:', myShifts.length);
         
+        // Load past shifts as well
+        await loadPastShifts();
+        
         return myShifts;
         
     } catch (error) {
         console.error('❌ Error loading shifts:', error);
         showSampleShifts();
         return [];
+    }
+}
+
+// Load past shifts
+async function loadPastShifts() {
+    try {
+        console.log('📅 Loading past shifts...');
+        
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Get current user ID
+        const { data: { user } } = await window.supabaseClient.auth.getUser();
+        if (!user) return;
+        
+        // Get staff record for current user
+        const { data: staff, error: staffError } = await window.supabaseClient
+            .from('staff')
+            .select('id')
+            .eq('user_id', user.id)
+            .single();
+        
+        if (staffError) return;
+        
+        // Get past shifts for current employee
+        const { data: shifts, error } = await window.supabaseClient
+            .from('shifts')
+            .select(`
+                *,
+                locations (name, notes)
+            `)
+            .eq('staff_id', staff.id)
+            .lt('shift_date', today)
+            .order('shift_date', { ascending: false })
+            .limit(10);
+        
+        if (error) {
+            console.error('Error loading past shifts:', error);
+            return;
+        }
+        
+        pastShifts = shifts || [];
+        updatePastShiftsDisplay(pastShifts);
+        console.log('✅ Past shifts loaded:', pastShifts.length);
+        
+    } catch (error) {
+        console.error('❌ Error loading past shifts:', error);
     }
 }
 
@@ -99,7 +171,7 @@ function updateMyShiftsDisplay(shifts) {
             <div class="shift-item ${isToday ? 'today-shift' : ''}" data-shift-id="${shift.id}">
                 <div class="shift-info">
                     <h4>${escapeHtml(locationName)} 
-                        <span class="shift-status ${statusClass}">${shift.status}</span>
+                        <span class="shift-status ${statusClass}">${shift.status.replace('_', ' ')}</span>
                         ${isToday ? '<span class="today-badge">TODAY</span>' : ''}
                     </h4>
                     <p>
@@ -136,6 +208,12 @@ function updateMyShiftsDisplay(shifts) {
                     ${shift.status === 'completed' ? `
                         <span style="color: #28a745; font-weight: bold;">
                             <i class="fas fa-check-circle"></i> Completed
+                        </span>
+                    ` : ''}
+                    
+                    ${shift.status === 'cancelled' ? `
+                        <span style="color: #dc3545; font-weight: bold;">
+                            <i class="fas fa-times-circle"></i> Cancelled
                         </span>
                     ` : ''}
                 </div>
@@ -185,7 +263,60 @@ function updateMyShiftsDisplay(shifts) {
     }, 100);
 }
 
-// Show sample shifts
+// Update past shifts display
+function updatePastShiftsDisplay(shifts) {
+    const container = document.getElementById('pastShiftsList');
+    if (!container) return;
+    
+    if (!shifts || shifts.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: #666;">
+                <i class="fas fa-history" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
+                <p>No past shifts found.</p>
+                <p style="font-size: 0.9rem;">Completed shifts will appear here.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    shifts.forEach(shift => {
+        const locationName = shift.locations?.name || 'Unknown Location';
+        const statusClass = getShiftStatusClass(shift.status);
+        
+        html += `
+            <div class="shift-item" data-shift-id="${shift.id}">
+                <div class="shift-info">
+                    <h4>${escapeHtml(locationName)} 
+                        <span class="shift-status ${statusClass}">${shift.status.replace('_', ' ')}</span>
+                    </h4>
+                    <p>
+                        <i class="far fa-calendar"></i> ${formatDate(shift.shift_date)} 
+                        • <i class="far fa-clock"></i> ${formatTime(shift.start_time)} 
+                        • ${shift.duration} hours
+                    </p>
+                    ${shift.notes ? `<p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
+                        <i class="fas fa-sticky-note"></i> ${escapeHtml(shift.notes)}
+                    </p>` : ''}
+                    ${shift.actual_duration ? `<p style="color: #28a745; font-size: 0.9rem; margin-top: 5px;">
+                        <i class="fas fa-clock"></i> Actual: ${shift.actual_duration} hours
+                    </p>` : ''}
+                    ${shift.actual_start_time && shift.actual_end_time ? `
+                        <p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
+                            <i class="fas fa-play-circle"></i> Started: ${formatTime(shift.actual_start_time)}
+                            <br>
+                            <i class="fas fa-flag-checkered"></i> Ended: ${formatTime(shift.actual_end_time)}
+                        </p>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// Show sample shifts (fallback when no data)
 function showSampleShifts() {
     const container = document.getElementById('myShiftsList');
     if (!container) return;
@@ -199,6 +330,15 @@ function showSampleShifts() {
             duration: 3,
             status: 'pending',
             notes: 'Regular cleaning - all floors'
+        },
+        {
+            id: 'sample2',
+            location_name: 'Client Building A',
+            shift_date: new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0],
+            start_time: '14:00',
+            duration: 4,
+            status: 'confirmed',
+            notes: 'Deep clean required'
         }
     ];
     
@@ -220,6 +360,9 @@ function showSampleShifts() {
                         • <i class="far fa-clock"></i> ${formatTime(shift.start_time)} 
                         • ${shift.duration} hours
                     </p>
+                    ${shift.notes ? `<p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
+                        <i class="fas fa-sticky-note"></i> ${escapeHtml(shift.notes)}
+                    </p>` : ''}
                 </div>
                 <div class="shift-actions-employee">
                     ${shift.status === 'pending' ? `
@@ -228,6 +371,11 @@ function showSampleShifts() {
                         </button>
                         <button class="btn btn-sm btn-danger decline-shift-btn-sample" data-id="${shift.id}">
                             <i class="fas fa-times"></i> Decline
+                        </button>
+                    ` : ''}
+                    ${shift.status === 'confirmed' ? `
+                        <button class="btn btn-sm btn-primary start-shift-btn-sample" data-id="${shift.id}">
+                            <i class="fas fa-play"></i> Start
                         </button>
                     ` : ''}
                 </div>
@@ -241,15 +389,40 @@ function showSampleShifts() {
     setTimeout(() => {
         document.querySelectorAll('.accept-shift-btn-sample').forEach(button => {
             button.addEventListener('click', function() {
-                showMessage('✅ Shift accepted!', 'success');
+                showMessage('✅ Shift accepted! (Sample)', 'success');
+                this.closest('.shift-item').querySelector('.shift-status').textContent = 'confirmed';
+                this.closest('.shift-item').querySelector('.shift-status').className = 'shift-status status-confirmed';
+                this.parentNode.innerHTML = '<button class="btn btn-sm btn-primary start-shift-btn-sample"><i class="fas fa-play"></i> Start</button>';
             });
         });
         
         document.querySelectorAll('.decline-shift-btn-sample').forEach(button => {
             button.addEventListener('click', function() {
-                showMessage('Shift declined', 'info');
+                showMessage('Shift declined (Sample)', 'info');
+                this.closest('.shift-item').remove();
             });
         });
+        
+        document.querySelectorAll('.start-shift-btn-sample').forEach(button => {
+            button.addEventListener('click', function() {
+                showMessage('✅ Shift started! (Sample)', 'success');
+                this.closest('.shift-item').querySelector('.shift-status').textContent = 'in progress';
+                this.closest('.shift-item').querySelector('.shift-status').className = 'shift-status status-in-progress';
+                this.parentNode.innerHTML = '<button class="btn btn-sm btn-success complete-shift-btn-sample"><i class="fas fa-flag-checkered"></i> Complete</button>';
+            });
+        });
+        
+        // Add complete button handler dynamically
+        setTimeout(() => {
+            document.querySelectorAll('.complete-shift-btn-sample').forEach(button => {
+                button.addEventListener('click', function() {
+                    showMessage('✅ Shift completed! (Sample)', 'success');
+                    this.closest('.shift-item').querySelector('.shift-status').textContent = 'completed';
+                    this.closest('.shift-item').querySelector('.shift-status').className = 'shift-status status-completed';
+                    this.parentNode.innerHTML = '<span style="color: #28a745; font-weight: bold;"><i class="fas fa-check-circle"></i> Completed</span>';
+                });
+            });
+        }, 100);
     }, 100);
 }
 
@@ -385,11 +558,111 @@ window.completeShift = function() {
 };
 
 window.reportIssue = function() {
-    showMessage('✅ Issue reported to manager', 'success');
+    const html = `
+        <div class="modal-content">
+            <h2><i class="fas fa-exclamation-triangle"></i> Report Issue</h2>
+            <form id="reportIssueForm">
+                <div class="form-group">
+                    <label for="issueType">Issue Type</label>
+                    <select id="issueType" required>
+                        <option value="">Select issue type</option>
+                        <option value="equipment">Equipment Issue</option>
+                        <option value="safety">Safety Concern</option>
+                        <option value="access">Access Problem</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="issueDescription">Description</label>
+                    <textarea id="issueDescription" rows="4" placeholder="Describe the issue in detail..." required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="issueUrgency">Urgency</label>
+                    <select id="issueUrgency">
+                        <option value="low">Low - Can wait</option>
+                        <option value="medium" selected>Medium - Should be addressed soon</option>
+                        <option value="high">High - Needs immediate attention</option>
+                    </select>
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 10px;">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">
+                        <i class="fas fa-paper-plane"></i> Submit Report
+                    </button>
+                    <button type="button" class="btn cancel-btn" style="flex: 1; background: #6c757d; color: white;">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    showModal(html);
+    
+    document.getElementById('reportIssueForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        showMessage('✅ Issue reported to manager', 'success');
+        closeModal();
+    });
+    
+    document.querySelector('.cancel-btn').addEventListener('click', closeModal);
 };
 
 window.requestTimeOff = function() {
-    showMessage('✅ Time off request submitted', 'success');
+    const html = `
+        <div class="modal-content">
+            <h2><i class="fas fa-calendar-times"></i> Request Time Off</h2>
+            <form id="timeOffForm">
+                <div class="form-group">
+                    <label for="timeOffType">Type of Request</label>
+                    <select id="timeOffType" required>
+                        <option value="">Select type</option>
+                        <option value="vacation">Vacation</option>
+                        <option value="sick">Sick Leave</option>
+                        <option value="personal">Personal Day</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="startDate">Start Date</label>
+                    <input type="date" id="startDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="endDate">End Date</label>
+                    <input type="date" id="endDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="timeOffReason">Reason (Optional)</label>
+                    <textarea id="timeOffReason" rows="3" placeholder="Brief reason for time off..."></textarea>
+                </div>
+                <div style="margin-top: 20px; display: flex; gap: 10px;">
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">
+                        <i class="fas fa-paper-plane"></i> Submit Request
+                    </button>
+                    <button type="button" class="btn cancel-btn" style="flex: 1; background: #6c757d; color: white;">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    showModal(html);
+    
+    // Set default dates
+    const today = new Date();
+    const nextWeek = new Date(today);
+    nextWeek.setDate(today.getDate() + 7);
+    
+    document.getElementById('startDate').value = today.toISOString().split('T')[0];
+    document.getElementById('endDate').value = nextWeek.toISOString().split('T')[0];
+    
+    document.getElementById('timeOffForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        showMessage('✅ Time off request submitted', 'success');
+        closeModal();
+    });
+    
+    document.querySelector('.cancel-btn').addEventListener('click', closeModal);
 };
 
 // Refresh my shifts
@@ -398,6 +671,23 @@ window.refreshMyShifts = async function() {
     showMessage('Refreshing shifts...', 'info');
     await loadMyShifts();
     showMessage('✅ Shifts refreshed!', 'success');
+};
+
+// Refresh past shifts
+window.refreshPastShifts = async function() {
+    console.log('🔄 Refreshing past shifts...');
+    showMessage('Refreshing past shifts...', 'info');
+    await loadPastShifts();
+    showMessage('✅ Past shifts refreshed!', 'success');
+};
+
+// Export functions for use in other modules
+window.shiftsModule = {
+    loadMyShifts,
+    loadPastShifts,
+    updateShiftStatus,
+    getShiftStatusClass,
+    formatTime
 };
 
 console.log('✅ Employee Shifts module loaded');
