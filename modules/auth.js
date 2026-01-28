@@ -1,4 +1,4 @@
-// auth.js - Fixed version with better role detection
+// auth.js - Fixed version with proper profile creation
 console.log('🔐 Auth module loading...');
 
 const AUTH_CONFIG = {
@@ -79,18 +79,22 @@ async function handleUserSession(user) {
     if (error) {
         console.warn('Profile load error:', error.message);
         
-        // If profile doesn't exist, check if this is a new manager
+        // If profile doesn't exist, create a basic one
         if (error.code === 'PGRST116') {
-            // Check if user was just registered (look for metadata)
-            const userMetadata = currentUser.user_metadata;
-            console.log('User metadata:', userMetadata);
+            console.log('Creating basic profile for user');
+            const { error: createError } = await supabase
+                .from('profiles')
+                .insert([{
+                    id: currentUser.id,
+                    role: 'employee',
+                    name: currentUser.email.split('@')[0]
+                }]);
             
-            if (userMetadata?.role === 'manager') {
-                // This is a manager who needs a profile
-                console.log('Creating profile for new manager');
-                userRole = 'manager';
+            if (createError) {
+                console.error('Failed to create profile:', createError);
             } else {
                 userRole = 'employee';
+                console.log('Basic profile created');
             }
         }
     } else if (profile) {
@@ -157,7 +161,7 @@ async function login(email, password) {
     }
 }
 
-// Register manager - FIXED VERSION
+// Register manager - SIMPLIFIED VERSION
 async function registerManager(email, password, companyName) {
     if (!supabase) {
         return { success: false, error: 'Supabase not initialized' };
@@ -166,14 +170,13 @@ async function registerManager(email, password, companyName) {
     try {
         console.log('Starting manager registration for:', email);
         
-        // Sign up the user with manager metadata
+        // STEP 1: Sign up the user
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
             email: email.trim(),
             password: password,
             options: {
                 data: {
-                    role: 'manager',
-                    company_name: companyName
+                    role: 'manager'
                 }
             }
         });
@@ -187,12 +190,12 @@ async function registerManager(email, password, companyName) {
             return { success: false, error: 'No user created' };
         }
 
-        console.log('User created:', authData.user.id);
+        console.log('✅ User created:', authData.user.id);
 
-        // Wait a moment for the user to be fully created
+        // Wait for the trigger to create basic profile
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // Create company
+        // STEP 2: Create company
         const { data: company, error: companyError } = await supabase
             .from('companies')
             .insert([{ 
@@ -207,42 +210,50 @@ async function registerManager(email, password, companyName) {
 
         if (companyError) {
             console.error('Company creation error:', companyError.message);
-            // Try to delete the user if company creation fails
-            try {
-                await supabase.auth.admin.deleteUser(authData.user.id);
-            } catch (deleteError) {
-                console.error('Failed to delete user:', deleteError);
-            }
             return { success: false, error: 'Company creation failed: ' + companyError.message };
         }
 
-        console.log('Company created:', company.id);
+        console.log('✅ Company created:', company.id);
 
-        // Create profile for the manager
+        // STEP 3: Update profile with company and manager role
         const { error: profileError } = await supabase
             .from('profiles')
-            .insert([{
-                id: authData.user.id,
+            .update({
                 company_id: company.id,
                 role: 'manager',
                 name: 'Manager'
-            }]);
+            })
+            .eq('id', authData.user.id);
 
         if (profileError) {
-            console.error('Profile creation error:', profileError.message);
-            // Clean up company if profile fails
+            console.error('Profile update error:', profileError.message);
+            
+            // Try to delete company if profile update fails
             await supabase.from('companies').delete().eq('id', company.id);
-            try {
-                await supabase.auth.admin.deleteUser(authData.user.id);
-            } catch (deleteError) {
-                console.error('Failed to delete user:', deleteError);
-            }
-            return { success: false, error: 'Profile creation failed: ' + profileError.message };
+            return { success: false, error: 'Profile update failed: ' + profileError.message };
         }
 
-        console.log('Profile created for manager');
+        console.log('✅ Profile updated with manager role');
 
-        // Sign in the user immediately
+        // STEP 4: Also create staff record for the manager
+        const { error: staffError } = await supabase
+            .from('staff')
+            .insert([{
+                user_id: authData.user.id,
+                company_id: company.id,
+                name: 'Manager',
+                email: email.trim(),
+                role: 'manager',
+                hourly_rate: 23.00,
+                is_active: true
+            }]);
+
+        if (staffError) {
+            console.warn('Staff record creation warning:', staffError.message);
+            // Continue anyway, staff record is optional
+        }
+
+        // STEP 5: Sign in the user
         const { error: signInError } = await supabase.auth.signInWithPassword({
             email: email.trim(),
             password: password
@@ -250,7 +261,7 @@ async function registerManager(email, password, companyName) {
 
         if (signInError) {
             console.error('Auto sign-in error:', signInError.message);
-            // Still success, user can login manually
+            // Return success but tell user to login manually
             return { 
                 success: true, 
                 user: authData.user, 
@@ -259,9 +270,11 @@ async function registerManager(email, password, companyName) {
             };
         }
 
-        // Update localStorage with manager role immediately
+        // Force update localStorage immediately
         localStorage.setItem(AUTH_CONFIG.ROLE_KEY, 'manager');
         localStorage.setItem(AUTH_CONFIG.COMPANY_KEY, company.id);
+        
+        console.log('✅ Registration complete - role set to manager');
 
         return { 
             success: true, 
