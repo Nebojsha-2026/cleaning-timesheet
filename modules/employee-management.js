@@ -1,231 +1,198 @@
-// Employee Management Module
+// modules/employee-management.js
 console.log('👥 Employee Management module loading...');
 
-// Load all employees for manager
-async function loadEmployees() {
-    try {
-        const companyId = localStorage.getItem('cleaning_timesheet_company') ||
-            localStorage.getItem('cleaning_timesheet_company_id');
-        if (!companyId) {
-            console.warn('No company ID found');
-            return [];
-        }
+function getSupabase() {
+    return window.supabaseClient || window.supabase;
+}
 
-        console.log('Loading employees for company:', companyId);
-        
-        const { data: employees, error } = await window.supabaseClient
-            .from('profiles')
-            .select(`
-                id,
-                name,
-                role,
-                created_at,
-                users:auth.users(email, last_sign_in_at)
-            `)
-            .eq('company_id', companyId)
-            .order('created_at', { ascending: false });
+function getCompanyId() {
+    // Prefer auth module if present
+    if (window.auth && typeof window.auth.getCurrentCompanyId === 'function') {
+        return window.auth.getCurrentCompanyId();
+    }
+    return localStorage.getItem('cleaning_timesheet_company_id') || localStorage.getItem('cleaning_timesheet_company') || null;
+}
 
-        if (error) throw error;
+function makeToken(length = 48) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const array = new Uint8Array(length);
+    crypto.getRandomValues(array);
+    return Array.from(array, (x) => chars[x % chars.length]).join('');
+}
 
-        console.log('Employees loaded:', employees?.length || 0);
-        return employees || [];
+async function countPendingInvites() {
+    const supabase = getSupabase();
+    const companyId = getCompanyId();
+    if (!supabase || !companyId) return;
 
-    } catch (error) {
-        console.error('Error loading employees:', error);
-        return [];
+    const { count, error } = await supabase
+        .from('invitations')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', companyId)
+        .eq('accepted', false);
+
+    if (!error) {
+        const el = document.getElementById('statPendingInvites');
+        if (el) el.textContent = count || 0;
     }
 }
 
-// Invite employee by email
-async function inviteEmployee(email, name = '') {
-    try {
-        const companyId = localStorage.getItem('cleaning_timesheet_company') ||
-            localStorage.getItem('cleaning_timesheet_company_id');
-        if (!companyId) {
-            throw new Error('No company selected');
-        }
+function buildInviteModalHtml() {
+    return `
+    <div class="modal-content">
+        <h2><i class="fas fa-user-plus"></i> Invite Employee</h2>
+        <p style="color:#666; margin-top:6px;">
+            This will generate an invite link you can copy and send to the employee.
+        </p>
 
-        // Create invitation record
-        const token = generateToken();
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiry
+        <form id="inviteEmployeeForm" style="margin-top:16px;">
+            <div class="form-group">
+                <label for="inviteName">Employee Name</label>
+                <input type="text" id="inviteName" placeholder="e.g. John Smith" required />
+            </div>
 
-        const { error } = await window.supabaseClient
-            .from('invitations')
-            .insert([{
-                company_id: companyId,
-                email: email.trim().toLowerCase(),
-                token: token,
-                role: 'employee',
-                expires_at: expiresAt.toISOString(),
-                accepted: false
-            }]);
+            <div class="form-group">
+                <label for="inviteEmail">Employee Email</label>
+                <input type="email" id="inviteEmail" placeholder="employee@example.com" required />
+            </div>
 
-        if (error) throw error;
+            <div style="margin-top:18px; display:flex; gap:10px;">
+                <button type="submit" class="btn btn-primary" style="flex:1;">
+                    <i class="fas fa-link"></i> Generate Invite Link
+                </button>
+                <button type="button" class="btn cancel-btn" style="flex:1; background:#6c757d; color:white;">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </form>
 
-        // TODO: Send invitation email with token
-        console.log('Invitation created for:', email);
-        
-        return { success: true, token: token };
-
-    } catch (error) {
-        console.error('Error inviting employee:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-// Generate random token
-function generateToken() {
-    return Math.random().toString(36).substring(2) + Date.now().toString(36);
-}
-
-// Create employee directly (without invitation)
-async function createEmployee(email, password, name, role = 'employee') {
-    try {
-        const companyId = localStorage.getItem('cleaning_timesheet_company') ||
-            localStorage.getItem('cleaning_timesheet_company_id');
-        if (!companyId) {
-            throw new Error('No company selected');
-        }
-
-        // Create user in auth
-        const { data: authData, error: authError } = await window.supabaseClient.auth.admin.createUser({
-            email: email.trim().toLowerCase(),
-            password: password,
-            email_confirm: true
-        });
-
-        if (authError) throw authError;
-
-        // Create profile
-        const { error: profileError } = await window.supabaseClient
-            .from('profiles')
-            .insert([{
-                id: authData.user.id,
-                company_id: companyId,
-                role: role,
-                name: name || email.split('@')[0]
-            }]);
-
-        if (profileError) throw profileError;
-
-        console.log('Employee created:', email);
-        return { success: true, userId: authData.user.id };
-
-    } catch (error) {
-        console.error('Error creating employee:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-// Show invite employee modal
-window.showInviteEmployeeModal = function() {
-    const html = `
-        <div class="modal-content">
-            <h2><i class="fas fa-user-plus"></i> Invite Employee</h2>
-            <form id="inviteEmployeeForm">
-                <div class="form-group">
-                    <label for="inviteEmail"><i class="fas fa-envelope"></i> Email Address</label>
-                    <input type="email" id="inviteEmail" placeholder="employee@example.com" required>
-                </div>
-                <div class="form-group">
-                    <label for="inviteName"><i class="fas fa-user"></i> Name (Optional)</label>
-                    <input type="text" id="inviteName" placeholder="Employee Name">
-                </div>
-                <div class="form-group">
-                    <label>Invitation Method</label>
-                    <div style="margin-top: 10px;">
-                        <label class="radio" style="display: block; margin-bottom: 10px;">
-                            <input type="radio" name="inviteMethod" value="email" checked>
-                            <span>Send invitation email (employee creates own password)</span>
-                        </label>
-                        <label class="radio" style="display: block;">
-                            <input type="radio" name="inviteMethod" value="create">
-                            <span>Create account for them (you'll set password)</span>
-                        </label>
-                    </div>
-                </div>
-                <div id="passwordSection" style="display: none;">
-                    <div class="form-group">
-                        <label for="employeePassword">Password</label>
-                        <input type="password" id="employeePassword" placeholder="Set initial password">
-                    </div>
-                </div>
-                <div style="margin-top: 20px; display: flex; gap: 10px;">
-                    <button type="submit" class="btn btn-primary" style="flex: 1;">
-                        <i class="fas fa-paper-plane"></i> Send Invitation
-                    </button>
-                    <button type="button" class="btn cancel-btn" style="flex: 1; background: #6c757d; color: white;">
-                        <i class="fas fa-times"></i> Cancel
-                    </button>
-                </div>
-            </form>
+        <div id="inviteResult" style="display:none; margin-top:16px; padding:12px; background:#f6f7fb; border-radius:8px;">
+            <h3 style="margin:0 0 10px 0; font-size:1rem;">Invite Link</h3>
+            <input type="text" id="inviteLinkOutput" readonly style="width:100%;" />
+            <div style="margin-top:10px; display:flex; gap:10px;">
+                <button type="button" class="btn btn-primary" id="copyInviteBtn" style="flex:1;">
+                    <i class="fas fa-copy"></i> Copy Link
+                </button>
+                <button type="button" class="btn" id="closeInviteBtn" style="flex:1; background:#6c757d; color:white;">
+                    <i class="fas fa-check"></i> Done
+                </button>
+            </div>
+            <p style="margin-top:10px; color:#666; font-size:0.9rem;">
+                Send this link to the employee. They will set their password and activate their account.
+            </p>
         </div>
+    </div>
     `;
+}
 
-    showModal(html);
+async function createInvitation(employeeName, employeeEmail) {
+    const supabase = getSupabase();
+    const companyId = getCompanyId();
 
-    // Toggle password field based on selection
-    document.querySelectorAll('input[name="inviteMethod"]').forEach(radio => {
-        radio.addEventListener('change', function() {
-            const passwordSection = document.getElementById('passwordSection');
-            if (this.value === 'create') {
-                passwordSection.style.display = 'block';
-                document.getElementById('employeePassword').required = true;
-            } else {
-                passwordSection.style.display = 'none';
-                document.getElementById('employeePassword').required = false;
-            }
-        });
-    });
+    if (!supabase) throw new Error('Supabase not ready');
+    if (!companyId) throw new Error('Company not found. Please login again.');
 
-    // Handle form submission
-    document.getElementById('inviteEmployeeForm').addEventListener('submit', async (e) => {
+    const token = makeToken(56);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    const { error } = await supabase
+        .from('invitations')
+        .insert([{
+            company_id: companyId,
+            email: employeeEmail.toLowerCase(),
+            token,
+            role: 'employee',
+            expires_at: expiresAt.toISOString(),
+            accepted: false
+        }]);
+
+    if (error) throw new Error(error.message);
+
+    // Build invite link (GitHub Pages safe)
+    const origin = window.location.origin;
+    const pathBase = window.location.pathname.replace(/\/[^/]*$/, '/'); // folder path
+    const inviteUrl = `${origin}${pathBase}auth/invite-accept.html?token=${encodeURIComponent(token)}`;
+
+    return { token, inviteUrl };
+}
+
+// Expose modal trigger (manager.html uses this)
+window.showInviteEmployeeModal = function () {
+    if (window.auth && typeof window.auth.protectRoute === 'function') {
+        const ok = window.auth.protectRoute('manager');
+        if (!ok) return;
+    }
+
+    if (typeof window.showModal !== 'function' || typeof window.closeModal !== 'function') {
+        alert('Modal system not loaded (utils.js).');
+        return;
+    }
+
+    window.showModal(buildInviteModalHtml());
+
+    const form = document.getElementById('inviteEmployeeForm');
+    const cancelBtn = document.querySelector('.cancel-btn');
+
+    cancelBtn?.addEventListener('click', window.closeModal);
+
+    form?.addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        const email = document.getElementById('inviteEmail').value.trim();
         const name = document.getElementById('inviteName').value.trim();
-        const method = document.querySelector('input[name="inviteMethod"]:checked').value;
-        const password = document.getElementById('employeePassword')?.value;
+        const email = document.getElementById('inviteEmail').value.trim();
 
-        if (!email) {
-            showMessage('Please enter email address', 'error');
+        if (!name || !email) {
+            window.showMessage?.('Please fill in name and email', 'error');
             return;
         }
 
-        if (method === 'create' && (!password || password.length < 6)) {
-            showMessage('Password must be at least 6 characters', 'error');
-            return;
-        }
-
-        showMessage('Processing...', 'info');
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const original = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
 
         try {
-            if (method === 'create') {
-                // Create employee directly
-                const result = await createEmployee(email, password, name);
-                if (result.success) {
-                    showMessage('✅ Employee account created successfully!', 'success');
-                    closeModal();
-                } else {
-                    showMessage('❌ ' + result.error, 'error');
+            const { inviteUrl } = await createInvitation(name, email);
+
+            const result = document.getElementById('inviteResult');
+            const out = document.getElementById('inviteLinkOutput');
+            result.style.display = 'block';
+            out.value = inviteUrl;
+
+            document.getElementById('copyInviteBtn')?.addEventListener('click', async () => {
+                try {
+                    await navigator.clipboard.writeText(inviteUrl);
+                    window.showMessage?.('✅ Link copied!', 'success');
+                } catch {
+                    out.select();
+                    document.execCommand('copy');
+                    window.showMessage?.('✅ Link copied!', 'success');
                 }
-            } else {
-                // Send invitation
-                const result = await inviteEmployee(email, name);
-                if (result.success) {
-                    showMessage('✅ Invitation sent to ' + email, 'success');
-                    closeModal();
-                } else {
-                    showMessage('❌ ' + result.error, 'error');
-                }
-            }
-        } catch (error) {
-            showMessage('❌ Error: ' + error.message, 'error');
+            });
+
+            document.getElementById('closeInviteBtn')?.addEventListener('click', () => {
+                window.closeModal();
+            });
+
+            window.showMessage?.('✅ Invite link created!', 'success');
+            await countPendingInvites();
+
+        } catch (err) {
+            console.error(err);
+            window.showMessage?.('❌ ' + err.message, 'error');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = original;
         }
     });
-
-    document.querySelector('.cancel-btn').addEventListener('click', closeModal);
 };
+
+// Auto-refresh pending invite count when manager dashboard loads
+document.addEventListener('DOMContentLoaded', () => {
+    // only on manager.html
+    if ((window.location.pathname || '').includes('manager.html')) {
+        setTimeout(countPendingInvites, 1000);
+    }
+});
 
 console.log('✅ Employee Management module loaded');
