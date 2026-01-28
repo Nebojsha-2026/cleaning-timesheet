@@ -54,9 +54,23 @@
     <script src="modules/utils.js"></script>
     <script src="modules/auth.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Hide loading screen
             document.getElementById('loadingScreen').style.display = 'none';
             document.querySelector('.container').style.display = 'block';
+
+            // Check if already logged in
+            const token = localStorage.getItem('cleaning_timesheet_token');
+            if (token) {
+                // Get role and redirect
+                const role = localStorage.getItem('cleaning_timesheet_role') || 'employee';
+                if (role === 'manager') {
+                    window.location.href = 'manager.html';
+                } else {
+                    window.location.href = 'index.html';
+                }
+                return;
+            }
 
             const form = document.getElementById('loginForm');
             const messageDiv = document.getElementById('loginMessage');
@@ -84,9 +98,15 @@
                     messageDiv.textContent = 'Success! Redirecting...';
                     messageDiv.className = 'message success';
 
-                    // Force redirect after success (auth.js may delay)
+                    // Wait for auth state change to handle redirect
                     setTimeout(() => {
-                        window.location.href = 'manager.html';  // Change to index.html if employee
+                        // Force check after login
+                        const role = localStorage.getItem('cleaning_timesheet_role') || 'employee';
+                        if (role === 'manager') {
+                            window.location.href = 'manager.html';
+                        } else {
+                            window.location.href = 'index.html';
+                        }
                     }, 1500);
                 } else {
                     messageDiv.textContent = result.error || 'Login failed';
