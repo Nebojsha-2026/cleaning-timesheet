@@ -26,17 +26,41 @@ document.addEventListener('DOMContentLoaded', async function() {
     window.supabaseClient = supabase;
     window.CONFIG = CONFIG;
 
-    // Load role and company from localStorage (set by auth.js)
+    // Load role and company from localStorage
     currentUserRole = localStorage.getItem('cleaning_timesheet_role') || 'employee';
     currentCompanyId = localStorage.getItem('cleaning_timesheet_company_id') || null;
 
     console.log('Detected role:', currentUserRole);
     console.log('Detected company ID:', currentCompanyId);
 
-    // Only run dashboard-specific code on actual dashboard pages
-    const isDashboardPage = window.location.pathname.includes('manager.html') || 
-                           window.location.pathname.includes('index.html');
+    // Check if user is authenticated
+    const token = localStorage.getItem('cleaning_timesheet_token');
+    const isAuthenticated = !!token;
 
+    // If not authenticated and on dashboard page, redirect to login
+    const isDashboardPage = window.location.pathname.includes('manager.html') || 
+                          window.location.pathname.includes('index.html');
+    
+    const isAuthPage = window.location.pathname.includes('login.html') || 
+                      window.location.pathname.includes('register.html');
+
+    if (!isAuthenticated && isDashboardPage) {
+        console.log('Not authenticated, redirecting to login');
+        window.location.href = 'login.html';
+        return;
+    }
+
+    if (isAuthenticated && isAuthPage) {
+        // Already logged in, redirect to appropriate dashboard
+        if (currentUserRole === 'manager') {
+            window.location.href = 'manager.html';
+        } else {
+            window.location.href = 'index.html';
+        }
+        return;
+    }
+
+    // Initialize dashboard if on dashboard page
     if (isDashboardPage) {
         try {
             await loadCompanyBranding();
@@ -63,7 +87,6 @@ async function loadCompanyBranding() {
     try {
         if (!currentCompanyId) {
             console.warn('No company ID – using defaults');
-            showMessage('No company selected – using default branding', 'info');
             return;
         }
 
@@ -75,13 +98,17 @@ async function loadCompanyBranding() {
             .eq('id', currentCompanyId)
             .single();
 
-        if (error) throw error;
-        if (!company) {
-            console.warn('Company not found');
-            showMessage('Company not found – using defaults', 'info');
+        if (error) {
+            console.warn('Company not found or error:', error.message);
             return;
         }
 
+        if (!company) {
+            console.warn('Company not found');
+            return;
+        }
+
+        // Apply branding
         const title = company.custom_title || 'Cleaning Timesheet';
         const appTitle = document.getElementById('appTitle');
         if (appTitle) appTitle.textContent = title;
@@ -114,39 +141,195 @@ async function loadCompanyBranding() {
     }
 }
 
-// Initialize dashboard content (only called on dashboard pages)
+// Initialize dashboard content
 async function initializeDashboard() {
     console.log('Initializing dashboard...');
 
-    const connected = await testConnection();
-    if (!connected) {
-        showMessage('Connection issues – limited functionality', 'error');
-    }
-
-    // Set date - safe check
+    // Set current date
     const dateEl = document.getElementById('currentDate');
     if (dateEl) {
         const today = new Date();
         dateEl.textContent = formatDate(today);
     }
 
-    // Stats - safe check
-    const employeesEl = document.getElementById('statEmployees');
-    if (employeesEl) employeesEl.textContent = '8';
+    // Test connection
+    const connected = await testConnection();
+    if (!connected) {
+        showMessage('Connection issues – limited functionality', 'error');
+    }
 
-    const shiftsEl = document.getElementById('statUpcomingShifts');
-    if (shiftsEl) shiftsEl.textContent = '14';
-
-    const hoursEl = document.getElementById('statHours');
-    if (hoursEl) hoursEl.textContent = '112';
-
-    const invitesEl = document.getElementById('statPendingInvites');
-    if (invitesEl) invitesEl.textContent = '3';
+    // Load initial data based on user role
+    if (currentUserRole === 'manager') {
+        await loadManagerDashboard();
+    } else {
+        await loadEmployeeDashboard();
+    }
 
     showMessage('Dashboard loaded!', 'success');
 }
 
-// Company settings form (only if exists)
+async function loadManagerDashboard() {
+    console.log('Loading manager dashboard...');
+    
+    // Load stats
+    try {
+        const { count: employeeCount } = await supabase
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('company_id', currentCompanyId)
+            .eq('role', 'employee');
+
+        const { count: shiftCount } = await supabase
+            .from('shifts')
+            .select('*', { count: 'exact', head: true })
+            .gte('shift_date', new Date().toISOString().split('T')[0]);
+
+        // Update UI
+        const employeesEl = document.getElementById('statEmployees');
+        if (employeesEl) employeesEl.textContent = employeeCount || 0;
+
+        const shiftsEl = document.getElementById('statUpcomingShifts');
+        if (shiftsEl) shiftsEl.textContent = shiftCount || 0;
+
+        const hoursEl = document.getElementById('statHours');
+        if (hoursEl) hoursEl.textContent = '0'; // Placeholder
+
+        const invitesEl = document.getElementById('statPendingInvites');
+        if (invitesEl) invitesEl.textContent = '0'; // Placeholder
+
+    } catch (err) {
+        console.error('Error loading manager stats:', err);
+    }
+}
+
+async function loadEmployeeDashboard() {
+    console.log('Loading employee dashboard...');
+    
+    // Get current user's employee profile
+    try {
+        const { data: profile } = await supabase.auth.getUser();
+        
+        if (profile?.user?.id) {
+            // Get employee details from profiles table
+            const { data: employeeProfile } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', profile.user.id)
+                .single();
+
+            if (employeeProfile) {
+                currentEmployeeId = employeeProfile.id;
+                
+                // Update stats
+                updateEmployeeStats();
+                
+                // Load shifts
+                if (typeof loadMyShifts === 'function') {
+                    await loadMyShifts();
+                }
+            }
+        }
+    } catch (err) {
+        console.error('Error loading employee data:', err);
+    }
+}
+
+async function updateEmployeeStats() {
+    try {
+        // Get completed shifts count
+        const { count: completedShifts } = await supabase
+            .from('shifts')
+            .select('*', { count: 'exact', head: true })
+            .eq('staff_id', currentEmployeeId)
+            .eq('status', 'completed');
+
+        // Get locations count
+        const { count: locationCount } = await supabase
+            .from('locations')
+            .select('*', { count: 'exact', head: true });
+
+        // Get timesheets count
+        const { count: timesheetCount } = await supabase
+            .from('timesheets')
+            .select('*', { count: 'exact', head: true });
+
+        // Update UI elements if they exist
+        const statsCards = document.querySelectorAll('.stat-card');
+        if (statsCards.length >= 4) {
+            statsCards[0].innerHTML = `
+                <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+                <div class="stat-info">
+                    <h3>Completed Shifts</h3>
+                    <div class="stat-value">${completedShifts || 0}</div>
+                </div>
+            `;
+
+            statsCards[1].innerHTML = `
+                <div class="stat-icon"><i class="fas fa-map-marker-alt"></i></div>
+                <div class="stat-info">
+                    <h3>Locations</h3>
+                    <div class="stat-value">${locationCount || 0}</div>
+                </div>
+            `;
+
+            statsCards[2].innerHTML = `
+                <div class="stat-icon"><i class="fas fa-file-invoice-dollar"></i></div>
+                <div class="stat-info">
+                    <h3>Timesheets</h3>
+                    <div class="stat-value">${timesheetCount || 0}</div>
+                </div>
+            `;
+
+            statsCards[3].innerHTML = `
+                <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
+                <div class="stat-info">
+                    <h3>Total Earned</h3>
+                    <div class="stat-value">$0</div>
+                </div>
+            `;
+
+            // Remove loading class
+            statsCards.forEach(card => card.classList.remove('loading'));
+        }
+    } catch (err) {
+        console.error('Error updating employee stats:', err);
+    }
+}
+
+// Test database connection
+async function testConnection() {
+    try {
+        console.log('🔌 Testing Supabase connection...');
+        const { data, error } = await supabase
+            .from('locations')
+            .select('count', { count: 'exact', head: true });
+        
+        if (error) throw error;
+        
+        console.log('✅ Database connection successful');
+        
+        // Update connection status if element exists
+        const statusDiv = document.getElementById('connectionStatus');
+        if (statusDiv) {
+            statusDiv.innerHTML = '<i class="fas fa-wifi"></i><span>Connected</span>';
+            statusDiv.style.color = '#28a745';
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('❌ Database connection failed:', error);
+        
+        const statusDiv = document.getElementById('connectionStatus');
+        if (statusDiv) {
+            statusDiv.innerHTML = '<i class="fas fa-wifi"></i><span>Disconnected</span>';
+            statusDiv.style.color = '#dc3545';
+        }
+        
+        return false;
+    }
+}
+
+// Company settings form
 function setupCompanySettingsForm() {
     const form = document.getElementById('companySettingsForm');
     if (!form) return;
@@ -182,10 +365,15 @@ async function loadCurrentCompanySettings() {
 
     if (error || !company) return;
 
-    document.getElementById('companyTitle').value = company.custom_title || 'Cleaning Timesheet';
-    document.getElementById('primaryColor').value = company.primary_color || '#667eea';
-    document.getElementById('secondaryColor').value = company.secondary_color || '#764ba2';
-    document.getElementById('defaultPayFrequency').value = company.default_pay_frequency || 'weekly';
+    const titleInput = document.getElementById('companyTitle');
+    const primaryColorInput = document.getElementById('primaryColor');
+    const secondaryColorInput = document.getElementById('secondaryColor');
+    const payFreqSelect = document.getElementById('defaultPayFrequency');
+
+    if (titleInput) titleInput.value = company.custom_title || 'Cleaning Timesheet';
+    if (primaryColorInput) primaryColorInput.value = company.primary_color || '#667eea';
+    if (secondaryColorInput) secondaryColorInput.value = company.secondary_color || '#764ba2';
+    if (payFreqSelect) payFreqSelect.value = company.default_pay_frequency || 'weekly';
 }
 
 async function saveCompanySettings() {
@@ -194,25 +382,17 @@ async function saveCompanySettings() {
         return;
     }
 
-    const title = document.getElementById('companyTitle').value.trim();
-    const primary = document.getElementById('primaryColor').value;
-    const secondary = document.getElementById('secondaryColor').value;
-    const payFreq = document.getElementById('defaultPayFrequency').value;
-    const file = document.getElementById('logoUpload').files[0];
-
-    let logoUrl = null;
-
-    if (file) {
-        showMessage('Logo upload coming soon – using placeholder', 'info');
-        logoUrl = 'https://placehold.co/200x60/' + primary.replace('#','') + '/ffffff/png?text=' + encodeURIComponent(title.substring(0,3));
-    }
+    const title = document.getElementById('companyTitle')?.value.trim() || 'Cleaning Timesheet';
+    const primary = document.getElementById('primaryColor')?.value || '#667eea';
+    const secondary = document.getElementById('secondaryColor')?.value || '#764ba2';
+    const payFreq = document.getElementById('defaultPayFrequency')?.value || 'weekly';
 
     const updates = {
-        custom_title: title || 'Cleaning Timesheet',
+        custom_title: title,
         primary_color: primary,
         secondary_color: secondary,
         default_pay_frequency: payFreq,
-        ...(logoUrl && { logo_url: logoUrl })
+        updated_at: new Date().toISOString()
     };
 
     const { error } = await supabase
@@ -230,12 +410,13 @@ async function saveCompanySettings() {
 }
 
 function previewBrandingChanges() {
-    const primary = document.getElementById('primaryColor').value;
-    const secondary = document.getElementById('secondaryColor').value;
-    const title = document.getElementById('companyTitle').value.trim() || 'Cleaning Timesheet';
+    const primary = document.getElementById('primaryColor')?.value || '#667eea';
+    const secondary = document.getElementById('secondaryColor')?.value || '#764ba2';
+    const title = document.getElementById('companyTitle')?.value.trim() || 'Cleaning Timesheet';
 
     document.documentElement.style.setProperty('--primary-color', primary);
     document.documentElement.style.setProperty('--secondary-color', secondary);
+    
     const appTitle = document.getElementById('appTitle');
     if (appTitle) appTitle.textContent = title;
 
@@ -243,9 +424,18 @@ function previewBrandingChanges() {
 }
 
 // Placeholder actions
-function showInviteEmployeeModal() { showMessage('Invite employee – coming soon', 'info'); }
-function showCreateShiftModal() { showMessage('Create shift – coming soon', 'info'); }
-function viewAllTimesheets() { showMessage('Timesheets – coming soon', 'info'); }
+function showInviteEmployeeModal() { 
+    showMessage('Invite employee – coming soon', 'info'); 
+}
+
+function showCreateShiftModal() { 
+    showMessage('Create shift – coming soon', 'info'); 
+}
+
+function viewAllTimesheets() { 
+    showMessage('Timesheets – coming soon', 'info'); 
+}
+
 function showCompanySettings() {
     const card = document.getElementById('companySettingsCard');
     if (card) {
@@ -253,6 +443,9 @@ function showCompanySettings() {
         card.scrollIntoView({ behavior: 'smooth' });
     }
 }
-function refreshShifts() { showMessage('Refreshing...', 'info'); }
+
+function refreshShifts() { 
+    showMessage('Refreshing...', 'info'); 
+}
 
 console.log('🎉 Script loaded');
