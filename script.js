@@ -479,4 +479,597 @@ function setupTimesheetForm() {
     form.addEventListener('submit', handleGenerateTimesheet);
 }
 
-... (rest of file continues exactly as in repo)
+async function loadTimesheetPeriods() {
+    const container = document.getElementById('periodSelectionBlocks');
+    if (!container) return;
+
+    try {
+        // Get current user's pay frequency from staff record
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: staff } = await supabase
+            .from('staff')
+            .select('pay_frequency, timesheet_weekly, timesheet_fortnightly, timesheet_monthly, timesheet_custom')
+            .eq('user_id', user.id)
+            .single();
+
+        const periods = [];
+        
+        if (staff?.timesheet_weekly) periods.push({ id: 'weekly', label: 'This Week', icon: 'fa-calendar-week' });
+        if (staff?.timesheet_fortnightly) periods.push({ id: 'fortnightly', label: 'Fortnight', icon: 'fa-calendar-alt' });
+        if (staff?.timesheet_monthly) periods.push({ id: 'monthly', label: 'This Month', icon: 'fa-calendar' });
+        if (staff?.timesheet_custom) periods.push({ id: 'custom', label: 'Custom', icon: 'fa-calendar-day' });
+
+        // Default periods if none specified
+        if (periods.length === 0) {
+            periods.push(
+                { id: 'weekly', label: 'This Week', icon: 'fa-calendar-week' },
+                { id: 'fortnightly', label: 'Fortnight', icon: 'fa-calendar-alt' },
+                { id: 'monthly', label: 'This Month', icon: 'fa-calendar' },
+                { id: 'custom', label: 'Custom', icon: 'fa-calendar-day' }
+            );
+        }
+
+        let html = '';
+        periods.forEach(period => {
+            html += `
+                <div class="period-block" data-period="${period.id}">
+                    <i class="fas ${period.icon}"></i>
+                    <span>${period.label}</span>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+
+        // Add click handlers
+        document.querySelectorAll('.period-block').forEach(block => {
+            block.addEventListener('click', function() {
+                const period = this.getAttribute('data-period');
+                selectTimesheetPeriod(period);
+            });
+        });
+
+        // Select first period by default
+        if (periods.length > 0) {
+            selectTimesheetPeriod(periods[0].id);
+        }
+
+    } catch (err) {
+        console.error('Error loading timesheet periods:', err);
+        container.innerHTML = '<div class="loading-simple">Error loading periods</div>';
+    }
+}
+
+function selectTimesheetPeriod(period) {
+    // Update selected state
+    document.querySelectorAll('.period-block').forEach(block => {
+        block.classList.toggle('selected', block.getAttribute('data-period') === period);
+    });
+
+    // Update hidden input
+    document.getElementById('timesheetPeriod').value = period;
+
+    // Show/hide sections
+    const customDatesSection = document.getElementById('customDatesSection');
+    const autoDatesSection = document.getElementById('autoDatesSection');
+    
+    if (period === 'custom') {
+        if (customDatesSection) customDatesSection.style.display = 'block';
+        if (autoDatesSection) autoDatesSection.style.display = 'none';
+    } else {
+        if (customDatesSection) customDatesSection.style.display = 'none';
+        if (autoDatesSection) autoDatesSection.style.display = 'block';
+        
+        // Calculate and display dates
+        const today = new Date();
+        let startDate, endDate;
+        
+        switch(period) {
+            case 'weekly':
+                startDate = getStartOfWeek(today);
+                endDate = getEndOfWeek(today);
+                break;
+            case 'fortnightly':
+                startDate = getStartOfFortnight(today);
+                endDate = getEndOfFortnight(today);
+                break;
+            case 'monthly':
+                startDate = getStartOfMonth(today);
+                endDate = getEndOfMonth(today);
+                break;
+            default:
+                startDate = new Date(today);
+                startDate.setDate(today.getDate() - 7);
+                endDate = today;
+        }
+        
+        const startDateEl = document.getElementById('autoStartDate');
+        const endDateEl = document.getElementById('autoEndDate');
+        const startInput = document.getElementById('startDate');
+        const endInput = document.getElementById('endDate');
+        
+        if (startDateEl) startDateEl.textContent = formatDate(startDate);
+        if (endDateEl) endDateEl.textContent = formatDate(endDate);
+        if (startInput) startInput.value = startDate.toISOString().split('T')[0];
+        if (endInput) endInput.value = endDate.toISOString().split('T')[0];
+    }
+}
+
+function showCustomDatesPopup() {
+    const html = `
+        <div class="modal-content">
+            <h2>Select Custom Dates</h2>
+            <form id="customDatesForm">
+                <div class="form-group">
+                    <label for="customStartDate">Start Date</label>
+                    <input type="date" id="customStartDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="customEndDate">End Date</label>
+                    <input type="date" id="customEndDate" required>
+                </div>
+                <div style="margin-top:20px; display:flex; gap:10px;">
+                    <button type="submit" class="btn btn-primary" style="flex:1;">
+                        <i class="fas fa-check"></i> Apply Dates
+                    </button>
+                    <button type="button" class="btn cancel-btn" style="flex:1; background:#6c757d; color:white;">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    `;
+    
+    showModal(html);
+    
+    const today = new Date();
+    const lastWeek = new Date(today);
+    lastWeek.setDate(today.getDate() - 7);
+    
+    const startInput = document.getElementById('customStartDate');
+    const endInput = document.getElementById('customEndDate');
+    
+    if (startInput) startInput.value = lastWeek.toISOString().split('T')[0];
+    if (endInput) endInput.value = today.toISOString().split('T')[0];
+    
+    document.getElementById('customDatesForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const startDate = document.getElementById('customStartDate').value;
+        const endDate = document.getElementById('customEndDate').value;
+        
+        document.getElementById('startDate').value = startDate;
+        document.getElementById('endDate').value = endDate;
+        
+        const startDateEl = document.getElementById('autoStartDate');
+        const endDateEl = document.getElementById('autoEndDate');
+        
+        if (startDateEl) startDateEl.textContent = formatDate(startDate);
+        if (endDateEl) endDateEl.textContent = formatDate(endDate);
+        
+        closeModal();
+        showMessage('✅ Custom dates applied!', 'success');
+    });
+    
+    document.querySelector('.cancel-btn').addEventListener('click', closeModal);
+}
+
+async function handleGenerateTimesheet(event) {
+    event.preventDefault();
+    
+    const button = event.target.querySelector('button[type="submit"]');
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    button.disabled = true;
+    
+    try {
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+        const sendEmail = document.getElementById('sendEmail')?.checked || false;
+        const emailAddress = sendEmail ? document.getElementById('emailAddress')?.value.trim() : null;
+        
+        if (!startDate || !endDate) {
+            throw new Error('Please select start and end dates');
+        }
+        
+        if (sendEmail && (!emailAddress || !validateEmail(emailAddress))) {
+            throw new Error('Please enter a valid email address');
+        }
+        
+        // Get current user's staff record
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('User not found');
+        
+        const { data: staff, error: staffError } = await supabase
+            .from('staff')
+            .select('id')
+            .eq('user_id', user.id)
+            .single();
+        
+        if (staffError) throw new Error('Staff record not found');
+        
+        // Get entries for the period
+        const { data: entries, error: entriesError } = await supabase
+            .from('entries')
+            .select(`
+                *,
+                locations (name, hourly_rate)
+            `)
+            .eq('staff_id', staff.id)
+            .gte('work_date', startDate)
+            .lte('work_date', endDate)
+            .order('work_date', { ascending: true });
+        
+        if (entriesError) throw entriesError;
+        
+        if (!entries || entries.length === 0) {
+            throw new Error('No entries found for selected period');
+        }
+        
+        // Calculate totals
+        const totalHours = entries.reduce((sum, e) => sum + parseFloat(e.hours), 0);
+        const totalEarnings = entries.reduce((sum, e) => {
+            const rate = e.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE;
+            return sum + (parseFloat(e.hours) * rate);
+        }, 0);
+        
+        // Generate reference number
+        const refNumber = 'TS' + new Date().getTime().toString().slice(-8);
+        
+        // Create timesheet record
+        const insertData = {
+            company_id: currentCompanyId,
+            staff_id: staff.id,
+            ref_number: refNumber,
+            start_date: startDate,
+            end_date: endDate,
+            total_hours: totalHours,
+            total_earnings: totalEarnings,
+            status: 'generated'
+        };
+        
+        if (sendEmail && emailAddress) {
+            insertData.email_address = emailAddress;
+            insertData.email_sent = false; // Will be sent by backend trigger
+        }
+        
+        const { data: timesheet, error: tsError } = await supabase
+            .from('timesheets')
+            .insert([insertData])
+            .select()
+            .single();
+        
+        if (tsError) throw tsError;
+        
+        // Prepare timesheet details for display
+        const timesheetDetails = {
+            refNumber,
+            startDate,
+            endDate,
+            totalHours: totalHours.toFixed(2),
+            totalEarnings: totalEarnings.toFixed(2),
+            entriesCount: entries.length,
+            entries: entries.map(entry => ({
+                date: formatDate(entry.work_date),
+                location: entry.locations?.name || 'Unknown',
+                hours: entry.hours,
+                rate: entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE,
+                earnings: (entry.hours * (entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE)).toFixed(2),
+                notes: entry.notes || ''
+            }))
+        };
+        
+        showMessage(`✅ Timesheet ${refNumber} generated!`, 'success');
+        
+        // Update stats
+        await updateEmployeeStats();
+        
+        // Show timesheet details
+        if (typeof viewTimesheetDetails === 'function') {
+            viewTimesheetDetails(timesheetDetails);
+        }
+        
+    } catch (error) {
+        console.error('❌ Timesheet generation error:', error);
+        showMessage('❌ Error: ' + error.message, 'error');
+    } finally {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    }
+}
+
+// Test database connection
+async function testConnection() {
+    try {
+        console.log('🔌 Testing Supabase connection...');
+        const { data, error } = await supabase
+            .from('locations')
+            .select('count', { count: 'exact', head: true });
+        
+        if (error) throw error;
+        
+        console.log('✅ Database connection successful');
+        
+        // Update connection status if element exists
+        const statusDiv = document.getElementById('connectionStatus');
+        if (statusDiv) {
+            statusDiv.innerHTML = '<i class="fas fa-wifi"></i><span>Connected</span>';
+            statusDiv.style.color = '#28a745';
+        }
+        
+        // Update API status
+        const apiStatus = document.getElementById('apiStatus');
+        if (apiStatus) {
+            apiStatus.textContent = 'Connected';
+            apiStatus.style.color = '#28a745';
+        }
+        
+        // Update last updated time
+        const lastUpdated = document.getElementById('lastUpdated');
+        if (lastUpdated) {
+            lastUpdated.textContent = new Date().toLocaleTimeString();
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('❌ Database connection failed:', error);
+        
+        const statusDiv = document.getElementById('connectionStatus');
+        if (statusDiv) {
+            statusDiv.innerHTML = '<i class="fas fa-wifi"></i><span>Disconnected</span>';
+            statusDiv.style.color = '#dc3545';
+        }
+        
+        const apiStatus = document.getElementById('apiStatus');
+        if (apiStatus) {
+            apiStatus.textContent = 'Disconnected';
+            apiStatus.style.color = '#dc3545';
+        }
+        
+        return false;
+    }
+}
+
+// Company settings form
+function setupCompanySettingsForm() {
+    const form = document.getElementById('companySettingsForm');
+    if (!form) return;
+
+    loadCurrentCompanySettings();
+
+    document.getElementById('logoUpload')?.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                document.getElementById('logoPreview').innerHTML = 
+                    `<img src="${ev.target.result}" style="max-height:80px; max-width:100%;">`;
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await saveCompanySettings();
+    });
+}
+
+async function loadCurrentCompanySettings() {
+    if (!currentCompanyId) return;
+
+    const { data: company, error } = await supabase
+        .from('companies')
+        .select('custom_title, primary_color, secondary_color, default_pay_frequency')
+        .eq('id', currentCompanyId)
+        .single();
+
+    if (error || !company) return;
+
+    const titleInput = document.getElementById('companyTitle');
+    const primaryColorInput = document.getElementById('primaryColor');
+    const secondaryColorInput = document.getElementById('secondaryColor');
+    const payFreqSelect = document.getElementById('defaultPayFrequency');
+
+    if (titleInput) titleInput.value = company.custom_title || 'Cleaning Timesheet';
+    if (primaryColorInput) primaryColorInput.value = company.primary_color || '#667eea';
+    if (secondaryColorInput) secondaryColorInput.value = company.secondary_color || '#764ba2';
+    if (payFreqSelect) payFreqSelect.value = company.default_pay_frequency || 'weekly';
+}
+
+async function saveCompanySettings() {
+    if (!currentCompanyId) {
+        showMessage('No company selected – cannot save', 'error');
+        return;
+    }
+
+    const title = document.getElementById('companyTitle')?.value.trim() || 'Cleaning Timesheet';
+    const primary = document.getElementById('primaryColor')?.value || '#667eea';
+    const secondary = document.getElementById('secondaryColor')?.value || '#764ba2';
+    const payFreq = document.getElementById('defaultPayFrequency')?.value || 'weekly';
+
+    const updates = {
+        custom_title: title,
+        primary_color: primary,
+        secondary_color: secondary,
+        default_pay_frequency: payFreq,
+        updated_at: new Date().toISOString()
+    };
+
+    const { error } = await supabase
+        .from('companies')
+        .update(updates)
+        .eq('id', currentCompanyId);
+
+    if (error) {
+        showMessage('Save failed: ' + error.message, 'error');
+        return;
+    }
+
+    showMessage('Settings saved!', 'success');
+    await loadCompanyBranding();
+}
+
+function previewBrandingChanges() {
+    const primary = document.getElementById('primaryColor')?.value || '#667eea';
+    const secondary = document.getElementById('secondaryColor')?.value || '#764ba2';
+    const title = document.getElementById('companyTitle')?.value.trim() || 'Cleaning Timesheet';
+
+    document.documentElement.style.setProperty('--primary-color', primary);
+    document.documentElement.style.setProperty('--secondary-color', secondary);
+    
+    const appTitle = document.getElementById('appTitle');
+    if (appTitle) {
+        const icon = appTitle.querySelector('i');
+        if (icon) {
+            appTitle.innerHTML = `<i class="${icon.className}"></i> ${title}`;
+        } else {
+            appTitle.textContent = title;
+        }
+    }
+
+    showMessage('Preview applied!', 'info');
+}
+
+// Helper functions
+function getStartOfWeek(date) {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff));
+}
+
+function getEndOfWeek(date) {
+    const start = getStartOfWeek(date);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return end;
+}
+
+function getStartOfFortnight(date) {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1) - 7; // Previous Monday
+    return new Date(d.setDate(diff));
+}
+
+function getEndOfFortnight(date) {
+    const start = getStartOfFortnight(date);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 13); // 14 days total
+    return end;
+}
+
+function getStartOfMonth(date) {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function getEndOfMonth(date) {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
+function formatDate(dateString) {
+    try {
+        if (typeof dateString === 'string' && dateString.includes('-')) {
+            const [year, month, day] = dateString.split('-');
+            const date = new Date(year, month - 1, day);
+            return date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+        } else if (dateString instanceof Date) {
+            return dateString.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+        }
+        return dateString;
+    } catch {
+        return dateString;
+    }
+}
+
+function formatTime(timeString) {
+    if (!timeString) return '';
+    const [hours, minutes] = timeString.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${minutes} ${ampm}`;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function validateEmail(email) {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email);
+}
+
+// Action functions
+window.showInviteEmployeeModal = function() { 
+    showMessage('Invite employee – coming soon', 'info'); 
+};
+
+window.showCreateShiftModal = function() { 
+    showMessage('Create shift – coming soon', 'info'); 
+};
+
+window.viewAllTimesheets = function() { 
+    if (typeof viewTimesheets === 'function') {
+        viewTimesheets();
+    } else {
+        showMessage('Timesheets – coming soon', 'info');
+    }
+};
+
+window.showCompanySettings = function() {
+    const card = document.getElementById('companySettingsCard');
+    if (card) {
+        card.style.display = 'block';
+        card.scrollIntoView({ behavior: 'smooth' });
+    }
+};
+
+window.refreshShifts = async function() { 
+    showMessage('Refreshing shifts...', 'info');
+    
+    if (currentUserRole === 'manager') {
+        await loadManagerUpcomingShifts();
+    } else {
+        if (typeof refreshMyShifts === 'function') {
+            await refreshMyShifts();
+        }
+        if (typeof refreshPastShifts === 'function') {
+            await refreshPastShifts();
+        }
+    }
+    
+    showMessage('✅ Shifts refreshed!', 'success');
+};
+
+window.generateTimesheet = function() {
+    const form = document.getElementById('timesheetForm');
+    if (form) {
+        form.scrollIntoView({ behavior: 'smooth' });
+    }
+};
+
+window.viewLocations = function() {
+    if (typeof viewLocations === 'function') {
+        viewLocations();
+    } else {
+        showMessage('Locations – coming soon', 'info');
+    }
+};
+
+window.showSettings = function() {
+    showMessage('Settings – coming soon', 'info');
+};
+
+window.showHelp = function() {
+    showMessage('Help documentation – coming soon', 'info');
+};
+
+console.log('🎉 Script loaded');
