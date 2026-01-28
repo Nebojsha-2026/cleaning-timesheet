@@ -4,7 +4,7 @@ console.log('👥 Employee Management module loading...');
 // Load all employees for manager
 async function loadEmployees() {
     try {
-        const companyId = localStorage.getItem('cleaning_timesheet_company_id');
+        const companyId = localStorage.getItem('cleaning_timesheet_company');
         if (!companyId) {
             console.warn('No company ID found');
             return [];
@@ -38,7 +38,7 @@ async function loadEmployees() {
 // Invite employee by email
 async function inviteEmployee(email, name = '') {
     try {
-        const companyId = localStorage.getItem('cleaning_timesheet_company_id');
+        const companyId = localStorage.getItem('cleaning_timesheet_company');
         if (!companyId) {
             throw new Error('No company selected');
         }
@@ -80,7 +80,7 @@ function generateToken() {
 // Create employee directly (without invitation)
 async function createEmployee(email, password, name, role = 'employee') {
     try {
-        const companyId = localStorage.getItem('cleaning_timesheet_company_id');
+        const companyId = localStorage.getItem('cleaning_timesheet_company');
         if (!companyId) {
             throw new Error('No company selected');
         }
