@@ -118,6 +118,49 @@ async function handleUserSession(user) {
         console.log('✅ Loaded profile - Role:', userRole, 'Company:', currentCompanyId);
     }
 
+    const metadata = currentUser.user_metadata || {};
+    if (!userRole && metadata.role) {
+        userRole = metadata.role;
+    }
+
+    if (!currentCompanyId && metadata.company_id) {
+        currentCompanyId = metadata.company_id;
+    }
+
+    if (!currentCompanyId || !userRole || userRole === 'employee') {
+        const { data: staff, error: staffError } = await supabase
+            .from('staff')
+            .select('company_id, role')
+            .eq('user_id', currentUser.id)
+            .single();
+
+        if (staffError) {
+            console.warn('Staff lookup failed:', staffError.message);
+        } else if (staff) {
+            if (!currentCompanyId) currentCompanyId = staff.company_id;
+            if (!userRole || userRole === 'employee') userRole = staff.role || userRole;
+        }
+    }
+
+    if (currentUser?.id && (currentCompanyId || userRole)) {
+        const profileUpdates = {
+            id: currentUser.id,
+            role: userRole || 'employee'
+        };
+
+        if (currentCompanyId) {
+            profileUpdates.company_id = currentCompanyId;
+        }
+
+        const { error: profileSyncError } = await supabase
+            .from('profiles')
+            .upsert([profileUpdates], { onConflict: 'id' });
+
+        if (profileSyncError) {
+            console.warn('Profile sync failed:', profileSyncError.message);
+        }
+    }
+
     localStorage.setItem(AUTH_CONFIG.TOKEN_KEY, currentToken || '');
     localStorage.setItem(AUTH_CONFIG.USER_KEY, JSON.stringify(currentUser));
     localStorage.setItem(AUTH_CONFIG.COMPANY_KEY, currentCompanyId || '');
@@ -269,6 +312,17 @@ async function registerManager(email, password, companyName) {
         }
 
         console.log('✅ Company created:', company.id);
+
+        const { error: metadataError } = await supabase.auth.updateUser({
+            data: {
+                role: 'manager',
+                company_id: company.id
+            }
+        });
+
+        if (metadataError) {
+            console.warn('⚠️ User metadata update failed:', metadataError.message);
+        }
 
         // STEP 5: Update profile with company and manager role
         const { error: profileError } = await supabase
