@@ -10,6 +10,7 @@ let currentShiftId = null;
 // Helper function to get shift status class
 function getShiftStatusClass(status) {
     switch(status) {
+        case 'offered': return 'status-offered';
         case 'pending': return 'status-pending';
         case 'confirmed': return 'status-confirmed';
         case 'in_progress': return 'status-in-progress';
@@ -29,13 +30,13 @@ function formatTime(timeString) {
     return `${displayHour}:${minutes} ${ampm}`;
 }
 
-// Load shifts assigned to current user
+// Load shifts assigned to current user AND offered shifts
 async function loadMyShifts() {
     try {
-        console.log('📅 Loading my shifts...');
-        
+        console.log('📅 Loading my shifts (assigned + offered)...');
+
         const today = new Date().toISOString().split('T')[0];
-        
+
         // Get current user ID
         const { data: { user } } = await window.supabaseClient.auth.getUser();
         if (!user) {
@@ -43,22 +44,22 @@ async function loadMyShifts() {
             showSampleShifts();
             return [];
         }
-        
+
         // Get staff record for current user
         const { data: staff, error: staffError } = await window.supabaseClient
             .from('staff')
-            .select('id')
+            .select('id, company_id')
             .eq('user_id', user.id)
             .single();
-        
+
         if (staffError) {
             console.warn('No staff record found:', staffError.message);
             showSampleShifts();
             return [];
         }
-        
-        // Get shifts for current employee
-        const { data: shifts, error } = await window.supabaseClient
+
+        // 1) Assigned shifts
+        const { data: assignedShifts, error: assignedError } = await window.supabaseClient
             .from('shifts')
             .select(`
                 *,
@@ -68,23 +69,67 @@ async function loadMyShifts() {
             .gte('shift_date', today)
             .order('shift_date', { ascending: true })
             .order('start_time', { ascending: true })
-            .limit(10);
-        
-        if (error) {
-            console.error('Error loading shifts:', error);
-            showSampleShifts();
-            return [];
+            .limit(20);
+
+        if (assignedError) {
+            console.error('Error loading assigned shifts:', assignedError);
         }
-        
-        myShifts = shifts || [];
+
+        // 2) Offered shifts (via shift_offers table)
+        let offeredShifts = [];
+        try {
+            const { data: offers, error: offersError } = await window.supabaseClient
+                .from('shift_offers')
+                .select('shift_id')
+                .eq('staff_id', staff.id)
+                .eq('status', 'offered');
+
+            if (offersError) throw offersError;
+
+            const offerIds = (offers || []).map(o => o.shift_id).filter(Boolean);
+
+            if (offerIds.length > 0) {
+                const { data: shifts, error: offeredError } = await window.supabaseClient
+                    .from('shifts')
+                    .select(`
+                        *,
+                        locations (name, notes)
+                    `)
+                    .in('id', offerIds)
+                    .is('staff_id', null) // still unassigned
+                    .gte('shift_date', today);
+
+                if (offeredError) throw offeredError;
+
+                offeredShifts = (shifts || []).map(s => ({
+                    ...s,
+                    _isOffer: true,
+                    status: 'offered'
+                }));
+            }
+        } catch (err) {
+            // If shift_offers isn't available yet (or RLS blocks it), don't break the page.
+            console.warn('Offered shifts not available:', err.message || err);
+        }
+
+        // Merge and sort
+        const combined = [...(offeredShifts || []), ...(assignedShifts || [])]
+            .sort((a, b) => {
+                const ad = `${a.shift_date}T${(a.start_time || '00:00')}`;
+                const bd = `${b.shift_date}T${(b.start_time || '00:00')}`;
+                return ad.localeCompare(bd);
+            })
+            .slice(0, 10);
+
+        myShifts = combined;
         updateMyShiftsDisplay(myShifts);
-        console.log('✅ My shifts loaded:', myShifts.length);
-        
+        console.log('✅ My shifts loaded:', myShifts.length, '(offers:', offeredShifts.length, ')');
+
         // Load past shifts as well
         await loadPastShifts();
-        
+
         return myShifts;
-        
+
     } catch (error) {
         console.error('❌ Error loading shifts:', error);
         showSampleShifts();
@@ -96,22 +141,22 @@ async function loadMyShifts() {
 async function loadPastShifts() {
     try {
         console.log('📅 Loading past shifts...');
-        
+
         const today = new Date().toISOString().split('T')[0];
-        
+
         // Get current user ID
         const { data: { user } } = await window.supabaseClient.auth.getUser();
         if (!user) return;
-        
+
         // Get staff record for current user
         const { data: staff, error: staffError } = await window.supabaseClient
             .from('staff')
             .select('id')
             .eq('user_id', user.id)
             .single();
-        
+
         if (staffError) return;
-        
+
         // Get past shifts for current employee
         const { data: shifts, error } = await window.supabaseClient
             .from('shifts')
@@ -123,18 +168,36 @@ async function loadPastShifts() {
             .lt('shift_date', today)
             .order('shift_date', { ascending: false })
             .limit(10);
-        
+
         if (error) {
             console.error('Error loading past shifts:', error);
             return;
         }
-        
+
         pastShifts = shifts || [];
         updatePastShiftsDisplay(pastShifts);
         console.log('✅ Past shifts loaded:', pastShifts.length);
-        
+
     } catch (error) {
         console.error('❌ Error loading past shifts:', error);
+    }
+}
+
+// Accept an offered shift (atomic via RPC)
+async function acceptOfferedShift(shiftId) {
+    try {
+        showMessage('Accepting shift offer...', 'info');
+
+        const { data, error } = await window.supabaseClient
+            .rpc('accept_shift_offer', { p_shift_id: shiftId });
+
+        if (error) throw error;
+
+        showMessage('✅ Offer accepted! Shift is now assigned to you.', 'success');
+        await loadMyShifts();
+    } catch (error) {
+        console.error('❌ Error accepting offer:', error);
+        showMessage('❌ Could not accept offer: ' + (error.message || 'Unknown error'), 'error');
     }
 }
 
@@ -142,7 +205,7 @@ async function loadPastShifts() {
 function updateMyShiftsDisplay(shifts) {
     const container = document.getElementById('myShiftsList');
     if (!container) return;
-    
+
     if (!shifts || shifts.length === 0) {
         container.innerHTML = `
             <div style="text-align: center; padding: 40px; color: #666;">
@@ -151,40 +214,50 @@ function updateMyShiftsDisplay(shifts) {
                 <p style="font-size: 0.9rem;">Check back later or contact your manager.</p>
             </div>
         `;
-        
+
         const shiftActions = document.getElementById('shiftActions');
         if (shiftActions) {
             shiftActions.style.display = 'none';
         }
         return;
     }
-    
+
     let html = '';
     shifts.forEach(shift => {
         const locationName = shift.locations?.name || 'Unknown Location';
         const statusClass = getShiftStatusClass(shift.status);
         const isToday = shift.shift_date === new Date().toISOString().split('T')[0];
-        const canStart = shift.status === 'confirmed' && isToday;
-        const canComplete = shift.status === 'in_progress';
-        
+        const isOffer = !!shift._isOffer;
+
+        const canStart = !isOffer && shift.status === 'confirmed' && isToday;
+        const canComplete = !isOffer && shift.status === 'in_progress';
+
         html += `
             <div class="shift-item ${isToday ? 'today-shift' : ''}" data-shift-id="${shift.id}">
                 <div class="shift-info">
-                    <h4>${escapeHtml(locationName)} 
-                        <span class="shift-status ${statusClass}">${shift.status.replace('_', ' ')}</span>
+                    <h4>${escapeHtml(locationName)}
+                        <span class="shift-status ${statusClass}">${(shift.status || 'pending').replace('_', ' ')}</span>
+                        ${isOffer ? '<span class="offer-badge">OFFER</span>' : ''}
                         ${isToday ? '<span class="today-badge">TODAY</span>' : ''}
                     </h4>
                     <p>
-                        <i class="far fa-calendar"></i> ${formatDate(shift.shift_date)} 
-                        • <i class="far fa-clock"></i> ${formatTime(shift.start_time)} 
+                        <i class="far fa-calendar"></i> ${formatDate(shift.shift_date)}
+                        • <i class="far fa-clock"></i> ${formatTime(shift.start_time)}
                         • ${shift.duration} hours
                     </p>
                     ${shift.notes ? `<p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
                         <i class="fas fa-sticky-note"></i> ${escapeHtml(shift.notes)}
                     </p>` : ''}
                 </div>
+
                 <div class="shift-actions-employee">
-                    ${shift.status === 'pending' ? `
+                    ${isOffer ? `
+                        <button class="btn btn-sm btn-success accept-offer-btn" data-id="${shift.id}">
+                            <i class="fas fa-check"></i> Accept Offer
+                        </button>
+                    ` : ''}
+
+                    ${(!isOffer && shift.status === 'pending') ? `
                         <button class="btn btn-sm btn-success accept-shift-btn" data-id="${shift.id}">
                             <i class="fas fa-check"></i> Accept
                         </button>
@@ -192,26 +265,26 @@ function updateMyShiftsDisplay(shifts) {
                             <i class="fas fa-times"></i> Decline
                         </button>
                     ` : ''}
-                    
+
                     ${canStart ? `
                         <button class="btn btn-sm btn-primary start-shift-btn" data-id="${shift.id}">
                             <i class="fas fa-play"></i> Start
                         </button>
                     ` : ''}
-                    
+
                     ${canComplete ? `
                         <button class="btn btn-sm btn-success complete-shift-btn" data-id="${shift.id}">
                             <i class="fas fa-flag-checkered"></i> Complete
                         </button>
                     ` : ''}
-                    
-                    ${shift.status === 'completed' ? `
+
+                    ${(!isOffer && shift.status === 'completed') ? `
                         <span style="color: #28a745; font-weight: bold;">
                             <i class="fas fa-check-circle"></i> Completed
                         </span>
                     ` : ''}
-                    
-                    ${shift.status === 'cancelled' ? `
+
+                    ${(!isOffer && shift.status === 'cancelled') ? `
                         <span style="color: #dc3545; font-weight: bold;">
                             <i class="fas fa-times-circle"></i> Cancelled
                         </span>
@@ -220,11 +293,19 @@ function updateMyShiftsDisplay(shifts) {
             </div>
         `;
     });
-    
+
     container.innerHTML = html;
-    
+
     // Add event listeners
     setTimeout(() => {
+        // Accept offered shift buttons
+        document.querySelectorAll('.accept-offer-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const id = this.getAttribute('data-id');
+                acceptOfferedShift(id);
+            });
+        });
+
         // Accept shift buttons
         document.querySelectorAll('.accept-shift-btn').forEach(button => {
             button.addEventListener('click', function() {
@@ -232,7 +313,7 @@ function updateMyShiftsDisplay(shifts) {
                 updateShiftStatus(id, 'confirmed');
             });
         });
-        
+
         // Decline shift buttons
         document.querySelectorAll('.decline-shift-btn').forEach(button => {
             button.addEventListener('click', function() {
@@ -240,7 +321,7 @@ function updateMyShiftsDisplay(shifts) {
                 declineShift(id);
             });
         });
-        
+
         // Start shift buttons
         document.querySelectorAll('.start-shift-btn').forEach(button => {
             button.addEventListener('click', function() {
@@ -248,7 +329,7 @@ function updateMyShiftsDisplay(shifts) {
                 startSpecificShift(id);
             });
         });
-        
+
         // Complete shift buttons
         document.querySelectorAll('.complete-shift-btn').forEach(button => {
             button.addEventListener('click', function() {
@@ -256,10 +337,10 @@ function updateMyShiftsDisplay(shifts) {
                 completeSpecificShift(id);
             });
         });
-        
+
         // Update global shift actions
         updateGlobalShiftActions();
-        
+
     }, 100);
 }
 
@@ -267,7 +348,7 @@ function updateMyShiftsDisplay(shifts) {
 function updatePastShiftsDisplay(shifts) {
     const container = document.getElementById('pastShiftsList');
     if (!container) return;
-    
+
     if (!shifts || shifts.length === 0) {
         container.innerHTML = `
             <div style="text-align: center; padding: 40px; color: #666;">
@@ -278,21 +359,21 @@ function updatePastShiftsDisplay(shifts) {
         `;
         return;
     }
-    
+
     let html = '';
     shifts.forEach(shift => {
         const locationName = shift.locations?.name || 'Unknown Location';
         const statusClass = getShiftStatusClass(shift.status);
-        
+
         html += `
             <div class="shift-item" data-shift-id="${shift.id}">
                 <div class="shift-info">
-                    <h4>${escapeHtml(locationName)} 
+                    <h4>${escapeHtml(locationName)}
                         <span class="shift-status ${statusClass}">${shift.status.replace('_', ' ')}</span>
                     </h4>
                     <p>
-                        <i class="far fa-calendar"></i> ${formatDate(shift.shift_date)} 
-                        • <i class="far fa-clock"></i> ${formatTime(shift.start_time)} 
+                        <i class="far fa-calendar"></i> ${formatDate(shift.shift_date)}
+                        • <i class="far fa-clock"></i> ${formatTime(shift.start_time)}
                         • ${shift.duration} hours
                     </p>
                     ${shift.notes ? `<p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
@@ -312,7 +393,7 @@ function updatePastShiftsDisplay(shifts) {
             </div>
         `;
     });
-    
+
     container.innerHTML = html;
 }
 
@@ -320,7 +401,7 @@ function updatePastShiftsDisplay(shifts) {
 function showSampleShifts() {
     const container = document.getElementById('myShiftsList');
     if (!container) return;
-    
+
     const sampleShifts = [
         {
             id: 'sample1',
@@ -341,23 +422,23 @@ function showSampleShifts() {
             notes: 'Deep clean required'
         }
     ];
-    
+
     let html = '<div style="margin-bottom: 15px; color: #666; font-size: 0.9rem; text-align: center;">📋 Showing sample shifts</div>';
-    
+
     sampleShifts.forEach(shift => {
         const statusClass = getShiftStatusClass(shift.status);
         const isToday = shift.shift_date === new Date().toISOString().split('T')[0];
-        
+
         html += `
             <div class="shift-item ${isToday ? 'today-shift' : ''}">
                 <div class="shift-info">
-                    <h4>${escapeHtml(shift.location_name)} 
+                    <h4>${escapeHtml(shift.location_name)}
                         <span class="shift-status ${statusClass}">${shift.status}</span>
                         ${isToday ? '<span class="today-badge">TODAY</span>' : ''}
                     </h4>
                     <p>
-                        <i class="far fa-calendar"></i> ${formatDate(shift.shift_date)} 
-                        • <i class="far fa-clock"></i> ${formatTime(shift.start_time)} 
+                        <i class="far fa-calendar"></i> ${formatDate(shift.shift_date)}
+                        • <i class="far fa-clock"></i> ${formatTime(shift.start_time)}
                         • ${shift.duration} hours
                     </p>
                     ${shift.notes ? `<p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
@@ -382,9 +463,9 @@ function showSampleShifts() {
             </div>
         `;
     });
-    
+
     container.innerHTML = html;
-    
+
     // Add sample button handlers
     setTimeout(() => {
         document.querySelectorAll('.accept-shift-btn-sample').forEach(button => {
@@ -395,14 +476,14 @@ function showSampleShifts() {
                 this.parentNode.innerHTML = '<button class="btn btn-sm btn-primary start-shift-btn-sample"><i class="fas fa-play"></i> Start</button>';
             });
         });
-        
+
         document.querySelectorAll('.decline-shift-btn-sample').forEach(button => {
             button.addEventListener('click', function() {
                 showMessage('Shift declined (Sample)', 'info');
                 this.closest('.shift-item').remove();
             });
         });
-        
+
         document.querySelectorAll('.start-shift-btn-sample').forEach(button => {
             button.addEventListener('click', function() {
                 showMessage('✅ Shift started! (Sample)', 'success');
@@ -411,7 +492,7 @@ function showSampleShifts() {
                 this.parentNode.innerHTML = '<button class="btn btn-sm btn-success complete-shift-btn-sample"><i class="fas fa-flag-checkered"></i> Complete</button>';
             });
         });
-        
+
         // Add complete button handler dynamically
         setTimeout(() => {
             document.querySelectorAll('.complete-shift-btn-sample').forEach(button => {
@@ -430,7 +511,7 @@ function showSampleShifts() {
 async function updateShiftStatus(shiftId, status) {
     try {
         const updateData = { status };
-        
+
         if (status === 'confirmed') {
             updateData.confirmed_at = new Date().toISOString();
         } else if (status === 'in_progress') {
@@ -438,7 +519,7 @@ async function updateShiftStatus(shiftId, status) {
         } else if (status === 'completed') {
             updateData.completed_at = new Date().toISOString();
             updateData.actual_end_time = new Date().toTimeString().split(' ')[0].substring(0, 5);
-            
+
             const shift = myShifts.find(s => s.id === shiftId);
             if (shift && shift.actual_start_time) {
                 const start = new Date(`2000-01-01T${shift.actual_start_time}`);
@@ -448,24 +529,24 @@ async function updateShiftStatus(shiftId, status) {
                 updateData.actual_duration = durationHours.toFixed(2);
             }
         }
-        
+
         const { error } = await window.supabaseClient
             .from('shifts')
             .update(updateData)
             .eq('id', shiftId);
-        
+
         if (error) throw error;
-        
+
         showMessage(`✅ Shift marked as ${status.replace('_', ' ')}`, 'success');
         await loadMyShifts();
-        
+
     } catch (error) {
         console.error('❌ Error updating shift:', error);
         showMessage('❌ Error updating shift: ' + error.message, 'error');
     }
 }
 
-// Decline a shift
+// Decline a shift (assigned shifts only)
 async function declineShift(shiftId) {
     try {
         const { error } = await window.supabaseClient
@@ -475,12 +556,12 @@ async function declineShift(shiftId) {
                 notes: 'DECLINED by employee'
             })
             .eq('id', shiftId);
-        
+
         if (error) throw error;
-        
+
         showMessage('✅ Shift declined successfully', 'success');
         await loadMyShifts();
-        
+
     } catch (error) {
         console.error('❌ Error declining shift:', error);
         showMessage('❌ Error declining shift: ' + error.message, 'error');
@@ -490,7 +571,7 @@ async function declineShift(shiftId) {
 // Start a specific shift
 async function startSpecificShift(shiftId) {
     currentShiftId = shiftId;
-    
+
     try {
         await updateShiftStatus(shiftId, 'in_progress');
     } catch (error) {
@@ -511,20 +592,21 @@ async function completeSpecificShift(shiftId) {
 function updateGlobalShiftActions() {
     const shiftActions = document.getElementById('shiftActions');
     if (!shiftActions) return;
-    
+
     const today = new Date().toISOString().split('T')[0];
-    const todaysShift = myShifts.find(shift => 
-        shift.shift_date === today && 
+    const todaysShift = myShifts.find(shift =>
+        shift.shift_date === today &&
+        !shift._isOffer &&
         (shift.status === 'confirmed' || shift.status === 'in_progress')
     );
-    
+
     if (todaysShift) {
         shiftActions.style.display = 'block';
         currentShiftId = todaysShift.id;
-        
+
         const startBtn = document.getElementById('startShiftBtn');
         const completeBtn = document.getElementById('completeShiftBtn');
-        
+
         if (startBtn && completeBtn) {
             if (todaysShift.status === 'confirmed') {
                 startBtn.style.display = 'block';
@@ -595,15 +677,15 @@ window.reportIssue = function() {
             </form>
         </div>
     `;
-    
+
     showModal(html);
-    
+
     document.getElementById('reportIssueForm').addEventListener('submit', function(e) {
         e.preventDefault();
         showMessage('✅ Issue reported to manager', 'success');
         closeModal();
     });
-    
+
     document.querySelector('.cancel-btn').addEventListener('click', closeModal);
 };
 
@@ -645,23 +727,23 @@ window.requestTimeOff = function() {
             </form>
         </div>
     `;
-    
+
     showModal(html);
-    
+
     // Set default dates
     const today = new Date();
     const nextWeek = new Date(today);
     nextWeek.setDate(today.getDate() + 7);
-    
+
     document.getElementById('startDate').value = today.toISOString().split('T')[0];
     document.getElementById('endDate').value = nextWeek.toISOString().split('T')[0];
-    
+
     document.getElementById('timeOffForm').addEventListener('submit', function(e) {
         e.preventDefault();
         showMessage('✅ Time off request submitted', 'success');
         closeModal();
     });
-    
+
     document.querySelector('.cancel-btn').addEventListener('click', closeModal);
 };
 
