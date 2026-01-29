@@ -16,6 +16,7 @@
     .msg { margin-top: 14px; padding: 12px; border-radius: 10px; background: #f6f7fb; }
     .error { color: #b00020; }
     .success { color: #0a7a2f; }
+    .info { color: #0b5cab; }
   </style>
 </head>
 <body>
@@ -37,8 +38,8 @@
       </div>
 
       <div class="row">
-        <label>Create Password</label>
-        <input type="password" id="password" placeholder="Create a password" required />
+        <label>Password</label>
+        <input type="password" id="password" placeholder="Create a password (or enter your existing password)" required />
       </div>
 
       <button class="btn btn-primary btn-wide" type="submit" id="submitBtn">
@@ -67,6 +68,20 @@
       msgBox.style.display = 'block';
       msgBox.className = 'msg ' + (type || '');
       msgBox.textContent = text;
+    }
+
+    async function ensureSession(email, password) {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.access_token) return data.session;
+
+      const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw new Error('Sign-in failed: ' + error.message);
+      return signInData.session;
+    }
+
+    function isAlreadyRegisteredError(err) {
+      const msg = (err?.message || '').toLowerCase();
+      return msg.includes('already registered') || msg.includes('user already registered');
     }
 
     async function loadInvite() {
@@ -105,17 +120,7 @@
       inviteInfo.textContent = `Company: ${inv.company_name} • Email: ${inv.email}`;
 
       document.getElementById('email').value = inv.email;
-
       acceptForm.style.display = 'block';
-    }
-
-    async function ensureSession(email, password) {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.access_token) return data.session;
-
-      const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw new Error('Sign-in failed: ' + error.message);
-      return signInData.session;
     }
 
     acceptForm.addEventListener('submit', async (e) => {
@@ -131,18 +136,26 @@
       submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Activating...';
 
       try {
-        // Sign up employee user
+        // Try sign up first (new users)
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
           options: { data: { role: 'employee' } }
         });
 
-        if (signUpError) throw new Error(signUpError.message);
-        if (!authData?.user?.id) throw new Error('No user created');
-
-        // Ensure session exists (email confirmation is disabled, so this usually works immediately)
-        await ensureSession(email, password);
+        if (signUpError) {
+          // If user already exists, sign in instead
+          if (isAlreadyRegisteredError(signUpError)) {
+            showMsg('This email already has an account. Signing you in...', 'info');
+            await ensureSession(email, password);
+          } else {
+            throw new Error(signUpError.message);
+          }
+        } else {
+          // New user created => ensure session
+          if (!authData?.user?.id) throw new Error('No user created');
+          await ensureSession(email, password);
+        }
 
         // Finalize invitation (creates profile + staff and marks accepted)
         const { data: companyId, error: finalizeError } = await supabase.rpc('finalize_invitation', {
@@ -156,18 +169,25 @@
         // Store metadata for app routing (nice-to-have)
         await supabase.auth.updateUser({ data: { role: 'employee', company_id: companyId } });
 
-        // Set local storage for your app pages
+        // Store local settings
         const sessionNow = await supabase.auth.getSession();
         localStorage.setItem('cleaning_timesheet_role', 'employee');
         localStorage.setItem('cleaning_timesheet_company_id', companyId);
         localStorage.setItem('cleaning_timesheet_token', sessionNow?.data?.session?.access_token || '');
 
-        showMsg('✅ Account activated! Redirecting to your dashboard...', 'success');
+        showMsg('✅ Account activated and linked to company! Redirecting...', 'success');
         setTimeout(() => window.location.href = '../employee.html', 700);
 
       } catch (err) {
         console.error(err);
-        showMsg('❌ ' + err.message, 'error');
+
+        // common case: existing user typed wrong password
+        const msg = (err?.message || '').toLowerCase();
+        if (msg.includes('invalid login credentials')) {
+          showMsg('❌ This email already has an account, but the password you entered is wrong. Please use the correct password (or implement Forgot Password next).', 'error');
+        } else {
+          showMsg('❌ ' + (err.message || 'Unknown error'), 'error');
+        }
       } finally {
         submitBtn.disabled = false;
         submitBtn.innerHTML = original;
