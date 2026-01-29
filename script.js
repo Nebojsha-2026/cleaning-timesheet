@@ -1140,58 +1140,63 @@
         };
     }
     window.showSettings = function () {
-        if (typeof window.showCompanySettings === 'function') {
-            window.showCompanySettings();
-        } else if (typeof window.showMessage === 'function') {
+    if (typeof window.showModal !== 'function') {
+        if (typeof window.showMessage === 'function') {
+            window.showMessage('Settings modal not available yet.', 'info');
+        }
+        return;
+    }
+
+    const settingsCard = document.getElementById('companySettingsCard');
+    const settingsForm = document.getElementById('companySettingsForm');
+
+    if (!settingsCard || !settingsForm) {
+        if (typeof window.showMessage === 'function') {
             window.showMessage('Company settings are not available yet.', 'info');
+        }
+        return;
+    }
+
+    const originalParent = settingsForm.parentElement;
+    const placeholder = document.createElement('div');
+    placeholder.dataset.settingsPlaceholder = 'true';
+    originalParent.insertBefore(placeholder, settingsForm);
+
+    window.showModal(`
+        <div class="modal-content">
+            <h2><i class="fas fa-building"></i> Company Settings</h2>
+            <p style="color:#64748b; margin-top:6px;">
+                Update branding, colors, and default pay settings for your company.
+            </p>
+            <div id="settingsModalBody" style="margin-top:16px;"></div>
+            <div style="margin-top:20px;">
+                <button type="button" class="btn" onclick="closeModal()" style="width:100%; background:#6c757d; color:white;">
+                    Close
+                </button>
+            </div>
+        </div>
+    `);
+
+    const modalBody = document.getElementById('settingsModalBody');
+    if (modalBody) modalBody.appendChild(settingsForm);
+
+    const restoreForm = () => {
+        const target = document.querySelector('[data-settings-placeholder="true"]');
+        if (target) {
+            target.replaceWith(settingsForm);
+        } else if (originalParent) {
+            originalParent.appendChild(settingsForm);
         }
     };
 
-    window.showHelp = function () {
-        if (typeof window.showModal !== 'function') {
-            alert('Help modal not available (utils.js).');
-            return;
+    const existingClose = window.closeModal;
+    window.closeModal = function () {
+        restoreForm();
+        if (typeof existingClose === 'function') {
+            existingClose();
         }
-
-        const helpHtml = `
-            <div class="modal-content">
-                <h2><i class="fas fa-life-ring"></i> Manager Help</h2>
-                <p style="color:#64748b; margin-top:6px;">
-                    Here are a few quick ways to keep your team moving.
-                </p>
-                <div class="summary-list" style="margin-top:16px;">
-                    <div class="summary-item">
-                        <div>
-                            <p class="summary-title">Invite staff quickly</p>
-                            <p class="summary-meta">Generate invite links and onboard cleaners in minutes.</p>
-                        </div>
-                        <button class="btn btn-outline" onclick="showInviteEmployeeModal()">Invite</button>
-                    </div>
-                    <div class="summary-item">
-                        <div>
-                            <p class="summary-title">Create or edit shifts</p>
-                            <p class="summary-meta">Assign shifts and adjust pay or hours before approval.</p>
-                        </div>
-                        <button class="btn btn-outline" onclick="showEditShiftsModal()">Edit shifts</button>
-                    </div>
-                    <div class="summary-item">
-                        <div>
-                            <p class="summary-title">Stay on top of payroll</p>
-                            <p class="summary-meta">Review timesheets and approve payments on time.</p>
-                        </div>
-                        <button class="btn btn-outline" onclick="viewAllTimesheets()">View</button>
-                    </div>
-                </div>
-                <div style="margin-top:20px; display:flex; gap:10px;">
-                    <button type="button" class="btn btn-primary" onclick="showCompanySettings()" style="flex:1;">
-                        <i class="fas fa-cog"></i> Company settings
-                    </button>
-                    <button type="button" class="btn" onclick="closeModal()" style="flex:1; background:#6c757d; color:white;">
-                        Close
-                    </button>
-                </div>
-            </div>
-        `;
+        window.closeModal = existingClose;
+    };
 
         window.showModal(helpHtml);
     };
@@ -1352,3 +1357,4 @@
         }
     };
 })();
+
