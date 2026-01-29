@@ -1,1 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Accept Invitation</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .accept-container { max-width: 520px; margin: 60px auto; background: white; border-radius: 12px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,.08); }
+    .muted { color:#666; }
+    .row { margin-top: 14px; }
+    .row label { display:block; margin-bottom: 6px; font-weight: 600; }
+    .row input { width:100%; padding: 10px; border-radius: 8px; border: 1px solid #ddd; }
+    .btn-wide { width:100%; margin-top: 16px; }
+    .msg { margin-top: 14px; padding: 12px; border-radius: 10px; background: #f6f7fb; }
+    .error { color: #b00020; }
+    .success { color: #0a7a2f; }
+  </style>
+</head>
+<body>
+  <div class="accept-container">
+    <h2><i class="fas fa-user-check"></i> Accept Invitation</h2>
+    <p class="muted" id="inviteSubtitle">Validating your invite...</p>
 
+    <div id="inviteInfo" class="msg" style="display:none;"></div>
+
+    <form id="acceptForm" style="display:none;">
+      <div class="row">
+        <label>Email</label>
+        <input type="email" id="email" readonly />
+      </div>
+
+      <div class="row">
+        <label>Your Name</label>
+        <input type="text" id="name" placeholder="e.g. Sarah Jones" required />
+      </div>
+
+      <div class="row">
+        <label>Create Password</label>
+        <input type="password" id="password" placeholder="Create a password" required />
+      </div>
+
+      <button class="btn btn-primary btn-wide" type="submit" id="submitBtn">
+        <i class="fas fa-check"></i> Activate Account
+      </button>
+    </form>
+
+    <div id="message" class="msg" style="display:none;"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
+  <script>
+    const supabase = window.supabase.createClient(
+      'https://hqmtigcjyqckqdzepcdu.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbXRpZ2NqeXFja3FkemVwY2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwODgwMjYsImV4cCI6MjA4NDY2NDAyNn0.Rs6yv54hZyXzqqWQM4m-Z4g3gKqacBeDfHiMfpOuFRw'
+    );
+
+    const token = new URLSearchParams(window.location.search).get('token');
+
+    const inviteSubtitle = document.getElementById('inviteSubtitle');
+    const inviteInfo = document.getElementById('inviteInfo');
+    const acceptForm = document.getElementById('acceptForm');
+    const msgBox = document.getElementById('message');
+
+    function showMsg(text, type='') {
+      msgBox.style.display = 'block';
+      msgBox.className = 'msg ' + (type || '');
+      msgBox.textContent = text;
+    }
+
+    async function loadInvite() {
+      if (!token) {
+        inviteSubtitle.textContent = 'Missing invitation token.';
+        showMsg('This invitation link is invalid (no token).', 'error');
+        return;
+      }
+
+      inviteSubtitle.textContent = 'Checking invitation...';
+
+      const { data, error } = await supabase.rpc('get_invitation_by_token', { invite_token: token });
+
+      if (error) {
+        inviteSubtitle.textContent = 'Invitation error.';
+        showMsg('Error: ' + error.message, 'error');
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        inviteSubtitle.textContent = 'Invitation not found or expired.';
+        showMsg('This invitation link is invalid or expired. Ask your manager to send a new invite.', 'error');
+        return;
+      }
+
+      const inv = data[0];
+
+      if (inv.accepted) {
+        inviteSubtitle.textContent = 'Invitation already used.';
+        showMsg('This invitation has already been accepted. Please login instead.', 'error');
+        return;
+      }
+
+      inviteSubtitle.textContent = `You’ve been invited to join ${inv.company_name}.`;
+      inviteInfo.style.display = 'block';
+      inviteInfo.textContent = `Company: ${inv.company_name} • Email: ${inv.email}`;
+
+      document.getElementById('email').value = inv.email;
+
+      acceptForm.style.display = 'block';
+    }
+
+    async function ensureSession(email, password) {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.access_token) return data.session;
+
+      const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw new Error('Sign-in failed: ' + error.message);
+      return signInData.session;
+    }
+
+    acceptForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const email = document.getElementById('email').value.trim().toLowerCase();
+      const name = document.getElementById('name').value.trim();
+      const password = document.getElementById('password').value;
+
+      const submitBtn = document.getElementById('submitBtn');
+      const original = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Activating...';
+
+      try {
+        // Sign up employee user
+        const { data: authData, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { role: 'employee' } }
+        });
+
+        if (signUpError) throw new Error(signUpError.message);
+        if (!authData?.user?.id) throw new Error('No user created');
+
+        // Ensure session exists (email confirmation is disabled, so this usually works immediately)
+        await ensureSession(email, password);
+
+        // Finalize invitation (creates profile + staff and marks accepted)
+        const { data: companyId, error: finalizeError } = await supabase.rpc('finalize_invitation', {
+          invite_token: token,
+          full_name: name
+        });
+
+        if (finalizeError) throw new Error(finalizeError.message);
+        if (!companyId) throw new Error('Invite finalized but company_id missing');
+
+        // Store metadata for app routing (nice-to-have)
+        await supabase.auth.updateUser({ data: { role: 'employee', company_id: companyId } });
+
+        // Set local storage for your app pages
+        const sessionNow = await supabase.auth.getSession();
+        localStorage.setItem('cleaning_timesheet_role', 'employee');
+        localStorage.setItem('cleaning_timesheet_company_id', companyId);
+        localStorage.setItem('cleaning_timesheet_token', sessionNow?.data?.session?.access_token || '');
+
+        showMsg('✅ Account activated! Redirecting to your dashboard...', 'success');
+        setTimeout(() => window.location.href = '../employee.html', 700);
+
+      } catch (err) {
+        console.error(err);
+        showMsg('❌ ' + err.message, 'error');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = original;
+      }
+    });
+
+    loadInvite();
+  </script>
+</body>
+</html>
