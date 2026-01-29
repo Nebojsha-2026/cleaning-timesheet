@@ -5,7 +5,7 @@
         SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbXRpZ2NqeXFja3FkemVwY2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwODgwMjYsImV4cCI6MjA4NDY2NDAyNn0.Rs6yv54hZyXzqqWQM4m-Z4g3gKqacBeDfHiMfpOuFRw',
         DEFAULT_HOURLY_RATE: 23,
         CURRENCY: 'AUD',
-        VERSION: '1.3.2'
+        VERSION: '1.3.1'
     };
 
     // Global variables (scoped inside this IIFE to avoid collisions with modules/auth.js)
@@ -62,43 +62,68 @@
         if (error) throw error;
     }
 
-    // ✅ Stronger: wait for shared supabase client from modules/auth.js
-    async function waitForSupabaseClient(maxMs = 1200) {
-        const start = Date.now();
-        while (Date.now() - start < maxMs) {
-            if (window.supabaseClient && window.supabaseClient.auth) return window.supabaseClient;
-            await new Promise(r => setTimeout(r, 50));
-        }
-        return null;
-    }
+    // ---------- Dropdown Menu Controller ----------
+    function setupUserMenuDropdown() {
+        // Supports BOTH HTML styles:
+        //  - button.menu-btn + div.dropdown
+        //  - button.user-menu-button + div.user-menu-dropdown
+        const menuRoot = document.querySelector('.user-menu');
+        if (!menuRoot) return;
 
-    // ✅ Unified refresh hook (used after create/cancel so UI updates immediately)
-    async function refreshAfterShiftChange() {
-        try {
-            if (currentUserRole === 'manager') {
-                // Refresh BOTH: stats + upcoming list (fixes "hours card not updating")
-                await loadManagerDashboard();
-            } else {
-                if (typeof refreshMyShifts === 'function') await refreshMyShifts();
-                if (typeof refreshPastShifts === 'function') await refreshPastShifts();
-            }
-        } catch (e) {
-            console.warn('Refresh after shift change failed:', e);
-        }
-    }
+        const btn =
+            menuRoot.querySelector('.menu-btn') ||
+            menuRoot.querySelector('.user-menu-button');
 
-    // Expose for other modules (manager-shifts.js / cancel-shifts.js can call this)
-    window.refreshAfterShiftChange = refreshAfterShiftChange;
+        const dropdown =
+            menuRoot.querySelector('.dropdown') ||
+            menuRoot.querySelector('.user-menu-dropdown');
+
+        if (!btn || !dropdown) {
+            console.warn('⚠️ User menu exists but missing button or dropdown element.');
+            return;
+        }
+
+        const OPEN_CLASS = 'open';
+
+        const closeMenu = () => dropdown.classList.remove(OPEN_CLASS);
+        const openMenu = () => dropdown.classList.add(OPEN_CLASS);
+        const toggleMenu = () => dropdown.classList.toggle(OPEN_CLASS);
+
+        // Prevent duplicate handlers if script reloaded
+        if (btn.dataset.bound === '1') return;
+        btn.dataset.bound = '1';
+
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleMenu();
+        });
+
+        // Close when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!menuRoot.contains(e.target)) closeMenu();
+        });
+
+        // Close on ESC
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeMenu();
+        });
+
+        // Close when selecting any item
+        dropdown.addEventListener('click', (e) => {
+            const target = e.target.closest('a,button');
+            if (target) closeMenu();
+        });
+
+        console.log('✅ User menu dropdown wired');
+    }
 
     // Initialize App
     document.addEventListener('DOMContentLoaded', async function () {
         console.log('✅ DOM Ready');
 
-        // ✅ Prefer existing shared client created by modules/auth.js (prevents duplicate GoTrue)
-        const shared = await waitForSupabaseClient(1200);
-        if (shared) {
-            supabase = shared;
-        } else if (window.supabaseClient && window.supabaseClient.auth) {
+        // ✅ Reuse existing Supabase client to avoid duplicate GoTrue instances
+        if (window.supabaseClient && window.supabaseClient.auth) {
             supabase = window.supabaseClient;
         } else {
             const { createClient } = window.supabase;
@@ -108,6 +133,9 @@
 
         // Make CONFIG available globally for modules that expect it
         window.CONFIG = CONFIG;
+
+        // Hook dropdown menu (manager + employee)
+        setupUserMenuDropdown();
 
         // Load role and company from localStorage
         currentUserRole = localStorage.getItem(STORAGE_KEYS.role) || 'employee';
@@ -156,7 +184,11 @@
                 await initializeDashboard();
             } catch (err) {
                 console.error('Dashboard initialization failed:', err);
-                showMessage('Dashboard failed to load some features', 'error');
+                if (typeof window.showMessage === 'function') {
+                    window.showMessage('Dashboard failed to load some features', 'error');
+                } else {
+                    alert('Dashboard failed to load some features');
+                }
             }
         } else {
             // On login/register pages - just hide loading
@@ -259,7 +291,9 @@
         // Test connection
         const connected = await testConnection();
         if (!connected) {
-            showMessage('Connection issues – limited functionality', 'error');
+            if (typeof window.showMessage === 'function') {
+                window.showMessage('Connection issues – limited functionality', 'error');
+            }
         }
 
         // Hide loading screen and show container
@@ -276,7 +310,9 @@
             await loadEmployeeDashboard();
         }
 
-        showMessage('Dashboard loaded!', 'success');
+        if (typeof window.showMessage === 'function') {
+            window.showMessage('Dashboard loaded!', 'success');
+        }
     }
 
     async function loadManagerDashboard() {
@@ -430,14 +466,15 @@
                     try {
                         if (!confirm('Cancel this shift?')) return;
                         await doManagerCancel(id);
-                        showMessage('✅ Shift cancelled', 'success');
-
-                        // ✅ IMPORTANT FIX: refresh stats + hours + list (no page refresh needed)
-                        await refreshAfterShiftChange();
-
+                        if (typeof window.showMessage === 'function') {
+                            window.showMessage('✅ Shift cancelled', 'success');
+                        }
+                        await loadManagerDashboard(); // refresh stats + hours + list
                     } catch (e) {
                         console.error(e);
-                        showMessage('❌ ' + (e.message || 'Cancel failed'), 'error');
+                        if (typeof window.showMessage === 'function') {
+                            window.showMessage('❌ ' + (e.message || 'Cancel failed'), 'error');
+                        }
                     }
                 });
             });
@@ -449,7 +486,6 @@
 
     // ✅ Expose for modules/manager-shifts.js to call after creating a shift
     window.loadManagerUpcomingShifts = loadManagerUpcomingShifts;
-    window.loadManagerDashboard = loadManagerDashboard;
 
     async function loadEmployeeDashboard() {
         console.log('Loading employee dashboard...');
@@ -464,8 +500,6 @@
 
                 if (typeof loadMyShifts === 'function') await loadMyShifts();
                 if (typeof loadPastShifts === 'function') await loadPastShifts();
-
-                // NOTE: loadLocations must not crash employee page (fixed in modules/locations.js)
                 if (typeof loadLocations === 'function') await loadLocations();
 
                 setupTimesheetForm();
@@ -648,7 +682,8 @@
             block.classList.toggle('selected', block.getAttribute('data-period') === period);
         });
 
-        document.getElementById('timesheetPeriod').value = period;
+        const hidden = document.getElementById('timesheetPeriod');
+        if (hidden) hidden.value = period;
 
         const customDatesSection = document.getElementById('customDatesSection');
         const autoDatesSection = document.getElementById('autoDatesSection');
@@ -719,7 +754,12 @@
             </div>
         `;
 
-        showModal(html);
+        if (typeof window.showModal === 'function') {
+            window.showModal(html);
+        } else {
+            alert('Modal system not loaded (utils.js).');
+            return;
+        }
 
         const today = new Date();
         const lastWeek = new Date(today);
@@ -746,11 +786,13 @@
             if (startDateEl) startDateEl.textContent = formatDate(startDate);
             if (endDateEl) endDateEl.textContent = formatDate(endDate);
 
-            closeModal();
-            showMessage('✅ Custom dates applied!', 'success');
+            if (typeof window.closeModal === 'function') window.closeModal();
+            if (typeof window.showMessage === 'function') window.showMessage('✅ Custom dates applied!', 'success');
         });
 
-        document.querySelector('.cancel-btn').addEventListener('click', closeModal);
+        document.querySelector('.cancel-btn').addEventListener('click', () => {
+            if (typeof window.closeModal === 'function') window.closeModal();
+        });
     }
 
     async function handleGenerateTimesheet(event) {
@@ -820,12 +862,16 @@
             const { error: tsError } = await supabase.from('timesheets').insert([insertData]);
             if (tsError) throw tsError;
 
-            showMessage(`✅ Timesheet ${refNumber} generated!`, 'success');
+            if (typeof window.showMessage === 'function') {
+                window.showMessage(`✅ Timesheet ${refNumber} generated!`, 'success');
+            }
             await updateEmployeeStats();
 
         } catch (error) {
             console.error('❌ Timesheet generation error:', error);
-            showMessage('❌ Error: ' + error.message, 'error');
+            if (typeof window.showMessage === 'function') {
+                window.showMessage('❌ Error: ' + error.message, 'error');
+            }
         } finally {
             button.innerHTML = originalText;
             button.disabled = false;
@@ -926,7 +972,7 @@
 
     async function saveCompanySettings() {
         if (!currentCompanyId) {
-            showMessage('No company selected – cannot save', 'error');
+            if (typeof window.showMessage === 'function') window.showMessage('No company selected – cannot save', 'error');
             return;
         }
 
@@ -949,11 +995,11 @@
             .eq('id', currentCompanyId);
 
         if (error) {
-            showMessage('Save failed: ' + error.message, 'error');
+            if (typeof window.showMessage === 'function') window.showMessage('Save failed: ' + error.message, 'error');
             return;
         }
 
-        showMessage('Settings saved!', 'success');
+        if (typeof window.showMessage === 'function') window.showMessage('Settings saved!', 'success');
         await loadCompanyBranding();
     }
 
@@ -1032,13 +1078,13 @@
     // ✅ Action functions (exposed) — only define placeholders if NOT already defined by modules
     if (typeof window.showInviteEmployeeModal !== 'function') {
         window.showInviteEmployeeModal = function () {
-            showMessage('Invite employee – coming soon', 'info');
+            if (typeof window.showMessage === 'function') window.showMessage('Invite employee – coming soon', 'info');
         };
     }
 
     if (typeof window.showCreateShiftModal !== 'function') {
         window.showCreateShiftModal = function () {
-            showMessage('Create shift – coming soon', 'info');
+            if (typeof window.showMessage === 'function') window.showMessage('Create shift – coming soon', 'info');
         };
     }
 
@@ -1047,7 +1093,7 @@
             if (typeof viewTimesheets === 'function') {
                 viewTimesheets();
             } else {
-                showMessage('Timesheets – coming soon', 'info');
+                if (typeof window.showMessage === 'function') window.showMessage('Timesheets – coming soon', 'info');
             }
         };
     }
@@ -1064,16 +1110,16 @@
 
     if (typeof window.refreshShifts !== 'function') {
         window.refreshShifts = async function () {
-            showMessage('Refreshing shifts...', 'info');
+            if (typeof window.showMessage === 'function') window.showMessage('Refreshing shifts...', 'info');
 
             if (currentUserRole === 'manager') {
-                await loadManagerDashboard(); // ✅ also refreshes hours/stat cards
+                await loadManagerDashboard();
             } else {
                 if (typeof refreshMyShifts === 'function') await refreshMyShifts();
                 if (typeof refreshPastShifts === 'function') await refreshPastShifts();
             }
 
-            showMessage('✅ Shifts refreshed!', 'success');
+            if (typeof window.showMessage === 'function') window.showMessage('✅ Shifts refreshed!', 'success');
         };
     }
 
@@ -1089,20 +1135,20 @@
             if (typeof viewLocations === 'function') {
                 viewLocations();
             } else {
-                showMessage('Locations – coming soon', 'info');
+                if (typeof window.showMessage === 'function') window.showMessage('Locations – coming soon', 'info');
             }
         };
     }
 
     if (typeof window.showSettings !== 'function') {
         window.showSettings = function () {
-            showMessage('Settings – coming soon', 'info');
+            if (typeof window.showMessage === 'function') window.showMessage('Settings – coming soon', 'info');
         };
     }
 
     if (typeof window.showHelp !== 'function') {
         window.showHelp = function () {
-            showMessage('Help documentation – coming soon', 'info');
+            if (typeof window.showMessage === 'function') window.showMessage('Help documentation – coming soon', 'info');
         };
     }
 })();
