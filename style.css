@@ -65,14 +65,31 @@ body {
 .header {
     background: white;
     border-radius: 15px;
-    padding: 25px 30px;
+    padding: 22px 26px;
     margin-bottom: 25px;
     box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
 }
 
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.header-left {
+    min-width: 0;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 .header-content h1 {
     color: #333;
-    font-size: 2.5rem;
+    font-size: 2.2rem;
     margin-bottom: 5px;
 }
 
@@ -83,19 +100,19 @@ body {
 
 .subtitle {
     color: #666;
-    font-size: 1.1rem;
-    margin-bottom: 20px;
+    font-size: 1.05rem;
+    margin-bottom: 14px;
 }
 
 .header-stats {
     display: flex;
-    gap: 15px;
+    gap: 12px;
     flex-wrap: wrap;
 }
 
 .stat-badge {
     background: #f8f9fa;
-    padding: 8px 15px;
+    padding: 8px 14px;
     border-radius: 20px;
     font-size: 0.9rem;
     display: flex;
@@ -107,55 +124,134 @@ body {
     color: var(--primary-color);
 }
 
-/* Stats Row */
+/* =========================================================
+   User menu (3-line dropdown)
+   ========================================================= */
+.user-menu {
+    position: relative;
+}
+
+.menu-btn {
+    border: 1px solid #e9ecef;
+    background: white;
+    border-radius: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    color: #333;
+}
+
+.menu-btn:hover {
+    box-shadow: 0 8px 18px rgba(0,0,0,0.08);
+}
+
+.menu-btn i {
+    color: var(--primary-color);
+    font-size: 1.1rem;
+}
+
+.dropdown {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 10px);
+    width: 220px;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.16);
+    overflow: hidden;
+    display: none;
+    z-index: 99999;
+}
+
+.dropdown.open {
+    display: block;
+}
+
+.dropdown a,
+.dropdown button {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    color: #333;
+    text-decoration: none;
+}
+
+.dropdown a:hover,
+.dropdown button:hover {
+    background: #f8f9fa;
+}
+
+.dropdown .danger {
+    color: #b02a37;
+    font-weight: 800;
+}
+
+.dropdown .danger i {
+    color: #b02a37;
+}
+
+.dropdown .divider {
+    height: 1px;
+    background: #e9ecef;
+}
+
+/* Stats Row (improved compact cards like employee) */
 .stats-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 20px;
-    margin-bottom: 25px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    margin-bottom: 18px;
 }
 
 .stat-card {
     background: white;
-    border-radius: 10px;
-    padding: 25px;
+    border-radius: 12px;
+    padding: 18px;
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 14px;
     box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
-    transition: transform 0.3s;
+    transition: transform 0.2s;
+    min-height: 92px;
 }
 
 .stat-card:hover {
-    transform: translateY(-5px);
-}
-
-.stat-card.loading {
-    opacity: 0.7;
+    transform: translateY(-3px);
 }
 
 .stat-icon {
-    width: 60px;
-    height: 60px;
+    width: 54px;
+    height: 54px;
     background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-    border-radius: 12px;
+    border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 1.5rem;
+    font-size: 1.35rem;
 }
 
 .stat-info h3 {
     font-size: 0.9rem;
     color: #666;
-    margin-bottom: 5px;
-    font-weight: 600;
+    margin-bottom: 4px;
+    font-weight: 800;
 }
 
 .stat-value {
-    font-size: 2rem;
-    font-weight: bold;
+    font-size: 1.85rem;
+    font-weight: 900;
     color: #333;
 }
 
@@ -183,7 +279,7 @@ body {
 
 .card-header {
     background: #f8f9fa;
-    padding: 20px 25px;
+    padding: 18px 20px;
     border-bottom: 1px solid #e9ecef;
     display: flex;
     justify-content: space-between;
@@ -191,7 +287,7 @@ body {
 }
 
 .card-header h2 {
-    font-size: 1.3rem;
+    font-size: 1.2rem;
     color: #333;
     display: flex;
     align-items: center;
@@ -199,19 +295,19 @@ body {
 }
 
 .card-body {
-    padding: 25px;
+    padding: 22px;
 }
 
 /* Forms */
 .form-group {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
 }
 
 .form-group label {
     display: block;
     margin-bottom: 8px;
     color: #333;
-    font-weight: 600;
+    font-weight: 800;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -221,9 +317,9 @@ body {
 .form-group textarea,
 .form-group select {
     width: 100%;
-    padding: 12px 15px;
+    padding: 12px 14px;
     border: 2px solid #e0e0e0;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 1rem;
     transition: border-color 0.3s;
     font-family: inherit;
@@ -250,13 +346,13 @@ select {
 
 /* Buttons */
 .btn {
-    padding: 14px 25px;
+    padding: 12px 18px;
     border: none;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 1rem;
-    font-weight: 600;
+    font-weight: 800;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.25s;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -266,7 +362,7 @@ select {
 
 .btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 10px 18px rgba(0, 0, 0, 0.10);
 }
 
 .btn-primary {
@@ -276,6 +372,11 @@ select {
 
 .btn-success {
     background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #dc3545 0%, #b02a37 100%);
     color: white;
 }
 
@@ -296,21 +397,21 @@ select {
 .actions-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 15px;
+    gap: 14px;
 }
 
 .action-btn {
     background: #f8f9fa;
     border: 2px solid #e9ecef;
-    border-radius: 8px;
-    padding: 20px;
+    border-radius: 12px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 10px;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.25s;
 }
 
 .action-btn:hover {
@@ -320,11 +421,11 @@ select {
 }
 
 .action-btn i {
-    font-size: 1.5rem;
+    font-size: 1.35rem;
 }
 
 .action-btn span {
-    font-weight: 600;
+    font-weight: 800;
     font-size: 0.9rem;
 }
 
@@ -336,26 +437,9 @@ select {
     display: none;
 }
 
-.message.success {
-    background: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
-    display: block;
-}
-
-.message.error {
-    background: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
-    display: block;
-}
-
-.message.info {
-    background: #d1ecf1;
-    color: #0c5460;
-    border: 1px solid #bee5eb;
-    display: block;
-}
+.message.success { display: block; background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+.message.error { display: block; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+.message.info { display: block; background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
 
 /* Footer */
 .footer {
@@ -365,74 +449,11 @@ select {
     margin-top: 30px;
 }
 
-.footer-links {
-    margin-top: 10px;
-}
-
-.footer-links a {
-    color: rgba(255, 255, 255, 0.8);
-    text-decoration: none;
-}
-
-.footer-links a:hover {
-    color: white;
-    text-decoration: underline;
-}
-
-/* Period Selection Blocks */
-.period-selection-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    margin-top: 10px;
-}
-
-.period-block {
-    background: #f8f9fa;
-    border: 2px solid #e0e0e0;
-    border-radius: 6px;
-    padding: 10px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.3s;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 60px;
-}
-
-.period-block:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
-    border-color: var(--primary-color);
-}
-
-.period-block.selected {
-    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-    color: white;
-    border-color: var(--primary-color);
-    box-shadow: 0 3px 8px rgba(102, 126, 234, 0.3);
-}
-
-/* Make sure these are updated too if present */
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
-    border-color: var(--primary-color);
-}
-
-.stat-badge i,
-.entry-hours,
-.shift-time {
-    color: var(--primary-color);
-}
-
 /* Shift Items */
 .shift-item {
     background: white;
-    border-radius: 10px;
-    padding: 20px;
+    border-radius: 12px;
+    padding: 18px;
     margin-bottom: 15px;
     border: 1px solid #e9ecef;
     transition: transform 0.2s, box-shadow 0.2s;
@@ -440,12 +461,7 @@ select {
 
 .shift-item:hover {
     transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-}
-
-.shift-item.today-shift {
-    border-left: 4px solid var(--primary-color);
-    background: #f8f9fa;
+    box-shadow: 0 10px 18px rgba(0, 0, 0, 0.08);
 }
 
 .shift-info h4 {
@@ -459,42 +475,18 @@ select {
 .shift-status {
     padding: 4px 12px;
     border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 600;
+    font-size: 0.78rem;
+    font-weight: 900;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
-.status-pending {
-    background: #fff3cd;
-    color: #856404;
-}
-
-.status-confirmed {
-    background: #d4edda;
-    color: #155724;
-}
-
-.status-in-progress {
-    background: #d1ecf1;
-    color: #0c5460;
-}
-
-.status-completed {
-    background: #28a745;
-    color: white;
-}
-
-.status-cancelled {
-    background: #f8d7da;
-    color: #721c24;
-}
-
-/* Offered shift status */
-.status-offered {
-    background: #cfe2ff;
-    color: #084298;
-}
+.status-pending { background: #fff3cd; color: #856404; }
+.status-confirmed { background: #d4edda; color: #155724; }
+.status-in-progress { background: #d1ecf1; color: #0c5460; }
+.status-completed { background: #28a745; color: white; }
+.status-cancelled { background: #f8d7da; color: #721c24; }
+.status-offered { background: #cfe2ff; color: #084298; }
 
 .today-badge {
     background: var(--primary-color);
@@ -502,32 +494,32 @@ select {
     padding: 3px 10px;
     border-radius: 12px;
     font-size: 0.7rem;
-    font-weight: bold;
+    font-weight: 900;
     letter-spacing: 1px;
 }
 
-/* Offered Shift Badge */
 .offer-badge {
     background: #e7f1ff;
     color: #084298;
     padding: 3px 10px;
     border-radius: 12px;
     font-size: 0.7rem;
-    font-weight: 700;
+    font-weight: 900;
     letter-spacing: 1px;
     border: 1px solid rgba(8, 66, 152, 0.15);
 }
 
 .shift-actions-employee {
-    margin-top: 15px;
+    margin-top: 12px;
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
 }
 
 .shift-actions-employee .btn-sm {
-    padding: 6px 15px;
-    font-size: 0.85rem;
+    padding: 8px 12px;
+    font-size: 0.88rem;
+    border-radius: 10px;
 }
 
 /* Loading indicators */
@@ -548,7 +540,7 @@ select {
 }
 
 /* =========================================================
-   MODAL OVERLAY (FIXES "SHOWING DOWN THE PAGE")
+   MODAL OVERLAY
    ========================================================= */
 .modal {
     position: fixed;
@@ -571,33 +563,11 @@ select {
     margin: auto 0;
 }
 
-.modal-content h2 {
-    margin-bottom: 6px;
-    font-size: 1.5rem;
-}
-
-.modal-content p {
-    margin-bottom: 10px;
-}
-
-.modal-content .btn {
-    width: 100%;
-}
-
-@media (min-width: 720px) {
-    .modal-content .btn {
-        width: auto;
-    }
-}
-
-/* Small helper for inline meta fields in modals */
 .modal-inline {
     display: grid;
     grid-template-columns: 1fr;
     gap: 12px;
 }
 @media (min-width: 720px) {
-    .modal-inline {
-        grid-template-columns: 1fr 1fr;
-    }
+    .modal-inline { grid-template-columns: 1fr 1fr; }
 }
