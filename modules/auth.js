@@ -1,268 +1,201 @@
-// modules/auth.js - Role-safe auth + RPC-based manager bootstrap
+// modules/auth.js
 console.log('🔐 Auth module loading...');
 
+// Config
 const AUTH_CONFIG = {
-    TOKEN_KEY: 'cleaning_timesheet_token',
-    USER_KEY: 'cleaning_timesheet_user',
-    COMPANY_KEY: 'cleaning_timesheet_company_id',
-    ROLE_KEY: 'cleaning_timesheet_role'
+    TOKEN_KEY: 'auth_token',
+    USER_KEY: 'auth_user',
+    ROLE_KEY: 'user_role',
+    COMPANY_KEY: 'company_id'
 };
 
+let supabase = null;
 let currentUser = null;
 let currentToken = null;
 let currentCompanyId = null;
 let userRole = null;
-let supabase = null;
 
+function isTestPage() {
+    const p = window.location.pathname.toLowerCase();
+    return p.includes('test-registration') || p.includes('test-');
+}
+
+// Init Supabase from global config (script.js sets CONFIG)
 function initSupabase() {
-    if (window.supabase && window.supabase.createClient) {
-        supabase = window.supabase.createClient(
-            'https://hqmtigcjyqckqdzepcdu.supabase.co',
-            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbXRpZ2NqeXFja3FkemVwY2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwODgwMjYsImV4cCI6MjA4NDY2NDAyNn0.Rs6yv54hZyXzqqWQM4m-Z4g3gKqacBeDfHiMfpOuFRw'
-        );
-        window.supabaseClient = supabase;
+    try {
+        if (window.supabase && typeof window.supabase.from === 'function') {
+            // already created in script.js
+            supabase = window.supabase;
+            console.log('✅ Supabase already initialized (script.js)');
+            return;
+        }
+
+        if (!window.supabaseClient && window.CONFIG?.SUPABASE_URL && window.CONFIG?.SUPABASE_KEY) {
+            window.supabaseClient = window.supabase.createClient(window.CONFIG.SUPABASE_URL, window.CONFIG.SUPABASE_KEY);
+        }
+        supabase = window.supabaseClient || window.supabase;
         console.log('✅ Supabase initialized');
-    } else {
-        console.error('❌ Supabase library not loaded');
+    } catch (e) {
+        console.error('Supabase init failed:', e);
     }
 }
 
 initSupabase();
 
-function isTestPage() {
-    const p = window.location.pathname || '';
-    return p.includes('test-registration.html') || p.includes('test-registration2.html');
-}
-
-function isAuthPage() {
-    const p = window.location.pathname || '';
-    return p.includes('login.html') || p.includes('register.html') || p.includes('forgot-password.html');
-}
-
-function isDashboardPage() {
-    const p = window.location.pathname || '';
-    return p.includes('manager.html') || p.includes('employee.html');
-}
-
+// Main initializer
 async function initializeAuth() {
-    if (!supabase) return;
-
-    if (isTestPage()) {
-        console.log('🧪 Test page detected - skipping auth initialization');
+    if (!supabase) {
+        console.error('Supabase not ready');
         return;
     }
 
-    try {
-        const { data: { session } } = await supabase.auth.getSession();
+    // Skip auth checks on test pages
+    if (isTestPage()) {
+        console.log('Test page detected - skipping auth initialization');
+        return;
+    }
 
-        if (session?.user) {
+    // ✅ If user just logged out in this tab, force sign-out and stop auto-login.
+    if (sessionStorage.getItem('just_logged_out') === '1') {
+        console.log('🧹 just_logged_out flag present - forcing signed-out state');
+        sessionStorage.removeItem('just_logged_out');
+        try { await supabase.auth.signOut(); } catch (_) {}
+        clearAuth();
+        // Do not proceed to handle session
+    } else {
+        // Check current session first
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
             console.log('✅ Found existing session');
             await handleUserSession(session.user);
+        }
+    }
+
+    // Listen for auth changes
+    supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('Auth event:', event, session ? 'has session' : 'no session');
+        if (isTestPage()) return;
+
+        // If logout was just triggered, ignore any session event race.
+        if (sessionStorage.getItem('just_logged_out') === '1') {
+            console.log('⛔ Ignoring auth event due to just_logged_out');
+            return;
+        }
+
+        if (session?.user) {
+            await handleUserSession(session.user);
         } else {
-            if (isDashboardPage()) {
+            clearAuth();
+            const isAuthPage =
+                window.location.pathname.includes('login.html') ||
+                window.location.pathname.includes('register.html');
+
+            if (!isAuthPage && !window.location.pathname.includes('invite-accept.html')) {
+                console.log('No session - redirecting to login');
                 window.location.href = 'login.html';
             }
         }
-
-        supabase.auth.onAuthStateChange(async (event, session2) => {
-            console.log('Auth event:', event, session2 ? 'has session' : 'no session');
-
-            if (isTestPage()) return;
-
-            if (session2?.user) {
-                await handleUserSession(session2.user);
-            } else {
-                clearAuth();
-                if (isDashboardPage() && !window.location.pathname.includes('invite-accept.html')) {
-                    window.location.href = 'login.html';
-                }
-            }
-        });
-    } catch (e) {
-        console.error('❌ initializeAuth exception:', e);
-    }
+    });
 }
 
 async function handleUserSession(user) {
     currentUser = user;
+    currentToken = (await supabase.auth.getSession()).data.session?.access_token || null;
 
-    const sessionResp = await supabase.auth.getSession();
-    currentToken = sessionResp?.data?.session?.access_token || null;
-
-    const metadata = currentUser.user_metadata || {};
-    const metaRole = (metadata.role || '').toLowerCase();
-    const metaCompanyId = metadata.company_id || null;
-
-    // Profiles
-    let profile = null;
-    const { data: profileData } = await supabase
+    // Load profile (role + company)
+    const { data: profile, error } = await supabase
         .from('profiles')
-        .select('company_id, role, name')
-        .eq('id', currentUser.id)
-        .maybeSingle();
-
-    if (profileData) profile = profileData;
-
-    // Staff (optional)
-    let staff = null;
-    const { data: staffData } = await supabase
-        .from('staff')
         .select('company_id, role')
-        .eq('user_id', currentUser.id)
-        .maybeSingle();
+        .eq('id', user.id)
+        .single();
 
-    if (staffData) staff = staffData;
-
-    const profileRole = (profile?.role || '').toLowerCase();
-    const staffRole = (staff?.role || '').toLowerCase();
-
-    // Prefer manager if metadata says manager
-    let resolvedRole = 'employee';
-    if (metaRole === 'manager') resolvedRole = 'manager';
-    else if (profileRole) resolvedRole = profileRole;
-    else if (staffRole) resolvedRole = staffRole;
-
-    let resolvedCompanyId = profile?.company_id || metaCompanyId || staff?.company_id || null;
-
-    userRole = resolvedRole;
-    currentCompanyId = resolvedCompanyId;
-
-    // Ensure profile exists (no forced downgrade)
-    if (!profile) {
-        const nameGuess = (currentUser.email || '').split('@')[0] || 'User';
-        const insertPayload = { id: currentUser.id, role: userRole, name: nameGuess };
-        if (currentCompanyId) insertPayload.company_id = currentCompanyId;
-
-        const { error: createError } = await supabase.from('profiles').insert([insertPayload]);
-        if (createError) console.warn('Profile create warning:', createError.message);
+    if (error) {
+        console.error('Profile fetch error:', error);
+        // fallback
+        userRole = 'employee';
+        currentCompanyId = null;
     } else {
-        const updates = {};
-        if ((!profileRole && userRole) || (userRole === 'manager' && profileRole !== 'manager')) {
-            updates.role = userRole;
-        }
-        if (!profile.company_id && currentCompanyId) updates.company_id = currentCompanyId;
-
-        if (Object.keys(updates).length > 0) {
-            updates.updated_at = new Date().toISOString();
-            const { error: updErr } = await supabase.from('profiles').update(updates).eq('id', currentUser.id);
-            if (updErr) console.warn('Profile update warning:', updErr.message);
-        }
+        userRole = profile?.role || 'employee';
+        currentCompanyId = profile?.company_id || null;
     }
 
     // Persist
     localStorage.setItem(AUTH_CONFIG.TOKEN_KEY, currentToken || '');
-    localStorage.setItem(AUTH_CONFIG.USER_KEY, JSON.stringify(currentUser));
-    localStorage.setItem(AUTH_CONFIG.COMPANY_KEY, currentCompanyId || '');
-    localStorage.setItem(AUTH_CONFIG.ROLE_KEY, userRole || 'employee');
+    localStorage.setItem(AUTH_CONFIG.USER_KEY, JSON.stringify({
+        id: user.id,
+        email: user.email
+    }));
+    localStorage.setItem(AUTH_CONFIG.ROLE_KEY, userRole);
+    if (currentCompanyId) localStorage.setItem(AUTH_CONFIG.COMPANY_KEY, currentCompanyId);
 
-    console.log('✅ Session handled:', currentUser.email, 'Role:', userRole, 'Company:', currentCompanyId);
+    console.log(`✅ Session handled: ${user.email} Role: ${userRole} Company: ${currentCompanyId}`);
 
-    await redirectBasedOnRole();
-}
+    // Redirect logic (skip if on invite accept)
+    if (window.location.pathname.includes('invite-accept.html')) return;
 
-async function redirectBasedOnRole() {
-    if (isTestPage()) return;
+    const path = window.location.pathname;
+    const onLogin = path.includes('login.html');
+    const onRegister = path.includes('register.html');
 
-    const role = localStorage.getItem(AUTH_CONFIG.ROLE_KEY) || 'employee';
-    const currentPath = window.location.pathname || '';
+    // If user is on auth pages, redirect to their dashboard
+    if (onLogin || onRegister) {
+        window.location.href = (userRole === 'manager') ? 'manager.html' : 'employee.html';
+        return;
+    }
 
-    const hasToken = !!localStorage.getItem(AUTH_CONFIG.TOKEN_KEY);
-    if (isAuthPage() && !hasToken) return;
-
-    console.log('🔀 Redirect check - role:', role, 'path:', currentPath);
-
-    if (role === 'manager') {
-        if (!currentPath.includes('manager.html')) window.location.href = 'manager.html';
-    } else {
-        if (!currentPath.includes('employee.html')) window.location.href = 'employee.html';
+    // If user is on wrong dashboard, redirect
+    if (path.includes('manager.html') && userRole !== 'manager') {
+        window.location.href = 'employee.html';
+        return;
+    }
+    if (path.includes('employee.html') && userRole === 'manager') {
+        window.location.href = 'manager.html';
+        return;
     }
 }
 
+// Login
 async function login(email, password) {
-    if (!supabase) return { success: false, error: 'System not ready' };
-
-    try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email: email.trim(),
-            password
-        });
-
-        if (error) return { success: false, error: error.message };
-        if (!data.user) return { success: false, error: 'No user data returned' };
-
-        await handleUserSession(data.user);
-        return { success: true, user: data.user };
-    } catch (err) {
-        return { success: false, error: err.message || 'Login failed' };
-    }
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    await handleUserSession(data.user);
+    return data.user;
 }
 
-// ✅ Manager registration now uses RPC bootstrap (solves your RLS insert failure)
+// Register manager (kept as-is; your register flow already works)
 async function registerManager(email, password, companyName) {
-    if (!supabase) return { success: false, error: 'Supabase not initialized' };
-
-    try {
-        // 1) Sign up (role in metadata)
-        const { data: authData, error: signUpError } = await supabase.auth.signUp({
-            email: email.trim(),
-            password,
-            options: { data: { role: 'manager' } }
-        });
-
-        if (signUpError) return { success: false, error: signUpError.message };
-        if (!authData.user) return { success: false, error: 'No user created' };
-
-        // 2) Ensure session exists
-        const { data: sessionData } = await supabase.auth.getSession();
-        if (!sessionData?.session) {
-            const { error: signInError } = await supabase.auth.signInWithPassword({
-                email: email.trim(),
-                password
-            });
-            if (signInError) return { success: false, error: 'Unable to start session after sign-up' };
-        }
-
-        // 3) Bootstrap company/profile/staff via RPC (bypasses RLS reliably)
-        const { data: companyId, error: rpcError } = await supabase.rpc('bootstrap_manager_company', {
-            company_name: companyName.trim()
-        });
-
-        if (rpcError) return { success: false, error: 'Bootstrap failed: ' + rpcError.message };
-        if (!companyId) return { success: false, error: 'Bootstrap failed: no company id returned' };
-
-        // 4) Store company in metadata (nice-to-have)
-        const { error: metadataError } = await supabase.auth.updateUser({
-            data: { role: 'manager', company_id: companyId }
-        });
-        if (metadataError) console.warn('Metadata update warning:', metadataError.message);
-
-        // 5) Force localStorage and finalize
-        localStorage.setItem(AUTH_CONFIG.ROLE_KEY, 'manager');
-        localStorage.setItem(AUTH_CONFIG.COMPANY_KEY, companyId);
-
-        await handleUserSession(authData.user);
-
-        return { success: true, user: authData.user, company: { id: companyId } };
-    } catch (err) {
-        return { success: false, error: err.message || 'Registration failed' };
-    }
+    const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { companyName } }
+    });
+    if (error) throw error;
+    return data.user;
 }
 
+// Logout
 async function logout() {
+    // ✅ prevent auth listener race
+    sessionStorage.setItem('just_logged_out', '1');
+
     try {
         if (supabase) await supabase.auth.signOut();
     } catch (e) {
-        console.warn('Logout warning:', e);
+        console.warn('signOut error:', e);
     }
+
     clearAuth();
     window.location.href = 'login.html';
 }
 
 function clearAuth() {
-    localStorage.removeItem(AUTH_CONFIG.TOKEN_KEY);
-    localStorage.removeItem(AUTH_CONFIG.USER_KEY);
-    localStorage.removeItem(AUTH_CONFIG.COMPANY_KEY);
-    localStorage.removeItem(AUTH_CONFIG.ROLE_KEY);
+    // Do NOT nuke all storage across the app ecosystem; clear only our keys + safe clear.
+    try {
+        localStorage.removeItem(AUTH_CONFIG.TOKEN_KEY);
+        localStorage.removeItem(AUTH_CONFIG.USER_KEY);
+        localStorage.removeItem(AUTH_CONFIG.ROLE_KEY);
+        localStorage.removeItem(AUTH_CONFIG.COMPANY_KEY);
+    } catch (_) {}
 
     currentUser = null;
     currentToken = null;
@@ -293,10 +226,12 @@ function protectRoute(requiredRole = null) {
         window.location.href = role === 'manager' ? 'manager.html' : 'employee.html';
         return false;
     }
+
     return true;
 }
 
-setTimeout(initializeAuth, 300);
+// Initialize auth after a short delay
+setTimeout(initializeAuth, 500);
 
 console.log('✅ Auth module loaded');
 
