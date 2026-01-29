@@ -1,277 +1,205 @@
-// modules/cancel-shifts.js
-console.log('🛑 Cancel Shifts module loaded');
+// modules/utils.js
+// Utility functions shared across modules (GLOBAL SAFE)
 
-function cs_getSupabase() {
-    return window.supabaseClient || window.supabaseClient;
+// Helper function to escape HTML to prevent XSS
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
-function cs_now() {
-    return new Date();
-}
-
-function cs_shiftStart(shift_date, start_time) {
-    const t = (start_time || '00:00').slice(0, 5);
-    return new Date(`${shift_date}T${t}:00`);
-}
-
-async function cs_getMyProfile() {
-    const supabase = window.supabaseClient;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not logged in');
-
-    const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('company_id, role')
-        .eq('id', user.id)
-        .single();
-
-    if (error) throw new Error(error.message);
-    return { user, profile };
-}
-
-async function cs_createNotification({ company_id, user_id, target_role, title, message, link }) {
-    const supabase = window.supabaseClient;
-
-    const { error } = await supabase.from('notifications').insert([{
-        company_id,
-        user_id: user_id || null,
-        target_role: target_role || null,
-        title: title || 'Notification',
-        message,
-        link: link || null,
-        is_read: false
-    }]);
-
-    if (error) console.warn('Notification insert failed:', error.message);
-}
-
-async function cancelShiftAsManager(shiftId) {
-    const supabase = window.supabaseClient;
-    const { profile } = await cs_getMyProfile();
-    if (profile.role !== 'manager') throw new Error('Not manager');
-
-    const { data: shift, error } = await supabase
-        .from('shifts')
-        .select('id, company_id, shift_date, start_time, status, staff_id, recurring_shift_id, locations(name), staff(user_id,name,email)')
-        .eq('id', shiftId)
-        .single();
-
-    if (error) throw new Error(error.message);
-
-    const start = cs_shiftStart(shift.shift_date, shift.start_time);
-    const diffHours = (start.getTime() - cs_now().getTime()) / (1000 * 60 * 60);
-
-    if (diffHours < 1) throw new Error('Manager can cancel only up to 1 hour before start time.');
-    if (['cancelled', 'completed'].includes((shift.status || '').toLowerCase())) {
-        throw new Error('Shift is already cancelled/completed.');
+// Format date for display (Australian style)
+function formatDate(dateInput) {
+  try {
+    // Accept Date or yyyy-mm-dd strings
+    if (dateInput instanceof Date) {
+      return dateInput.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
     }
-
-    const { error: uerr } = await supabase
-        .from('shifts')
-        .update({ status: 'cancelled' })
-        .eq('id', shiftId);
-
-    if (uerr) throw new Error(uerr.message);
-
-    const locName = shift.locations?.name || 'Location';
-    const recurringText = shift.recurring_shift_id ? ' (Recurring)' : '';
-    const msg = `Shift cancelled by manager${recurringText}: ${locName} on ${shift.shift_date} at ${shift.start_time}.`;
-
-    await cs_createNotification({
-        company_id: shift.company_id,
-        target_role: 'manager',
-        title: 'Shift Cancelled',
-        message: msg,
-        link: 'manager.html'
-    });
-
-    const employeeUserId = shift.staff?.user_id || null;
-    if (employeeUserId) {
-        await cs_createNotification({
-            company_id: shift.company_id,
-            user_id: employeeUserId,
-            title: 'Shift Cancelled',
-            message: msg,
-            link: 'employee.html'
-        });
+    const s = String(dateInput || '');
+    if (s.includes('-')) {
+      const [y, m, d] = s.split('-');
+      const dt = new Date(Number(y), Number(m) - 1, Number(d));
+      return dt.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
     }
+    const dt = new Date(s);
+    if (isNaN(dt.getTime())) return s;
+    return dt.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch {
+    return String(dateInput || '');
+  }
+}
 
+// Format time (e.g. 14:30 → 2:30 PM)
+function formatTime(timeString) {
+  if (!timeString) return '';
+  const t = String(timeString).slice(0, 5);
+  const [hours, minutes] = t.split(':');
+  const hour = parseInt(hours, 10);
+  if (Number.isNaN(hour)) return t;
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const displayHour = hour % 12 || 12;
+  return `${displayHour}:${minutes} ${ampm}`;
+}
+
+// Get start of week (Monday)
+function getStartOfWeek(date = new Date()) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(d.setDate(diff));
+}
+
+// Get end of week (Sunday)
+function getEndOfWeek(date = new Date()) {
+  const start = getStartOfWeek(date);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  return end;
+}
+
+// Get start of month
+function getStartOfMonth(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+// Get end of month
+function getEndOfMonth(date = new Date()) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
+// Show message to user (works on any page)
+function showMessage(text, type = 'info') {
+  const existing = document.getElementById('globalMessage');
+  if (existing) existing.remove();
+
+  const container = document.createElement('div');
+  container.id = 'globalMessage';
+  container.className = `message ${type}`;
+  container.textContent = text;
+
+  container.style.position = 'fixed';
+  container.style.top = '20px';
+  container.style.left = '50%';
+  container.style.transform = 'translateX(-50%)';
+  container.style.zIndex = '999999';
+  container.style.padding = '12px 24px';
+  container.style.borderRadius = '8px';
+  container.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+  container.style.maxWidth = '90%';
+  container.style.textAlign = 'center';
+  container.style.fontWeight = '600';
+
+  if (type === 'success') {
+    container.style.background = '#d4edda';
+    container.style.color = '#155724';
+    container.style.border = '1px solid #c3e6cb';
+  } else if (type === 'error') {
+    container.style.background = '#f8d7da';
+    container.style.color = '#721c24';
+    container.style.border = '1px solid #f5c6cb';
+  } else {
+    container.style.background = '#fff3cd';
+    container.style.color = '#856404';
+    container.style.border = '1px solid #ffeeba';
+  }
+
+  document.body.appendChild(container);
+
+  setTimeout(() => {
+    container.style.opacity = '0';
+    container.style.transition = 'opacity 0.5s';
+    setTimeout(() => container.remove(), 500);
+  }, 5000);
+}
+
+// Modal Helpers
+function showModal(contentHtml) {
+  window.closeModal();
+
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.innerHTML = contentHtml;
+
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal) {
+      window.closeModal();
+    }
+  });
+
+  const modalsContainer = document.getElementById('modalsContainer');
+  if (modalsContainer) modalsContainer.appendChild(modal);
+  else document.body.appendChild(modal);
+}
+
+window.closeModal = function () {
+  const modal = document.querySelector('.modal');
+  if (modal) modal.remove();
+};
+
+// Email validation helper
+function validateEmail(email) {
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(String(email || '').trim());
+}
+
+// Connection status helper
+function updateConnectionStatus(connected) {
+  const statusDiv = document.getElementById('connectionStatus');
+  if (!statusDiv) return;
+
+  statusDiv.innerHTML = connected
+    ? '<i class="fas fa-wifi"></i><span>Connected</span>'
+    : '<i class="fas fa-wifi"></i><span>Disconnected</span>';
+  statusDiv.style.color = connected ? '#28a745' : '#dc3545';
+}
+
+// Show error screen
+function showError(message) {
+  const loadingScreen = document.getElementById('loadingScreen');
+  if (!loadingScreen) return;
+
+  loadingScreen.innerHTML = `
+    <div style="text-align:center; color:white; padding:40px;">
+      <div style="font-size:4rem;">❌</div>
+      <h2 style="margin:20px 0;">Error</h2>
+      <p style="font-size:1.1rem; margin-bottom:20px;">${escapeHtml(message)}</p>
+      <button onclick="location.reload()" style="padding:10px 20px; background:white; color:#667eea; border:none; border-radius:8px; cursor:pointer;">
+        Try Again
+      </button>
+    </div>
+  `;
+}
+
+// OPTIONAL: simple DB ping
+async function testConnection() {
+  try {
+    if (!window.supabaseClient) throw new Error('Supabase client not initialized');
+    const { error } = await window.supabaseClient.from('locations').select('id', { head: true, count: 'exact' });
+    if (error) throw error;
+    updateConnectionStatus(true);
     return true;
+  } catch (err) {
+    console.error('❌ Database connection failed:', err);
+    updateConnectionStatus(false);
+    showError('Cannot connect to database: ' + (err.message || err));
+    return false;
+  }
 }
 
-async function cancelShiftAsEmployee(shiftId) {
-    const supabase = window.supabaseClient;
-    const { profile } = await cs_getMyProfile();
-    if (profile.role !== 'employee') throw new Error('Not employee');
+/* ✅ IMPORTANT: expose helpers globally for non-module scripts and other modules */
+window.escapeHtml = escapeHtml;
+window.formatDate = formatDate;
+window.formatTime = formatTime;
+window.getStartOfWeek = getStartOfWeek;
+window.getEndOfWeek = getEndOfWeek;
+window.getStartOfMonth = getStartOfMonth;
+window.getEndOfMonth = getEndOfMonth;
+window.showMessage = showMessage;
+window.showModal = showModal;
+window.validateEmail = validateEmail;
+window.updateConnectionStatus = updateConnectionStatus;
+window.showError = showError;
+window.testConnection = testConnection;
 
-    const { data: shift, error } = await supabase
-        .from('shifts')
-        .select('id, company_id, shift_date, start_time, status, recurring_shift_id, locations(name)')
-        .eq('id', shiftId)
-        .single();
-
-    if (error) throw new Error(error.message);
-
-    const start = cs_shiftStart(shift.shift_date, shift.start_time);
-    const diffHours = (start.getTime() - cs_now().getTime()) / (1000 * 60 * 60);
-
-    if (diffHours < 3) throw new Error('You can cancel only up to 3 hours before start time.');
-    if (['in_progress', 'completed', 'cancelled'].includes((shift.status || '').toLowerCase())) {
-        throw new Error('Shift is already started/completed/cancelled.');
-    }
-
-    const { error: uerr } = await supabase
-        .from('shifts')
-        .update({ status: 'cancelled' })
-        .eq('id', shiftId);
-
-    if (uerr) throw new Error(uerr.message);
-
-    const locName = shift.locations?.name || 'Location';
-    const recurringText = shift.recurring_shift_id ? ' (Recurring)' : '';
-    const msg = `Shift cancelled by employee${recurringText}: ${locName} on ${shift.shift_date} at ${shift.start_time}.`;
-
-    await cs_createNotification({
-        company_id: shift.company_id,
-        target_role: 'manager',
-        title: 'Shift Cancelled',
-        message: msg,
-        link: 'manager.html'
-    });
-
-    return true;
-}
-
-// Expose for other modules
-window.cancelShiftAsEmployee = cancelShiftAsEmployee;
-window.cancelShiftAsManager = cancelShiftAsManager;
-
-/**
- * ✅ IMPORTANT FIX:
- * Wait until loadManagerUpcomingShifts exists, then override it.
- */
-function cs_waitFor(fnName, timeoutMs = 15000) {
-    return new Promise((resolve, reject) => {
-        const start = Date.now();
-        const timer = setInterval(() => {
-            if (typeof window[fnName] === 'function') {
-                clearInterval(timer);
-                resolve(window[fnName]);
-                return;
-            }
-            if (Date.now() - start > timeoutMs) {
-                clearInterval(timer);
-                reject(new Error(`${fnName} not found after ${timeoutMs}ms`));
-            }
-        }, 200);
-    });
-}
-
-async function cs_overrideManagerUpcoming() {
-    const path = window.location.pathname.toLowerCase();
-    if (!path.includes('manager.html')) return;
-
-    let original;
-    try {
-        original = await cs_waitFor('loadManagerUpcomingShifts');
-    } catch (e) {
-        console.warn('Manager shift override skipped:', e.message);
-        return;
-    }
-
-    window.loadManagerUpcomingShifts = async function () {
-        const supabase = window.supabaseClient;
-        const shiftsList = document.getElementById('upcomingShiftsList');
-        if (!shiftsList) return;
-
-        try {
-            const companyId =
-                window.currentCompanyId ||
-                localStorage.getItem('cleaning_timesheet_company_id') ||
-                localStorage.getItem('company_id');
-
-            const { data: shifts, error } = await supabase
-                .from('shifts')
-                .select(`id, company_id, shift_date, start_time, duration, status, staff_id, recurring_shift_id, notes,
-                         locations(name), staff(user_id,name,email)`)
-                .eq('company_id', companyId)
-                .gte('shift_date', new Date().toISOString().split('T')[0])
-                .order('shift_date', { ascending: true })
-                .order('start_time', { ascending: true })
-                .limit(10);
-
-            if (error) throw error;
-
-            if (!shifts || shifts.length === 0) {
-                shiftsList.innerHTML = `
-                    <div style="text-align: center; padding: 40px; color: #666;">
-                        <i class="fas fa-calendar" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
-                        <p>No upcoming shifts scheduled.</p>
-                    </div>
-                `;
-                return;
-            }
-
-            shiftsList.innerHTML = shifts.map(shift => {
-                const loc = shift.locations?.name || 'Unknown location';
-                const isOffered = !shift.staff_id;
-                const status = (shift.status || 'pending').toLowerCase();
-
-                const start = cs_shiftStart(shift.shift_date, shift.start_time);
-                const diffHours = (start.getTime() - cs_now().getTime()) / (1000 * 60 * 60);
-                const canCancel = diffHours >= 1 && !['cancelled','completed'].includes(status);
-
-                return `
-                    <div class="shift-item" data-shift-id="${shift.id}">
-                        <div class="shift-info">
-                            <h4>
-                                ${escapeHtml(loc)}
-                                ${shift.recurring_shift_id ? `<span class="offer-badge">RECURRING</span>` : ''}
-                                <span class="shift-status ${isOffered ? 'status-offered' : getShiftStatusClass(shift.status)}">
-                                    ${isOffered ? 'offered' : (shift.status || 'pending').replace('_',' ')}
-                                </span>
-                            </h4>
-                            <p>
-                                <i class="far fa-calendar"></i> ${formatDate(shift.shift_date)}
-                                • <i class="far fa-clock"></i> ${formatTime(shift.start_time)}
-                                • ${shift.duration || 0} hours
-                            </p>
-                            <p><i class="fas fa-user"></i> ${isOffered ? 'Offered' : escapeHtml(shift.staff?.name || shift.staff?.email || 'Employee')}</p>
-
-                            ${canCancel ? `
-                                <div class="shift-actions-employee" style="margin-top:12px;">
-                                    <button class="btn btn-sm btn-danger manager-cancel-btn" data-id="${shift.id}">
-                                        <i class="fas fa-ban"></i> Cancel Shift
-                                    </button>
-                                </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            shiftsList.querySelectorAll('.manager-cancel-btn').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    const id = btn.getAttribute('data-id');
-                    try {
-                        if (!confirm('Cancel this shift?')) return;
-                        await window.cancelShiftAsManager(id);
-                        showMessage('✅ Shift cancelled', 'success');
-                        await window.loadManagerUpcomingShifts();
-                    } catch (e) {
-                        showMessage('❌ ' + (e.message || 'Cancel failed'), 'error');
-                    }
-                });
-            });
-
-        } catch (err) {
-            console.error('Manager shifts override error:', err);
-            // fallback
-            try { await original(); } catch (_) {}
-        }
-    };
-
-    console.log('✅ Manager upcoming shifts overridden (recurring + cancel enabled)');
-}
-
-cs_overrideManagerUpcoming().catch(() => {});
+console.log('✅ Utils module loaded (globals attached)');
