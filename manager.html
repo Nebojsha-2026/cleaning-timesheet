@@ -17,44 +17,42 @@
         </div>
     </div>
 
-    <div class="container" style="display:none;">
+    <div class="container" style="display: none;">
         <!-- Header -->
-        <header class="header">
+        <header class="header" id="mainHeader">
             <div class="header-content">
-                <div class="header-left">
-                    <h1 id="appTitle"><i class="fas fa-clipboard-check"></i> Cleaning Timesheet</h1>
-                    <p id="currentCompanyName" class="subtitle">Your Company</p>
-                    <div class="header-stats">
-                        <div class="stat-badge">
-                            <i class="fas fa-calendar"></i>
-                            <span id="currentDate">Today</span>
-                        </div>
-                        <div class="stat-badge" id="connectionStatus">
-                            <i class="fas fa-wifi"></i>
-                            <span>Connecting...</span>
-                        </div>
-                    </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <img id="companyLogo" src="" alt="Company Logo" style="max-height: 48px; display: none;">
+                    <h1 id="appTitle"><i class="fas fa-broom"></i> Cleaning Timesheet</h1>
                 </div>
+                <p class="subtitle">Manager Dashboard • Manage your team & schedule</p>
 
-                <div class="header-right">
+                <div class="header-stats">
+                    <div class="stat-badge">
+                        <i class="fas fa-users"></i>
+                        <span id="currentCompanyName">Company loading...</span>
+                    </div>
+                    <div class="stat-badge">
+                        <i class="fas fa-calendar"></i>
+                        <span id="currentDate">Today</span>
+                    </div>
+                    <div class="stat-badge" id="connectionStatus">
+                        <i class="fas fa-wifi"></i>
+                        <span>Connecting...</span>
+                    </div>
+
+                    <!-- ✅ 3-line menu -->
                     <div class="user-menu">
-                        <button class="menu-btn" id="menuBtn" type="button" title="Menu">
+                        <button class="user-menu-button" title="Menu">
                             <i class="fas fa-bars"></i>
                         </button>
-
-                        <div class="dropdown" id="menuDropdown">
-                            <button type="button" onclick="showHelp()">
-                                <i class="fas fa-circle-question"></i> Help
-                            </button>
-                            <button type="button" onclick="showCompanySettings()">
-                                <i class="fas fa-gear"></i> Settings
-                            </button>
-                            <div class="divider"></div>
-                            <button type="button" class="danger" onclick="auth.logout()">
-                                <i class="fas fa-right-from-bracket"></i> Logout
-                            </button>
+                        <div class="user-menu-dropdown">
+                            <button onclick="showHelp()"><i class="fas fa-question-circle"></i> Help</button>
+                            <button onclick="showSettings()"><i class="fas fa-cog"></i> Settings</button>
+                            <button onclick="safeLogout()" class="danger"><i class="fas fa-sign-out-alt"></i> Logout</button>
                         </div>
                     </div>
+
                 </div>
             </div>
         </header>
@@ -78,7 +76,7 @@
             <div class="stat-card">
                 <div class="stat-icon"><i class="fas fa-clock"></i></div>
                 <div class="stat-info">
-                    <h3>Hours (30 days)</h3>
+                    <h3>Scheduled Hours (30d)</h3>
                     <div class="stat-value" id="statHours">0</div>
                 </div>
             </div>
@@ -93,6 +91,7 @@
 
         <!-- Two Column Layout -->
         <div class="two-column">
+            <!-- Left Column -->
             <div class="column">
                 <div class="card">
                     <div class="card-header">
@@ -108,8 +107,22 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-history"></i> Recent Activity</h2>
+                    </div>
+                    <div class="card-body">
+                        <div id="activityFeed">
+                            <p style="text-align:center; color:#666; padding:30px 0;">
+                                Activity log coming soon...
+                            </p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
+            <!-- Right Column -->
             <div class="column">
                 <div class="card">
                     <div class="card-header">
@@ -129,17 +142,9 @@
                                 <i class="fas fa-file-invoice-dollar"></i>
                                 <span>Timesheets</span>
                             </button>
-                            <button class="action-btn" onclick="viewLocations()">
-                                <i class="fas fa-map-marker-alt"></i>
-                                <span>Locations</span>
-                            </button>
                             <button class="action-btn" onclick="showCompanySettings()">
-                                <i class="fas fa-building"></i>
+                                <i class="fas fa-cog"></i>
                                 <span>Company Settings</span>
-                            </button>
-                            <button class="action-btn" onclick="showHelp()">
-                                <i class="fas fa-question-circle"></i>
-                                <span>Help</span>
                             </button>
                         </div>
                     </div>
@@ -147,20 +152,20 @@
 
                 <div class="card" id="companySettingsCard" style="display:none;">
                     <div class="card-header">
-                        <h2><i class="fas fa-paint-brush"></i> Company Branding</h2>
+                        <h2><i class="fas fa-building"></i> Company Settings</h2>
                     </div>
                     <div class="card-body">
                         <form id="companySettingsForm">
                             <div class="form-group">
-                                <label for="companyTitle">Custom App Title</label>
-                                <input type="text" id="companyTitle" placeholder="e.g. Worklynx Timesheets">
+                                <label for="companyTitle">Company / App Title</label>
+                                <input type="text" id="companyTitle" placeholder="Cleaning Timesheet" required>
                             </div>
                             <div class="form-group">
-                                <label for="primaryColor">Primary Color</label>
+                                <label>Primary Color</label>
                                 <input type="color" id="primaryColor" value="#667eea">
                             </div>
                             <div class="form-group">
-                                <label for="secondaryColor">Secondary Color</label>
+                                <label>Secondary Color</label>
                                 <input type="color" id="secondaryColor" value="#764ba2">
                             </div>
                             <div class="form-group">
@@ -171,7 +176,12 @@
                                     <option value="monthly">Monthly</option>
                                 </select>
                             </div>
-                            <button type="submit" class="btn btn-primary">
+                            <div class="form-group">
+                                <label for="logoUpload">Company Logo</label>
+                                <input type="file" id="logoUpload" accept="image/*">
+                                <div id="logoPreview" style="margin-top:10px;"></div>
+                            </div>
+                            <button type="submit" class="btn btn-primary" style="width:100%;">
                                 <i class="fas fa-save"></i> Save Settings
                             </button>
                         </form>
@@ -180,42 +190,19 @@
 
             </div>
         </div>
-
-        <footer class="footer">
-            <p id="footerCompany">Cleaning Timesheet Manager • Powered by Supabase</p>
-            <p class="version-info">Version <span id="versionNumber">1.0</span></p>
-        </footer>
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
-    <script src="modules/utils.js"></script>
-    <script src="modules/auth.js"></script>
-    <script src="modules/shifts.js"></script>
-    <script src="modules/timesheets.js"></script>
-    <script src="modules/locations.js"></script>
-    <script src="modules/entries.js"></script>
-    <script src="modules/employee-management.js"></script>
-
-    <script src="modules/manager-shifts.js"></script>
-    <script src="modules/cancel-shifts.js"></script>
-
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script type="module" src="modules/utils.js"></script>
+    <script type="module" src="modules/auth.js"></script>
+    <script type="module" src="modules/shifts.js"></script>
+    <script type="module" src="modules/timesheets.js"></script>
+    <script type="module" src="modules/locations.js"></script>
+    <script type="module" src="modules/entries.js"></script>
+    <script type="module" src="modules/employee-management.js"></script>
+    <script type="module" src="modules/manager-shifts.js"></script>
+    <script type="module" src="cancel-shifts.js"></script>
     <script src="script.js"></script>
-
-    <script>
-        // Dropdown toggle
-        (function () {
-            const btn = document.getElementById('menuBtn');
-            const dd = document.getElementById('menuDropdown');
-            if (!btn || !dd) return;
-
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                dd.classList.toggle('open');
-            });
-
-            document.addEventListener('click', () => dd.classList.remove('open'));
-        })();
-    </script>
 </body>
 </html>
