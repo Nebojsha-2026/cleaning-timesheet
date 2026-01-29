@@ -1139,16 +1139,216 @@
             }
         };
     }
+    window.showSettings = function () {
+        if (typeof window.showCompanySettings === 'function') {
+            window.showCompanySettings();
+        } else if (typeof window.showMessage === 'function') {
+            window.showMessage('Company settings are not available yet.', 'info');
+        }
+    };
 
-    if (typeof window.showSettings !== 'function') {
-        window.showSettings = function () {
-            if (typeof window.showMessage === 'function') window.showMessage('Settings – coming soon', 'info');
-        };
-    }
+    window.showHelp = function () {
+        if (typeof window.showModal !== 'function') {
+            alert('Help modal not available (utils.js).');
+            return;
+        }
 
-    if (typeof window.showHelp !== 'function') {
-        window.showHelp = function () {
-            if (typeof window.showMessage === 'function') window.showMessage('Help documentation – coming soon', 'info');
-        };
-    }
+        const helpHtml = `
+            <div class="modal-content">
+                <h2><i class="fas fa-life-ring"></i> Manager Help</h2>
+                <p style="color:#64748b; margin-top:6px;">
+                    Here are a few quick ways to keep your team moving.
+                </p>
+                <div class="summary-list" style="margin-top:16px;">
+                    <div class="summary-item">
+                        <div>
+                            <p class="summary-title">Invite staff quickly</p>
+                            <p class="summary-meta">Generate invite links and onboard cleaners in minutes.</p>
+                        </div>
+                        <button class="btn btn-outline" onclick="showInviteEmployeeModal()">Invite</button>
+                    </div>
+                    <div class="summary-item">
+                        <div>
+                            <p class="summary-title">Create or edit shifts</p>
+                            <p class="summary-meta">Assign shifts and adjust pay or hours before approval.</p>
+                        </div>
+                        <button class="btn btn-outline" onclick="showEditShiftsModal()">Edit shifts</button>
+                    </div>
+                    <div class="summary-item">
+                        <div>
+                            <p class="summary-title">Stay on top of payroll</p>
+                            <p class="summary-meta">Review timesheets and approve payments on time.</p>
+                        </div>
+                        <button class="btn btn-outline" onclick="viewAllTimesheets()">View</button>
+                    </div>
+                </div>
+                <div style="margin-top:20px; display:flex; gap:10px;">
+                    <button type="button" class="btn btn-primary" onclick="showCompanySettings()" style="flex:1;">
+                        <i class="fas fa-cog"></i> Company settings
+                    </button>
+                    <button type="button" class="btn" onclick="closeModal()" style="flex:1; background:#6c757d; color:white;">
+                        Close
+                    </button>
+                </div>
+            </div>
+        `;
+
+        window.showModal(helpHtml);
+    };
+
+    window.showEmployeesModal = async function () {
+        if (typeof window.showModal !== 'function') {
+            alert('Modal system not loaded (utils.js).');
+            return;
+        }
+
+        window.showModal(`
+            <div class="modal-content">
+                <h2><i class="fas fa-user-friends"></i> Employees</h2>
+                <p style="color:#64748b; margin-top:6px;">
+                    Active and invited employees linked to your company.
+                </p>
+                <div id="employeesList" class="summary-list" style="margin-top:16px;">
+                    <div class="loading-simple" style="padding:20px 0;">
+                        <div class="spinner-small"></div>
+                        Loading employees...
+                    </div>
+                </div>
+                <div style="margin-top:20px; display:flex; gap:10px;">
+                    <button type="button" class="btn btn-primary" onclick="showInviteEmployeeModal()" style="flex:1;">
+                        <i class="fas fa-user-plus"></i> Invite employee
+                    </button>
+                    <button type="button" class="btn" onclick="closeModal()" style="flex:1; background:#6c757d; color:white;">
+                        Close
+                    </button>
+                </div>
+            </div>
+        `);
+
+        if (!supabase) {
+            window.showMessage?.('Supabase not ready yet.', 'error');
+            return;
+        }
+
+        if (!currentCompanyId) {
+            window.showMessage?.('No company selected for this account.', 'error');
+            return;
+        }
+
+        try {
+            const { data, error } = await supabase
+                .from('staff')
+                .select('id, name, email, role, is_active, pay_frequency, hourly_rate')
+                .eq('company_id', currentCompanyId)
+                .order('name', { ascending: true });
+
+            if (error) throw error;
+
+            const list = document.getElementById('employeesList');
+            if (!list) return;
+
+            if (!data || data.length === 0) {
+                list.innerHTML = `
+                    <div class="summary-item">
+                        <div>
+                            <p class="summary-title">No employees yet</p>
+                            <p class="summary-meta">Invite your first employee to get started.</p>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            list.innerHTML = data
+                .map((employee) => {
+                    const name = employee.name || employee.email || 'Unnamed employee';
+                    const email = employee.email ? ` • ${employee.email}` : '';
+                    const role = employee.role ? employee.role : 'employee';
+                    const status = employee.is_active === false ? 'Inactive' : 'Active';
+                    const pay = employee.pay_frequency ? ` • ${employee.pay_frequency}` : '';
+                    const rate = employee.hourly_rate ? ` • $${employee.hourly_rate}/hr` : '';
+
+                    return `
+                        <div class="summary-item">
+                            <div>
+                                <p class="summary-title">${name}</p>
+                                <p class="summary-meta">${role}${email}${pay}${rate}</p>
+                            </div>
+                            <span class="pill ${employee.is_active === false ? 'pill-warning' : 'pill-success'}">
+                                ${status}
+                            </span>
+                        </div>
+                    `;
+                })
+                .join('');
+        } catch (err) {
+            console.error(err);
+            const list = document.getElementById('employeesList');
+            if (list) {
+                list.innerHTML = `
+                    <div class="summary-item">
+                        <div>
+                            <p class="summary-title">Unable to load employees</p>
+                            <p class="summary-meta">${err.message || 'Please try again later.'}</p>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+    };
+
+    window.showEditShiftsModal = function () {
+        if (typeof window.showModal !== 'function') {
+            alert('Modal system not loaded (utils.js).');
+            return;
+        }
+
+        const editHtml = `
+            <div class="modal-content">
+                <h2><i class="fas fa-pen-to-square"></i> Edit Shifts</h2>
+                <p style="color:#64748b; margin-top:6px;">
+                    Soon you will be able to update times, rates, and assignments from one screen.
+                </p>
+                <div class="summary-list" style="margin-top:16px;">
+                    <div class="summary-item">
+                        <div>
+                            <p class="summary-title">Update shift details</p>
+                            <p class="summary-meta">Change start times, hours, or pay rates.</p>
+                        </div>
+                    </div>
+                    <div class="summary-item">
+                        <div>
+                            <p class="summary-title">Assign & unassign employees</p>
+                            <p class="summary-meta">Move shifts between team members with ease.</p>
+                        </div>
+                    </div>
+                    <div class="summary-item">
+                        <div>
+                            <p class="summary-title">Track approvals</p>
+                            <p class="summary-meta">See who has confirmed or declined assignments.</p>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top:20px; display:flex; gap:10px;">
+                    <button type="button" class="btn btn-primary" onclick="showCreateShiftModal()" style="flex:1;">
+                        <i class="fas fa-plus-circle"></i> Create shift
+                    </button>
+                    <button type="button" class="btn" onclick="closeModal()" style="flex:1; background:#6c757d; color:white;">
+                        Close
+                    </button>
+                </div>
+            </div>
+        `;
+
+        window.showModal(editHtml);
+    };
+
+    window.safeLogout = function () {
+        if (window.auth && typeof window.auth.logout === 'function') {
+            window.auth.logout();
+        } else {
+            localStorage.clear();
+            window.location.href = 'login.html';
+        }
+    };
 })();
