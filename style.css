@@ -571,3 +571,25 @@ select {
 @media (min-width: 720px) {
     .modal-inline { grid-template-columns: 1fr 1fr; }
 }
+.user-menu { position: relative; display: inline-block; }
+.user-menu-button {
+  border: none; background: rgba(255,255,255,0.15);
+  color: white; padding: 10px 12px; border-radius: 10px;
+  cursor: pointer;
+}
+.user-menu-dropdown {
+  position: absolute; right: 0; top: 46px;
+  background: white; border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+  min-width: 180px; overflow: hidden;
+  display: none; z-index: 9999;
+}
+.user-menu-dropdown.open { display: block; }
+.user-menu-dropdown button {
+  width: 100%; text-align: left;
+  border: none; background: transparent;
+  padding: 12px 14px; cursor: pointer;
+  display: flex; gap: 10px; align-items: center;
+}
+.user-menu-dropdown button:hover { background: #f3f4f6; }
+.user-menu-dropdown button.danger { color: #dc3545; font-weight: 600; }
