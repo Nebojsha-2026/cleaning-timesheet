@@ -71,7 +71,7 @@ function ms_buildCreateShiftModal({ employees, locations }) {
     ).join('');
 
     const employeeCheckboxes = employees.map(e => `
-        <label style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #eee; border-radius:8px; margin-bottom:8px;">
+        <label style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid #eee; border-radius:10px; margin-bottom:8px;">
             <input type="checkbox" class="offerEmployeeCheckbox" value="${e.id}">
             <span>
                 <strong>${ms_escapeHtml(e.name || 'Employee')}</strong>
@@ -80,7 +80,6 @@ function ms_buildCreateShiftModal({ employees, locations }) {
         </label>
     `).join('');
 
-    // datalist for locations
     const datalist = (locations || []).map(l =>
         `<option value="${ms_escapeHtml(l.name)}"></option>`
     ).join('');
@@ -134,6 +133,26 @@ function ms_buildCreateShiftModal({ employees, locations }) {
         <div class="form-group">
           <label>Total Amount (AUD)</label>
           <input type="text" id="msTotal" readonly value="$0.00" />
+        </div>
+
+        <!-- ✅ Recurring Shift -->
+        <div class="form-group">
+          <label style="display:flex; align-items:center; gap:10px;">
+            <input type="checkbox" id="msRecurringEnabled">
+            Recurring Shift (Weekly)
+          </label>
+          <div id="msRecurringBlock" style="display:none; margin-top:10px;">
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+              ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d,i)=>`
+                <label style="display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid #eee; border-radius:10px;">
+                  <input type="checkbox" class="msDay" value="${i===6?0:i+1}"> ${d}
+                </label>
+              `).join('')}
+            </div>
+            <p style="color:#666; margin-top:8px; font-size:0.9rem;">
+              For now this saves the recurring template + creates this first shift. Later we’ll add auto-generation of future shifts.
+            </p>
+          </div>
         </div>
 
         <div class="form-group">
@@ -232,9 +251,34 @@ async function ms_createLocation({ company_id, name, hourly_rate, default_hours 
     return data;
 }
 
+async function ms_createRecurringShift({ company_id, location_id, selected_days, start_time, duration, notes }) {
+    const supabase = ms_getSupabase();
+
+    const payload = {
+        company_id,
+        location_id,
+        pattern: 'weekly',
+        selected_days: selected_days,
+        start_time,
+        duration: Number(duration),
+        notes: notes || null,
+        is_active: true
+    };
+
+    const { data, error } = await supabase
+        .from('recurring_shifts')
+        .insert([payload])
+        .select('id')
+        .single();
+
+    if (error) throw new Error(error.message);
+    return data.id;
+}
+
 async function ms_createShiftAndOffers({
     company_id,
     location_id,
+    recurring_shift_id,
     shift_date,
     start_time,
     duration,
@@ -250,6 +294,7 @@ async function ms_createShiftAndOffers({
     const baseShift = {
         company_id,
         location_id,
+        recurring_shift_id: recurring_shift_id || null,
         shift_date,
         start_time,
         duration: Number(duration),
@@ -318,8 +363,7 @@ window.showCreateShiftModal = async function () {
 
         window.showModal(ms_buildCreateShiftModal({ employees, locations }));
 
-        const cancelBtn = document.getElementById('msCancelBtn');
-        cancelBtn?.addEventListener('click', window.closeModal);
+        document.getElementById('msCancelBtn')?.addEventListener('click', window.closeModal);
 
         const durationInput = document.getElementById('msDuration');
         const rateInput = document.getElementById('msRate');
@@ -334,7 +378,14 @@ window.showCreateShiftModal = async function () {
         durationInput?.addEventListener('input', ms_recalcTotal);
         rateInput?.addEventListener('input', ms_recalcTotal);
 
-        // Location input: if matches existing location exactly, use its defaults
+        // Recurring UI
+        const recurringEnabled = document.getElementById('msRecurringEnabled');
+        const recurringBlock = document.getElementById('msRecurringBlock');
+        recurringEnabled?.addEventListener('change', () => {
+            recurringBlock.style.display = recurringEnabled.checked ? 'block' : 'none';
+        });
+
+        // Location input
         const locName = document.getElementById('msLocationName');
         const locIdHidden = document.getElementById('msLocationId');
 
@@ -346,7 +397,6 @@ window.showCreateShiftModal = async function () {
 
             if (match) {
                 locIdHidden.value = match.id;
-                // Pre-fill defaults if fields are blank
                 if (match.default_hours && (!durationInput.value || Number(durationInput.value) === 0)) {
                     durationInput.value = String(match.default_hours);
                 }
@@ -359,7 +409,7 @@ window.showCreateShiftModal = async function () {
             }
         });
 
-        // Toggle assign vs offer blocks
+        // Toggle assign vs offer
         const assignBlock = document.getElementById('msAssignBlock');
         const offerBlock = document.getElementById('msOfferBlock');
 
@@ -376,7 +426,7 @@ window.showCreateShiftModal = async function () {
             });
         });
 
-        // Offer to all checkbox
+        // Offer to all
         const offerAll = document.getElementById('msOfferAll');
         const offerChecks = () => Array.from(document.querySelectorAll('.offerEmployeeCheckbox'));
         offerAll?.addEventListener('change', () => {
@@ -387,8 +437,7 @@ window.showCreateShiftModal = async function () {
         }));
 
         // Submit
-        const form = document.getElementById('createShiftForm');
-        form?.addEventListener('submit', async (e) => {
+        document.getElementById('createShiftForm')?.addEventListener('submit', async (e) => {
             e.preventDefault();
 
             const submitBtn = document.getElementById('msSubmitBtn');
@@ -415,11 +464,9 @@ window.showCreateShiftModal = async function () {
 
                 const total_amount = duration * hourly_rate;
 
-                // Determine location_id: use existing match OR create new
-                let location_id = locIdHidden.value || '';
-
+                // location_id (existing or create)
+                let location_id = document.getElementById('msLocationId').value || '';
                 if (!location_id) {
-                    // try exact lookup to avoid duplicates with different casing
                     const existing = await ms_findLocationByName(company_id, locationName);
                     if (existing?.id) {
                         location_id = existing.id;
@@ -435,6 +482,28 @@ window.showCreateShiftModal = async function () {
                     }
                 }
 
+                // recurring
+                let recurring_shift_id = null;
+                if (document.getElementById('msRecurringEnabled').checked) {
+                    const selected_days = Array.from(document.querySelectorAll('.msDay'))
+                        .filter(cb => cb.checked)
+                        .map(cb => Number(cb.value));
+
+                    if (!selected_days.length) {
+                        throw new Error('Select at least one day for recurring shift.');
+                    }
+
+                    recurring_shift_id = await ms_createRecurringShift({
+                        company_id,
+                        location_id,
+                        selected_days,
+                        start_time,
+                        duration,
+                        notes
+                    });
+                }
+
+                // assignment
                 let assigned_staff_id = null;
                 let offered_staff_ids = [];
 
@@ -443,12 +512,13 @@ window.showCreateShiftModal = async function () {
                     if (!assigned_staff_id) throw new Error('Please select an employee to assign the shift to');
                 } else {
                     offered_staff_ids = offerChecks().filter(cb => cb.checked).map(cb => cb.value);
-                    if (offered_staff_ids.length === 0) throw new Error('Select at least one employee to offer the shift to');
+                    if (!offered_staff_ids.length) throw new Error('Select at least one employee to offer the shift to');
                 }
 
                 const shiftId = await ms_createShiftAndOffers({
                     company_id,
                     location_id,
+                    recurring_shift_id,
                     shift_date,
                     start_time,
                     duration,
