@@ -2,24 +2,21 @@
 console.log('🗓️ Manager Shifts module loading...');
 
 function ms_getSupabase() {
-    return window.supabaseClient || window.supabase;
+    return window.supabaseClient;
 }
 
 async function ms_getManagerProfile() {
     const supabase = ms_getSupabase();
-    if (!supabase) throw new Error('Supabase not ready');
-
-    const { data: { user }, error: uerr } = await supabase.auth.getUser();
-    if (uerr) throw new Error(uerr.message);
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not logged in');
 
-    const { data: profile, error: perr } = await supabase
+    const { data: profile, error } = await supabase
         .from('profiles')
         .select('company_id, role')
         .eq('id', user.id)
         .single();
 
-    if (perr) throw new Error('Profile lookup failed: ' + perr.message);
+    if (error) throw new Error('Profile lookup failed: ' + error.message);
     if (!profile?.company_id) throw new Error('No company linked to your account');
     if (profile.role !== 'manager') throw new Error('Only managers can create shifts');
 
@@ -135,7 +132,6 @@ function ms_buildCreateShiftModal({ employees, locations }) {
           <input type="text" id="msTotal" readonly value="$0.00" />
         </div>
 
-        <!-- ✅ Recurring Shift -->
         <div class="form-group">
           <label style="display:flex; align-items:center; gap:10px;">
             <input type="checkbox" id="msRecurringEnabled">
@@ -150,7 +146,7 @@ function ms_buildCreateShiftModal({ employees, locations }) {
               `).join('')}
             </div>
             <p style="color:#666; margin-top:8px; font-size:0.9rem;">
-              For now this saves the recurring template + creates this first shift. Later we’ll add auto-generation of future shifts.
+              This saves the recurring template + creates this first shift.
             </p>
           </div>
         </div>
@@ -180,26 +176,17 @@ function ms_buildCreateShiftModal({ employees, locations }) {
             <option value="">Select employee...</option>
             ${employeeOptions}
           </select>
-          <p style="color:#666; margin-top:6px; font-size:0.9rem;">
-            Assigned shifts are immediately confirmed.
-          </p>
         </div>
 
         <div id="msOfferBlock" class="form-group" style="display:none;">
           <label>Offer To</label>
-
           <label style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
             <input type="checkbox" id="msOfferAll">
             Offer to all employees
           </label>
-
           <div id="msOfferList" style="max-height:220px; overflow:auto; padding-right:6px;">
             ${employeeCheckboxes || '<div style="color:#666;">No employees found yet.</div>'}
           </div>
-
-          <p style="color:#666; margin-top:8px; font-size:0.9rem;">
-            First employee to accept gets the shift. You will get a notification.
-          </p>
         </div>
 
         <div style="margin-top:18px; display:flex; gap:10px; flex-wrap:wrap;">
@@ -315,32 +302,29 @@ async function ms_createShiftAndOffers({
     const { data: inserted, error: insErr } = await supabase
         .from('shifts')
         .insert([baseShift])
-        .select('id')
+        .select('id, recurring_shift_id')
         .single();
 
     if (insErr) throw new Error(insErr.message);
-    const shiftId = inserted.id;
 
+    // NOTE: Offering employees requires shift_offers table - assumed existing from previous steps.
     if (mode === 'offer') {
         if (!offered_staff_ids || offered_staff_ids.length === 0) {
             throw new Error('Please select at least one employee to offer the shift to.');
         }
 
         const rows = offered_staff_ids.map(staffId => ({
-            shift_id: shiftId,
+            shift_id: inserted.id,
             company_id,
             staff_id: staffId,
             status: 'offered'
         }));
 
-        const { error: offerErr } = await supabase
-            .from('shift_offers')
-            .insert(rows);
-
+        const { error: offerErr } = await supabase.from('shift_offers').insert(rows);
         if (offerErr) throw new Error(offerErr.message);
     }
 
-    return shiftId;
+    return inserted.id;
 }
 
 window.showCreateShiftModal = async function () {
@@ -378,14 +362,12 @@ window.showCreateShiftModal = async function () {
         durationInput?.addEventListener('input', ms_recalcTotal);
         rateInput?.addEventListener('input', ms_recalcTotal);
 
-        // Recurring UI
         const recurringEnabled = document.getElementById('msRecurringEnabled');
         const recurringBlock = document.getElementById('msRecurringBlock');
         recurringEnabled?.addEventListener('change', () => {
             recurringBlock.style.display = recurringEnabled.checked ? 'block' : 'none';
         });
 
-        // Location input
         const locName = document.getElementById('msLocationName');
         const locIdHidden = document.getElementById('msLocationId');
 
@@ -409,7 +391,6 @@ window.showCreateShiftModal = async function () {
             }
         });
 
-        // Toggle assign vs offer
         const assignBlock = document.getElementById('msAssignBlock');
         const offerBlock = document.getElementById('msOfferBlock');
 
@@ -426,7 +407,6 @@ window.showCreateShiftModal = async function () {
             });
         });
 
-        // Offer to all
         const offerAll = document.getElementById('msOfferAll');
         const offerChecks = () => Array.from(document.querySelectorAll('.offerEmployeeCheckbox'));
         offerAll?.addEventListener('change', () => {
@@ -436,7 +416,6 @@ window.showCreateShiftModal = async function () {
             if (!cb.checked) offerAll.checked = false;
         }));
 
-        // Submit
         document.getElementById('createShiftForm')?.addEventListener('submit', async (e) => {
             e.preventDefault();
 
@@ -464,7 +443,7 @@ window.showCreateShiftModal = async function () {
 
                 const total_amount = duration * hourly_rate;
 
-                // location_id (existing or create)
+                // location_id
                 let location_id = document.getElementById('msLocationId').value || '';
                 if (!location_id) {
                     const existing = await ms_findLocationByName(company_id, locationName);
@@ -478,7 +457,7 @@ window.showCreateShiftModal = async function () {
                             default_hours: duration
                         });
                         location_id = created.id;
-                        window.showMessage?.(`✅ Location created: ${created.name}`, 'success');
+                        showMessage(`✅ Location created: ${created.name}`, 'success');
                     }
                 }
 
@@ -489,9 +468,7 @@ window.showCreateShiftModal = async function () {
                         .filter(cb => cb.checked)
                         .map(cb => Number(cb.value));
 
-                    if (!selected_days.length) {
-                        throw new Error('Select at least one day for recurring shift.');
-                    }
+                    if (!selected_days.length) throw new Error('Select at least one day for recurring shift.');
 
                     recurring_shift_id = await ms_createRecurringShift({
                         company_id,
@@ -509,10 +486,10 @@ window.showCreateShiftModal = async function () {
 
                 if (mode === 'assign') {
                     assigned_staff_id = document.getElementById('msAssignEmployee').value;
-                    if (!assigned_staff_id) throw new Error('Please select an employee to assign the shift to');
+                    if (!assigned_staff_id) throw new Error('Please select an employee');
                 } else {
                     offered_staff_ids = offerChecks().filter(cb => cb.checked).map(cb => cb.value);
-                    if (!offered_staff_ids.length) throw new Error('Select at least one employee to offer the shift to');
+                    if (!offered_staff_ids.length) throw new Error('Select at least one employee');
                 }
 
                 const shiftId = await ms_createShiftAndOffers({
@@ -530,18 +507,21 @@ window.showCreateShiftModal = async function () {
                     offered_staff_ids
                 });
 
-                window.showMessage?.('✅ Shift created!', 'success');
+                showMessage('✅ Shift created!', 'success');
                 window.closeModal();
 
-                if (typeof window.refreshShifts === 'function') {
+                // ✅ refresh manager list immediately (no full page refresh)
+                if (typeof window.loadManagerUpcomingShifts === 'function') {
+                    await window.loadManagerUpcomingShifts();
+                } else if (typeof window.refreshShifts === 'function') {
                     await window.refreshShifts();
                 }
 
-                console.log('Shift created:', shiftId);
+                console.log('Shift created:', shiftId, 'Recurring:', !!recurring_shift_id);
 
             } catch (err) {
                 console.error(err);
-                window.showMessage?.('❌ ' + (err.message || 'Error creating shift'), 'error');
+                showMessage('❌ ' + (err.message || 'Error creating shift'), 'error');
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = original;
@@ -550,7 +530,7 @@ window.showCreateShiftModal = async function () {
 
     } catch (err) {
         console.error(err);
-        window.showMessage?.('❌ ' + (err.message || 'Could not open create shift'), 'error');
+        showMessage('❌ ' + (err.message || 'Could not open create shift'), 'error');
     }
 };
 
