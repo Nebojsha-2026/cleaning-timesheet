@@ -505,92 +505,7 @@
                 setupTimesheetForm();
             }
         } catch (err) {
-            console.error('Error loading employee data:', err);
-        }
-    }
-
-    async function updateEmployeeStats() {
-        try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
-
-            const { data: staff, error: staffError } = await supabase
-                .from('staff')
-                .select('id, hourly_rate')
-                .eq('user_id', user.id)
-                .single();
-
-            if (staffError) {
-                console.warn('No staff record found:', staffError.message);
-                return;
-            }
-
-            const { data: completedShifts, error: shiftsError } = await supabase
-                .from('shifts')
-                .select('duration, locations(hourly_rate)')
-                .eq('staff_id', staff.id)
-                .eq('status', 'completed');
-
-            let completedCount = 0;
-            let totalEarnings = 0;
-
-            if (!shiftsError && completedShifts) {
-                completedCount = completedShifts.length;
-                completedShifts.forEach(shift => {
-                    const rate = shift.locations?.hourly_rate || staff.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE;
-                    const hours = parseFloat(shift.duration) || 0;
-                    totalEarnings += hours * rate;
-                });
-            }
-
-            const { count: locationCount } = await supabase
-                .from('locations')
-                .select('*', { count: 'exact', head: true })
-                .eq('is_active', true);
-
-            const { count: timesheetCount } = await supabase
-                .from('timesheets')
-                .select('*', { count: 'exact', head: true })
-                .eq('staff_id', staff.id);
-
-            const statsCards = document.querySelectorAll('.stat-card');
-            if (statsCards.length >= 4) {
-                statsCards[0].innerHTML = `
-                    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
-                    <div class="stat-info">
-                        <h3>Completed Shifts</h3>
-                        <div class="stat-value">${completedCount || 0}</div>
-                    </div>
-                `;
-
-                statsCards[1].innerHTML = `
-                    <div class="stat-icon"><i class="fas fa-map-marker-alt"></i></div>
-                    <div class="stat-info">
-                        <h3>Locations</h3>
-                        <div class="stat-value">${locationCount || 0}</div>
-                    </div>
-                `;
-
-                statsCards[2].innerHTML = `
-                    <div class="stat-icon"><i class="fas fa-file-invoice-dollar"></i></div>
-                    <div class="stat-info">
-                        <h3>Timesheets</h3>
-                        <div class="stat-value">${timesheetCount || 0}</div>
-                    </div>
-                `;
-
-                statsCards[3].innerHTML = `
-                    <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
-                    <div class="stat-info">
-                        <h3>Total Earned</h3>
-                        <div class="stat-value">$${totalEarnings.toFixed(2)}</div>
-                    </div>
-                `;
-
-                statsCards.forEach(card => card.classList.remove('loading'));
-            }
-        } catch (err) {
-            console.error('Error updating employee stats:', err);
+            console.error('Error loading employee dashboard:', err);
         }
     }
 
@@ -598,134 +513,108 @@
         const form = document.getElementById('timesheetForm');
         if (!form) return;
 
-        loadTimesheetPeriods();
+        setupAutoDateRange();
+        updatePayFrequency();
+        updateAutoDates();
 
-        const emailCheckbox = document.getElementById('sendEmail');
-        if (emailCheckbox) {
-            emailCheckbox.addEventListener('change', function () {
-                const emailGroup = document.getElementById('emailGroup');
-                if (emailGroup) {
-                    emailGroup.style.display = this.checked ? 'block' : 'none';
-                }
-            });
-        }
+        const periodSelect = document.getElementById('timesheetPeriod');
+        periodSelect.addEventListener('change', () => {
+            updateAutoDates();
+            toggleCustomDates();
+        });
 
         const customDatesBtn = document.getElementById('customDatesBtn');
         if (customDatesBtn) {
             customDatesBtn.addEventListener('click', showCustomDatesPopup);
         }
 
+        const sendEmailCheckbox = document.getElementById('sendEmail');
+        if (sendEmailCheckbox) {
+            sendEmailCheckbox.addEventListener('change', function () {
+                const emailBox = document.getElementById('emailBox');
+                emailBox.style.display = this.checked ? 'block' : 'none';
+            });
+        }
+
         form.addEventListener('submit', handleGenerateTimesheet);
     }
 
-    async function loadTimesheetPeriods() {
-        const container = document.getElementById('periodSelectionBlocks');
-        if (!container) return;
+    function setupAutoDateRange() {
+        const autoStart = document.getElementById('autoStartDate');
+        const autoEnd = document.getElementById('autoEndDate');
 
+        if (autoStart && autoEnd) {
+            const today = new Date();
+            const startDate = getStartOfWeek(today);
+            const endDate = getEndOfWeek(today);
+
+            autoStart.textContent = formatDate(startDate);
+            autoEnd.textContent = formatDate(endDate);
+        }
+    }
+
+    async function updatePayFrequency() {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
             const { data: staff } = await supabase
                 .from('staff')
-                .select('pay_frequency, timesheet_weekly, timesheet_fortnightly, timesheet_monthly, timesheet_custom')
+                .select('pay_frequency')
                 .eq('user_id', user.id)
                 .single();
 
-            const periods = [];
-
-            if (staff?.timesheet_weekly) periods.push({ id: 'weekly', label: 'This Week', icon: 'fa-calendar-week' });
-            if (staff?.timesheet_fortnightly) periods.push({ id: 'fortnightly', label: 'Fortnight', icon: 'fa-calendar-alt' });
-            if (staff?.timesheet_monthly) periods.push({ id: 'monthly', label: 'This Month', icon: 'fa-calendar' });
-            if (staff?.timesheet_custom) periods.push({ id: 'custom', label: 'Custom', icon: 'fa-calendar-day' });
-
-            if (periods.length === 0) {
-                periods.push(
-                    { id: 'weekly', label: 'This Week', icon: 'fa-calendar-week' },
-                    { id: 'fortnightly', label: 'Fortnight', icon: 'fa-calendar-alt' },
-                    { id: 'monthly', label: 'This Month', icon: 'fa-calendar' },
-                    { id: 'custom', label: 'Custom', icon: 'fa-calendar-day' }
-                );
-            }
-
-            let html = '';
-            periods.forEach(period => {
-                html += `
-                    <div class="period-block" data-period="${period.id}">
-                        <i class="fas ${period.icon}"></i>
-                        <span>${period.label}</span>
-                    </div>
-                `;
-            });
-
-            container.innerHTML = html;
-
-            document.querySelectorAll('.period-block').forEach(block => {
-                block.addEventListener('click', function () {
-                    const period = this.getAttribute('data-period');
-                    selectTimesheetPeriod(period);
-                });
-            });
-
-            if (periods.length > 0) {
-                selectTimesheetPeriod(periods[0].id);
-            }
-
+            const freq = staff?.pay_frequency || 'weekly';
+            const payFrequencyEl = document.getElementById('payFrequency');
+            if (payFrequencyEl) payFrequencyEl.textContent = freq.charAt(0).toUpperCase() + freq.slice(1);
         } catch (err) {
-            console.error('Error loading timesheet periods:', err);
-            container.innerHTML = '<div class="loading-simple">Error loading periods</div>';
+            console.error('Error loading pay frequency:', err);
         }
     }
 
-    function selectTimesheetPeriod(period) {
-        document.querySelectorAll('.period-block').forEach(block => {
-            block.classList.toggle('selected', block.getAttribute('data-period') === period);
-        });
+    function updateAutoDates() {
+        const period = document.getElementById('timesheetPeriod')?.value || 'weekly';
+        const today = new Date();
+        let startDate, endDate;
 
-        const hidden = document.getElementById('timesheetPeriod');
-        if (hidden) hidden.value = period;
+        switch (period) {
+            case 'weekly':
+                startDate = getStartOfWeek(today);
+                endDate = getEndOfWeek(today);
+                break;
+            case 'fortnightly':
+                startDate = getStartOfFortnight(today);
+                endDate = getEndOfFortnight(today);
+                break;
+            case 'monthly':
+                startDate = getStartOfMonth(today);
+                endDate = getEndOfMonth(today);
+                break;
+            default:
+                startDate = new Date(today);
+                startDate.setDate(today.getDate() - 7);
+                endDate = today;
+        }
 
-        const customDatesSection = document.getElementById('customDatesSection');
-        const autoDatesSection = document.getElementById('autoDatesSection');
+        const startDateEl = document.getElementById('autoStartDate');
+        const endDateEl = document.getElementById('autoEndDate');
+        const startInput = document.getElementById('startDate');
+        const endInput = document.getElementById('endDate');
+
+        if (startDateEl) startDateEl.textContent = formatDate(startDate);
+        if (endDateEl) endDateEl.textContent = formatDate(endDate);
+        if (startInput) startInput.value = startDate.toISOString().split('T')[0];
+        if (endInput) endInput.value = endDate.toISOString().split('T')[0];
+    }
+
+    function toggleCustomDates() {
+        const period = document.getElementById('timesheetPeriod').value;
+        const customBtn = document.getElementById('customDatesBtn');
 
         if (period === 'custom') {
-            if (customDatesSection) customDatesSection.style.display = 'block';
-            if (autoDatesSection) autoDatesSection.style.display = 'none';
+            customBtn.style.display = 'inline-block';
         } else {
-            if (customDatesSection) customDatesSection.style.display = 'none';
-            if (autoDatesSection) autoDatesSection.style.display = 'block';
-
-            const today = new Date();
-            let startDate, endDate;
-
-            switch (period) {
-                case 'weekly':
-                    startDate = getStartOfWeek(today);
-                    endDate = getEndOfWeek(today);
-                    break;
-                case 'fortnightly':
-                    startDate = getStartOfFortnight(today);
-                    endDate = getEndOfFortnight(today);
-                    break;
-                case 'monthly':
-                    startDate = getStartOfMonth(today);
-                    endDate = getEndOfMonth(today);
-                    break;
-                default:
-                    startDate = new Date(today);
-                    startDate.setDate(today.getDate() - 7);
-                    endDate = today;
-            }
-
-            const startDateEl = document.getElementById('autoStartDate');
-            const endDateEl = document.getElementById('autoEndDate');
-            const startInput = document.getElementById('startDate');
-            const endInput = document.getElementById('endDate');
-
-            if (startDateEl) startDateEl.textContent = formatDate(startDate);
-            if (endDateEl) endDateEl.textContent = formatDate(endDate);
-            if (startInput) startInput.value = startDate.toISOString().split('T')[0];
-            if (endInput) endInput.value = endDate.toISOString().split('T')[0];
+            customBtn.style.display = 'none';
         }
     }
 
@@ -818,61 +707,51 @@
 
             const { data: staff, error: staffError } = await supabase
                 .from('staff')
-                .select('id')
+                .select('id, company_id, hourly_rate, pay_frequency')
                 .eq('user_id', user.id)
                 .single();
 
-            if (staffError) throw new Error('Staff record not found');
+            if (staffError || !staff) throw new Error('Staff record not found');
 
             const { data: entries, error: entriesError } = await supabase
                 .from('entries')
-                .select(`*, locations (name, hourly_rate)`)
+                .select('*')
                 .eq('staff_id', staff.id)
                 .gte('work_date', startDate)
-                .lte('work_date', endDate)
-                .order('work_date', { ascending: true });
+                .lte('work_date', endDate);
 
-            if (entriesError) throw entriesError;
-            if (!entries || entries.length === 0) throw new Error('No entries found for selected period');
+            if (entriesError) throw new Error('Failed to load entries');
 
-            const totalHours = entries.reduce((sum, e) => sum + parseFloat(e.hours), 0);
-            const totalEarnings = entries.reduce((sum, e) => {
-                const rate = e.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE;
-                return sum + (parseFloat(e.hours) * rate);
-            }, 0);
+            const totalHours = entries.reduce((sum, entry) => sum + (parseFloat(entry.hours) || 0), 0);
+            const totalEarnings = totalHours * (parseFloat(staff.hourly_rate) || CONFIG.DEFAULT_HOURLY_RATE);
 
-            const refNumber = 'TS' + new Date().getTime().toString().slice(-8);
+            const refNumber = `TS-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
-            const insertData = {
-                company_id: currentCompanyId,
-                staff_id: staff.id,
-                ref_number: refNumber,
-                start_date: startDate,
-                end_date: endDate,
-                total_hours: totalHours,
-                total_earnings: totalEarnings,
-                status: 'generated'
-            };
+            const { error: insertError } = await supabase
+                .from('timesheets')
+                .insert({
+                    company_id: staff.company_id,
+                    staff_id: staff.id,
+                    ref_number: refNumber,
+                    start_date: startDate,
+                    end_date: endDate,
+                    total_hours: totalHours,
+                    total_earnings: totalEarnings,
+                    status: 'generated',
+                    email_address: emailAddress,
+                    email_sent: false
+                });
 
-            if (sendEmail && emailAddress) {
-                insertData.email_address = emailAddress;
-                insertData.email_sent = false;
-            }
+            if (insertError) throw new Error('Failed to save timesheet');
 
-            const { error: tsError } = await supabase.from('timesheets').insert([insertData]);
-            if (tsError) throw tsError;
+            if (typeof window.showMessage === 'function') window.showMessage(`✅ Timesheet ${refNumber} generated!`, 'success');
 
-            if (typeof window.showMessage === 'function') {
-                window.showMessage(`✅ Timesheet ${refNumber} generated!`, 'success');
-            }
-            await updateEmployeeStats();
+            button.innerHTML = originalText;
+            button.disabled = false;
 
         } catch (error) {
-            console.error('❌ Timesheet generation error:', error);
-            if (typeof window.showMessage === 'function') {
-                window.showMessage('❌ Error: ' + error.message, 'error');
-            }
-        } finally {
+            console.error(error);
+            if (typeof window.showMessage === 'function') window.showMessage('❌ Error: ' + error.message, 'error');
             button.innerHTML = originalText;
             button.disabled = false;
         }
@@ -880,46 +759,13 @@
 
     async function testConnection() {
         try {
-            console.log('🔌 Testing Supabase connection...');
-            const { error } = await supabase
-                .from('locations')
-                .select('count', { count: 'exact', head: true });
-
+            const { error } = await supabase.from('companies').select('id').limit(1);
             if (error) throw error;
-
-            console.log('✅ Database connection successful');
-
-            const statusDiv = document.getElementById('connectionStatus');
-            if (statusDiv) {
-                statusDiv.innerHTML = '<i class="fas fa-wifi"></i><span>Connected</span>';
-                statusDiv.style.color = '#28a745';
-            }
-
-            const apiStatus = document.getElementById('apiStatus');
-            if (apiStatus) {
-                apiStatus.textContent = 'Connected';
-                apiStatus.style.color = '#28a745';
-            }
-
-            const lastUpdated = document.getElementById('lastUpdated');
-            if (lastUpdated) lastUpdated.textContent = new Date().toLocaleTimeString();
-
+            updateConnectionStatus(true);
             return true;
-        } catch (error) {
-            console.error('❌ Database connection failed:', error);
-
-            const statusDiv = document.getElementById('connectionStatus');
-            if (statusDiv) {
-                statusDiv.innerHTML = '<i class="fas fa-wifi"></i><span>Disconnected</span>';
-                statusDiv.style.color = '#dc3545';
-            }
-
-            const apiStatus = document.getElementById('apiStatus');
-            if (apiStatus) {
-                apiStatus.textContent = 'Disconnected';
-                apiStatus.style.color = '#dc3545';
-            }
-
+        } catch (err) {
+            console.warn('Connection test failed:', err.message);
+            updateConnectionStatus(false);
             return false;
         }
     }
@@ -1139,64 +985,114 @@
             }
         };
     }
+
     window.showSettings = function () {
-    if (typeof window.showModal !== 'function') {
-        if (typeof window.showMessage === 'function') {
-            window.showMessage('Settings modal not available yet.', 'info');
+        if (typeof window.showModal !== 'function') {
+            if (typeof window.showCompanySettings === 'function') {
+                window.showCompanySettings();
+            } else if (typeof window.showMessage === 'function') {
+                window.showMessage('Settings modal not available yet.', 'info');
+            }
+            return;
         }
-        return;
-    }
 
-    const settingsCard = document.getElementById('companySettingsCard');
-    const settingsForm = document.getElementById('companySettingsForm');
+        const settingsCard = document.getElementById('companySettingsCard');
+        const settingsForm = document.getElementById('companySettingsForm');
 
-    if (!settingsCard || !settingsForm) {
-        if (typeof window.showMessage === 'function') {
-            window.showMessage('Company settings are not available yet.', 'info');
+        if (!settingsCard || !settingsForm) {
+            if (typeof window.showMessage === 'function') {
+                window.showMessage('Company settings are not available yet.', 'info');
+            }
+            return;
         }
-        return;
-    }
 
-    const originalParent = settingsForm.parentElement;
-    const placeholder = document.createElement('div');
-    placeholder.dataset.settingsPlaceholder = 'true';
-    originalParent.insertBefore(placeholder, settingsForm);
+        const originalParent = settingsForm.parentElement;
+        const placeholder = document.createElement('div');
+        placeholder.dataset.settingsPlaceholder = 'true';
+        originalParent.insertBefore(placeholder, settingsForm);
 
-    window.showModal(`
-        <div class="modal-content">
-            <h2><i class="fas fa-building"></i> Company Settings</h2>
-            <p style="color:#64748b; margin-top:6px;">
-                Update branding, colors, and default pay settings for your company.
-            </p>
-            <div id="settingsModalBody" style="margin-top:16px;"></div>
-            <div style="margin-top:20px;">
-                <button type="button" class="btn" onclick="closeModal()" style="width:100%; background:#6c757d; color:white;">
-                    Close
-                </button>
+        window.showModal(`
+            <div class="modal-content">
+                <h2><i class="fas fa-building"></i> Company Settings</h2>
+                <p style="color:#64748b; margin-top:6px;">
+                    Update branding, colors, and default pay settings for your company.
+                </p>
+                <div id="settingsModalBody" style="margin-top:16px;"></div>
+                <div style="margin-top:20px;">
+                    <button type="button" class="btn" onclick="closeModal()" style="width:100%; background:#6c757d; color:white;">
+                        Close
+                    </button>
+                </div>
             </div>
-        </div>
-    `);
+        `);
 
-    const modalBody = document.getElementById('settingsModalBody');
-    if (modalBody) modalBody.appendChild(settingsForm);
+        const modalBody = document.getElementById('settingsModalBody');
+        if (modalBody) modalBody.appendChild(settingsForm);
 
-    const restoreForm = () => {
-        const target = document.querySelector('[data-settings-placeholder="true"]');
-        if (target) {
-            target.replaceWith(settingsForm);
-        } else if (originalParent) {
-            originalParent.appendChild(settingsForm);
-        }
+        const restoreForm = () => {
+            const target = document.querySelector('[data-settings-placeholder="true"]');
+            if (target) {
+                target.replaceWith(settingsForm);
+            } else if (originalParent) {
+                originalParent.appendChild(settingsForm);
+            }
+        };
+
+        const existingClose = window.closeModal;
+        window.closeModal = function () {
+            restoreForm();
+            if (typeof existingClose === 'function') {
+                existingClose();
+            }
+            window.closeModal = existingClose;
+        };
     };
 
-    const existingClose = window.closeModal;
-    window.closeModal = function () {
-        restoreForm();
-        if (typeof existingClose === 'function') {
-            existingClose();
+    window.showHelp = function () {
+        if (typeof window.showModal !== 'function') {
+            alert('Help modal not available (utils.js).');
+            return;
         }
-        window.closeModal = existingClose;
-    };
+
+        const helpHtml = `
+            <div class="modal-content">
+                <h2><i class="fas fa-life-ring"></i> Manager Help</h2>
+                <p style="color:#64748b; margin-top:6px;">
+                    Here are a few quick ways to keep your team moving.
+                </p>
+                <div class="summary-list" style="margin-top:16px;">
+                    <div class="summary-item">
+                        <div>
+                            <p class="summary-title">Invite staff quickly</p>
+                            <p class="summary-meta">Generate invite links and onboard cleaners in minutes.</p>
+                        </div>
+                        <button class="btn btn-outline" onclick="showInviteEmployeeModal()">Invite</button>
+                    </div>
+                    <div class="summary-item">
+                        <div>
+                            <p class="summary-title">Create or edit shifts</p>
+                            <p class="summary-meta">Assign shifts and adjust pay or hours before approval.</p>
+                        </div>
+                        <button class="btn btn-outline" onclick="showEditShiftsModal()">Edit shifts</button>
+                    </div>
+                    <div class="summary-item">
+                        <div>
+                            <p class="summary-title">Stay on top of payroll</p>
+                            <p class="summary-meta">Review timesheets and approve payments on time.</p>
+                        </div>
+                        <button class="btn btn-outline" onclick="viewAllTimesheets()">View</button>
+                    </div>
+                </div>
+                <div style="margin-top:20px; display:flex; gap:10px;">
+                    <button type="button" class="btn btn-primary" onclick="showCompanySettings()" style="flex:1;">
+                        <i class="fas fa-cog"></i> Company settings
+                    </button>
+                    <button type="button" class="btn" onclick="closeModal()" style="flex:1; background:#6c757d; color:white;">
+                        Close
+                    </button>
+                </div>
+            </div>
+        `;
 
         window.showModal(helpHtml);
     };
@@ -1357,4 +1253,3 @@
         }
     };
 })();
-
