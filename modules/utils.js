@@ -184,5 +184,12 @@ async function testConnection() {
         return false;
     }
 }
+// --- Ensure utilities are globally accessible (needed by script.js and other modules) ---
+window.showMessage = window.showMessage || showMessage;
+window.showModal   = window.showModal   || showModal;
+window.closeModal  = window.closeModal  || closeModal;
+
+// Optional (handy elsewhere)
+window.escapeHtml  = window.escapeHtml  || escapeHtml;
 
 console.log('✅ Utils module loaded');
