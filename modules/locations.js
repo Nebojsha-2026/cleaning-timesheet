@@ -49,19 +49,6 @@ async function loadLocations() {
 
 // Create location datalist
 function createLocationDatalist() {
-    const input = document.getElementById('location');
-    if (!input) return null;
-
-    // If it already exists, return it
-    const existing = document.getElementById('locationList');
-    if (existing) return existing;
-
-    const datalist = document.createElement('datalist');
-    datalist.id = 'locationList';
-    input.setAttribute('list', 'locationList');
-    document.body.appendChild(datalist);
-    return datalist;
-}
 
 // Find or create location
 async function findOrCreateLocation(name, defaultHours = 2.0, hourlyRate = window.CONFIG.DEFAULT_HOURLY_RATE) {
