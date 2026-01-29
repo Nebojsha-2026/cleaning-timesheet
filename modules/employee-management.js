@@ -5,12 +5,26 @@ function getSupabase() {
     return window.supabaseClient || window.supabase;
 }
 
-function getCompanyId() {
-    // Prefer auth module if present
-    if (window.auth && typeof window.auth.getCurrentCompanyId === 'function') {
-        return window.auth.getCurrentCompanyId();
-    }
-    return localStorage.getItem('cleaning_timesheet_company_id') || localStorage.getItem('cleaning_timesheet_company') || null;
+async function getManagerCompanyIdStrict() {
+    const supabase = getSupabase();
+    if (!supabase) throw new Error('Supabase not ready');
+
+    const { data: { user }, error: userErr } = await supabase.auth.getUser();
+    if (userErr) throw new Error(userErr.message);
+    if (!user) throw new Error('Not logged in');
+
+    // Pull company/role from profiles (this is what your RLS policies are based on)
+    const { data: profile, error: profileErr } = await supabase
+        .from('profiles')
+        .select('company_id, role')
+        .eq('id', user.id)
+        .single();
+
+    if (profileErr) throw new Error('Profile lookup failed: ' + profileErr.message);
+    if (!profile?.company_id) throw new Error('Your account has no company_id. Please log out and log in again.');
+    if ((profile.role || '').toLowerCase() !== 'manager') throw new Error('You must be a manager to invite employees.');
+
+    return profile.company_id;
 }
 
 function makeToken(length = 48) {
@@ -22,18 +36,24 @@ function makeToken(length = 48) {
 
 async function countPendingInvites() {
     const supabase = getSupabase();
-    const companyId = getCompanyId();
-    if (!supabase || !companyId) return;
+    if (!supabase) return;
 
-    const { count, error } = await supabase
-        .from('invitations')
-        .select('*', { count: 'exact', head: true })
-        .eq('company_id', companyId)
-        .eq('accepted', false);
+    try {
+        const companyId = await getManagerCompanyIdStrict();
 
-    if (!error) {
-        const el = document.getElementById('statPendingInvites');
-        if (el) el.textContent = count || 0;
+        const { count, error } = await supabase
+            .from('invitations')
+            .select('*', { count: 'exact', head: true })
+            .eq('company_id', companyId)
+            .eq('accepted', false);
+
+        if (!error) {
+            const el = document.getElementById('statPendingInvites');
+            if (el) el.textContent = count || 0;
+        }
+    } catch (e) {
+        // Don't spam errors on load
+        console.warn('Pending invite count skipped:', e.message);
     }
 }
 
@@ -42,7 +62,7 @@ function buildInviteModalHtml() {
     <div class="modal-content">
         <h2><i class="fas fa-user-plus"></i> Invite Employee</h2>
         <p style="color:#666; margin-top:6px;">
-            This will generate an invite link you can copy and send to the employee.
+            This generates an invite link you can copy and send to the employee.
         </p>
 
         <form id="inviteEmployeeForm" style="margin-top:16px;">
@@ -78,19 +98,18 @@ function buildInviteModalHtml() {
                 </button>
             </div>
             <p style="margin-top:10px; color:#666; font-size:0.9rem;">
-                Send this link to the employee. They will set their password and activate their account.
+                Send this link to the employee. If they already have an account, they can enter their existing password.
             </p>
         </div>
     </div>
     `;
 }
 
-async function createInvitation(employeeName, employeeEmail) {
+async function createInvitation(employeeEmail) {
     const supabase = getSupabase();
-    const companyId = getCompanyId();
-
     if (!supabase) throw new Error('Supabase not ready');
-    if (!companyId) throw new Error('Company not found. Please login again.');
+
+    const companyId = await getManagerCompanyIdStrict();
 
     const token = makeToken(56);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
@@ -108,15 +127,13 @@ async function createInvitation(employeeName, employeeEmail) {
 
     if (error) throw new Error(error.message);
 
-    // Build invite link (GitHub Pages safe)
     const origin = window.location.origin;
-    const pathBase = window.location.pathname.replace(/\/[^/]*$/, '/'); // folder path
+    const pathBase = window.location.pathname.replace(/\/[^/]*$/, '/');
     const inviteUrl = `${origin}${pathBase}auth/invite-accept.html?token=${encodeURIComponent(token)}`;
 
     return { token, inviteUrl };
 }
 
-// Expose modal trigger (manager.html uses this)
 window.showInviteEmployeeModal = function () {
     if (window.auth && typeof window.auth.protectRoute === 'function') {
         const ok = window.auth.protectRoute('manager');
@@ -152,7 +169,7 @@ window.showInviteEmployeeModal = function () {
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
 
         try {
-            const { inviteUrl } = await createInvitation(name, email);
+            const { inviteUrl } = await createInvitation(email);
 
             const result = document.getElementById('inviteResult');
             const out = document.getElementById('inviteLinkOutput');
@@ -187,9 +204,7 @@ window.showInviteEmployeeModal = function () {
     });
 };
 
-// Auto-refresh pending invite count when manager dashboard loads
 document.addEventListener('DOMContentLoaded', () => {
-    // only on manager.html
     if ((window.location.pathname || '').includes('manager.html')) {
         setTimeout(countPendingInvites, 1000);
     }
