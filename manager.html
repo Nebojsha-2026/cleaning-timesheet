@@ -17,32 +17,50 @@
         </div>
     </div>
 
-    <div class="container" style="display: none;">
+    <div class="container" style="display:none;">
         <!-- Header -->
-        <header class="header" id="mainHeader">
+        <header class="header">
             <div class="header-content">
-                <div class="logo-section">
-                    <img id="companyLogo" class="company-logo" style="display:none;" alt="Company Logo">
-                    <div class="title-section">
-                        <h1 id="appTitle"><i class="fas fa-clipboard-check"></i> Cleaning Timesheet</h1>
-                        <p id="currentCompanyName" class="company-name">Your Company</p>
+                <div class="header-left">
+                    <h1 id="appTitle"><i class="fas fa-clipboard-check"></i> Cleaning Timesheet</h1>
+                    <p id="currentCompanyName" class="subtitle">Your Company</p>
+                    <div class="header-stats">
+                        <div class="stat-badge">
+                            <i class="fas fa-calendar"></i>
+                            <span id="currentDate">Today</span>
+                        </div>
+                        <div class="stat-badge" id="connectionStatus">
+                            <i class="fas fa-wifi"></i>
+                            <span>Connecting...</span>
+                        </div>
                     </div>
                 </div>
 
-                <div class="header-actions">
-                    <div class="date-display">
-                        <i class="far fa-calendar"></i>
-                        <span id="currentDate"></span>
+                <div class="header-right">
+                    <div class="user-menu">
+                        <button class="menu-btn" id="menuBtn" type="button" title="Menu">
+                            <i class="fas fa-bars"></i>
+                        </button>
+
+                        <div class="dropdown" id="menuDropdown">
+                            <button type="button" onclick="showHelp()">
+                                <i class="fas fa-circle-question"></i> Help
+                            </button>
+                            <button type="button" onclick="showCompanySettings()">
+                                <i class="fas fa-gear"></i> Settings
+                            </button>
+                            <div class="divider"></div>
+                            <button type="button" class="danger" onclick="auth.logout()">
+                                <i class="fas fa-right-from-bracket"></i> Logout
+                            </button>
+                        </div>
                     </div>
-                    <button class="logout-btn" onclick="auth.logout()">
-                        <i class="fas fa-sign-out-alt"></i> Logout
-                    </button>
                 </div>
             </div>
         </header>
 
-        <!-- Stats Overview -->
-        <div class="stats-grid">
+        <!-- Stats Row -->
+        <div class="stats-row">
             <div class="stat-card">
                 <div class="stat-icon"><i class="fas fa-users"></i></div>
                 <div class="stat-info">
@@ -75,7 +93,6 @@
 
         <!-- Two Column Layout -->
         <div class="two-column">
-            <!-- Left Column -->
             <div class="column">
                 <div class="card">
                     <div class="card-header">
@@ -93,7 +110,6 @@
                 </div>
             </div>
 
-            <!-- Right Column -->
             <div class="column">
                 <div class="card">
                     <div class="card-header">
@@ -129,7 +145,6 @@
                     </div>
                 </div>
 
-                <!-- Company Settings -->
                 <div class="card" id="companySettingsCard" style="display:none;">
                     <div class="card-header">
                         <h2><i class="fas fa-paint-brush"></i> Company Branding</h2>
@@ -156,13 +171,6 @@
                                     <option value="monthly">Monthly</option>
                                 </select>
                             </div>
-
-                            <div class="form-group">
-                                <label for="logoUpload">Company Logo (Preview Only For Now)</label>
-                                <input type="file" id="logoUpload" accept="image/*">
-                                <div id="logoPreview" style="margin-top: 10px;"></div>
-                            </div>
-
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-save"></i> Save Settings
                             </button>
@@ -173,7 +181,6 @@
             </div>
         </div>
 
-        <!-- Footer -->
         <footer class="footer">
             <p id="footerCompany">Cleaning Timesheet Manager • Powered by Supabase</p>
             <p class="version-info">Version <span id="versionNumber">1.0</span></p>
@@ -188,12 +195,27 @@
     <script src="modules/timesheets.js"></script>
     <script src="modules/locations.js"></script>
     <script src="modules/entries.js"></script>
-
     <script src="modules/employee-management.js"></script>
 
-    <!-- ✅ ADD THIS -->
     <script src="modules/manager-shifts.js"></script>
+    <script src="modules/cancel-shifts.js"></script>
 
     <script src="script.js"></script>
+
+    <script>
+        // Dropdown toggle
+        (function () {
+            const btn = document.getElementById('menuBtn');
+            const dd = document.getElementById('menuDropdown');
+            if (!btn || !dd) return;
+
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dd.classList.toggle('open');
+            });
+
+            document.addEventListener('click', () => dd.classList.remove('open'));
+        })();
+    </script>
 </body>
 </html>
