@@ -2,7 +2,7 @@
 console.log('🛑 Cancel Shifts module loaded');
 
 function cs_getSupabase() {
-    return window.supabaseClient || window.supabase;
+    return window.supabaseClient || window.supabaseClient;
 }
 
 function cs_now() {
@@ -15,7 +15,7 @@ function cs_shiftStart(shift_date, start_time) {
 }
 
 async function cs_getMyProfile() {
-    const supabase = cs_getSupabase();
+    const supabase = window.supabaseClient;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not logged in');
 
@@ -30,8 +30,9 @@ async function cs_getMyProfile() {
 }
 
 async function cs_createNotification({ company_id, user_id, target_role, title, message, link }) {
-    const supabase = cs_getSupabase();
-    const payload = {
+    const supabase = window.supabaseClient;
+
+    const { error } = await supabase.from('notifications').insert([{
         company_id,
         user_id: user_id || null,
         target_role: target_role || null,
@@ -39,17 +40,13 @@ async function cs_createNotification({ company_id, user_id, target_role, title, 
         message,
         link: link || null,
         is_read: false
-    };
+    }]);
 
-    const { error } = await supabase.from('notifications').insert([payload]);
-    if (error) {
-        // If policies block or table missing, we don't break the app
-        console.warn('Notification insert failed:', error.message);
-    }
+    if (error) console.warn('Notification insert failed:', error.message);
 }
 
 async function cancelShiftAsManager(shiftId) {
-    const supabase = cs_getSupabase();
+    const supabase = window.supabaseClient;
     const { profile } = await cs_getMyProfile();
     if (profile.role !== 'manager') throw new Error('Not manager');
 
@@ -80,7 +77,6 @@ async function cancelShiftAsManager(shiftId) {
     const recurringText = shift.recurring_shift_id ? ' (Recurring)' : '';
     const msg = `Shift cancelled by manager${recurringText}: ${locName} on ${shift.shift_date} at ${shift.start_time}.`;
 
-    // Notify manager feed
     await cs_createNotification({
         company_id: shift.company_id,
         target_role: 'manager',
@@ -89,7 +85,6 @@ async function cancelShiftAsManager(shiftId) {
         link: 'manager.html'
     });
 
-    // Notify employee if assigned
     const employeeUserId = shift.staff?.user_id || null;
     if (employeeUserId) {
         await cs_createNotification({
@@ -105,7 +100,7 @@ async function cancelShiftAsManager(shiftId) {
 }
 
 async function cancelShiftAsEmployee(shiftId) {
-    const supabase = cs_getSupabase();
+    const supabase = window.supabaseClient;
     const { profile } = await cs_getMyProfile();
     if (profile.role !== 'employee') throw new Error('Not employee');
 
@@ -121,7 +116,7 @@ async function cancelShiftAsEmployee(shiftId) {
     const diffHours = (start.getTime() - cs_now().getTime()) / (1000 * 60 * 60);
 
     if (diffHours < 3) throw new Error('You can cancel only up to 3 hours before start time.');
-    if (['cancelled', 'completed', 'in_progress'].includes((shift.status || '').toLowerCase())) {
+    if (['in_progress', 'completed', 'cancelled'].includes((shift.status || '').toLowerCase())) {
         throw new Error('Shift is already started/completed/cancelled.');
     }
 
@@ -136,7 +131,6 @@ async function cancelShiftAsEmployee(shiftId) {
     const recurringText = shift.recurring_shift_id ? ' (Recurring)' : '';
     const msg = `Shift cancelled by employee${recurringText}: ${locName} on ${shift.shift_date} at ${shift.start_time}.`;
 
-    // Notify manager feed
     await cs_createNotification({
         company_id: shift.company_id,
         target_role: 'manager',
@@ -148,26 +142,53 @@ async function cancelShiftAsEmployee(shiftId) {
     return true;
 }
 
-// Expose for shifts.js
+// Expose for other modules
 window.cancelShiftAsEmployee = cancelShiftAsEmployee;
 window.cancelShiftAsManager = cancelShiftAsManager;
 
-// --- Manager list override (adds Cancel + Recurring badge) ---
+/**
+ * ✅ IMPORTANT FIX:
+ * Wait until loadManagerUpcomingShifts exists, then override it.
+ */
+function cs_waitFor(fnName, timeoutMs = 15000) {
+    return new Promise((resolve, reject) => {
+        const start = Date.now();
+        const timer = setInterval(() => {
+            if (typeof window[fnName] === 'function') {
+                clearInterval(timer);
+                resolve(window[fnName]);
+                return;
+            }
+            if (Date.now() - start > timeoutMs) {
+                clearInterval(timer);
+                reject(new Error(`${fnName} not found after ${timeoutMs}ms`));
+            }
+        }, 200);
+    });
+}
+
 async function cs_overrideManagerUpcoming() {
     const path = window.location.pathname.toLowerCase();
     if (!path.includes('manager.html')) return;
 
-    if (typeof window.loadManagerUpcomingShifts !== 'function') return;
-
-    const original = window.loadManagerUpcomingShifts;
+    let original;
+    try {
+        original = await cs_waitFor('loadManagerUpcomingShifts');
+    } catch (e) {
+        console.warn('Manager shift override skipped:', e.message);
+        return;
+    }
 
     window.loadManagerUpcomingShifts = async function () {
-        const supabase = cs_getSupabase();
+        const supabase = window.supabaseClient;
         const shiftsList = document.getElementById('upcomingShiftsList');
         if (!shiftsList) return;
 
         try {
-            const companyId = window.currentCompanyId || localStorage.getItem('cleaning_timesheet_company_id') || localStorage.getItem('company_id');
+            const companyId =
+                window.currentCompanyId ||
+                localStorage.getItem('cleaning_timesheet_company_id') ||
+                localStorage.getItem('company_id');
 
             const { data: shifts, error } = await supabase
                 .from('shifts')
@@ -198,7 +219,7 @@ async function cs_overrideManagerUpcoming() {
 
                 const start = cs_shiftStart(shift.shift_date, shift.start_time);
                 const diffHours = (start.getTime() - cs_now().getTime()) / (1000 * 60 * 60);
-                const canCancel = diffHours >= 1 && !['cancelled', 'completed'].includes(status);
+                const canCancel = diffHours >= 1 && !['cancelled','completed'].includes(status);
 
                 return `
                     <div class="shift-item" data-shift-id="${shift.id}">
@@ -245,11 +266,12 @@ async function cs_overrideManagerUpcoming() {
 
         } catch (err) {
             console.error('Manager shifts override error:', err);
+            // fallback
             try { await original(); } catch (_) {}
         }
     };
 
-    console.log('✅ Manager upcoming shifts overridden (cancel + recurring badge enabled)');
+    console.log('✅ Manager upcoming shifts overridden (recurring + cancel enabled)');
 }
 
 cs_overrideManagerUpcoming().catch(() => {});
