@@ -5,7 +5,7 @@
         SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbXRpZ2NqeXFja3FkemVwY2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwODgwMjYsImV4cCI6MjA4NDY2NDAyNn0.Rs6yv54hZyXzqqWQM4m-Z4g3gKqacBeDfHiMfpOuFRw',
         DEFAULT_HOURLY_RATE: 23,
         CURRENCY: 'AUD',
-        VERSION: '1.3.1'
+        VERSION: '1.3.2'
     };
 
     // Global variables (scoped inside this IIFE to avoid collisions with modules/auth.js)
@@ -62,12 +62,43 @@
         if (error) throw error;
     }
 
+    // ✅ Stronger: wait for shared supabase client from modules/auth.js
+    async function waitForSupabaseClient(maxMs = 1200) {
+        const start = Date.now();
+        while (Date.now() - start < maxMs) {
+            if (window.supabaseClient && window.supabaseClient.auth) return window.supabaseClient;
+            await new Promise(r => setTimeout(r, 50));
+        }
+        return null;
+    }
+
+    // ✅ Unified refresh hook (used after create/cancel so UI updates immediately)
+    async function refreshAfterShiftChange() {
+        try {
+            if (currentUserRole === 'manager') {
+                // Refresh BOTH: stats + upcoming list (fixes "hours card not updating")
+                await loadManagerDashboard();
+            } else {
+                if (typeof refreshMyShifts === 'function') await refreshMyShifts();
+                if (typeof refreshPastShifts === 'function') await refreshPastShifts();
+            }
+        } catch (e) {
+            console.warn('Refresh after shift change failed:', e);
+        }
+    }
+
+    // Expose for other modules (manager-shifts.js / cancel-shifts.js can call this)
+    window.refreshAfterShiftChange = refreshAfterShiftChange;
+
     // Initialize App
     document.addEventListener('DOMContentLoaded', async function () {
         console.log('✅ DOM Ready');
 
-        // ✅ Reuse existing Supabase client to avoid duplicate GoTrue instances
-        if (window.supabaseClient && window.supabaseClient.auth) {
+        // ✅ Prefer existing shared client created by modules/auth.js (prevents duplicate GoTrue)
+        const shared = await waitForSupabaseClient(1200);
+        if (shared) {
+            supabase = shared;
+        } else if (window.supabaseClient && window.supabaseClient.auth) {
             supabase = window.supabaseClient;
         } else {
             const { createClient } = window.supabase;
@@ -400,7 +431,10 @@
                         if (!confirm('Cancel this shift?')) return;
                         await doManagerCancel(id);
                         showMessage('✅ Shift cancelled', 'success');
-                        await loadManagerUpcomingShifts();
+
+                        // ✅ IMPORTANT FIX: refresh stats + hours + list (no page refresh needed)
+                        await refreshAfterShiftChange();
+
                     } catch (e) {
                         console.error(e);
                         showMessage('❌ ' + (e.message || 'Cancel failed'), 'error');
@@ -415,6 +449,7 @@
 
     // ✅ Expose for modules/manager-shifts.js to call after creating a shift
     window.loadManagerUpcomingShifts = loadManagerUpcomingShifts;
+    window.loadManagerDashboard = loadManagerDashboard;
 
     async function loadEmployeeDashboard() {
         console.log('Loading employee dashboard...');
@@ -429,6 +464,8 @@
 
                 if (typeof loadMyShifts === 'function') await loadMyShifts();
                 if (typeof loadPastShifts === 'function') await loadPastShifts();
+
+                // NOTE: loadLocations must not crash employee page (fixed in modules/locations.js)
                 if (typeof loadLocations === 'function') await loadLocations();
 
                 setupTimesheetForm();
@@ -1030,7 +1067,7 @@
             showMessage('Refreshing shifts...', 'info');
 
             if (currentUserRole === 'manager') {
-                await loadManagerUpcomingShifts();
+                await loadManagerDashboard(); // ✅ also refreshes hours/stat cards
             } else {
                 if (typeof refreshMyShifts === 'function') await refreshMyShifts();
                 if (typeof refreshPastShifts === 'function') await refreshPastShifts();
