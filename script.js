@@ -5,7 +5,7 @@
         SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbXRpZ2NqeXFja3FkemVwY2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwODgwMjYsImV4cCI6MjA4NDY2NDAyNn0.Rs6yv54hZyXzqqWQM4m-Z4g3gKqacBeDfHiMfpOuFRw',
         DEFAULT_HOURLY_RATE: 23,
         CURRENCY: 'AUD',
-        VERSION: '1.3.0'
+        VERSION: '1.3.1'
     };
 
     // Global variables (scoped inside this IIFE to avoid collisions with modules/auth.js)
@@ -25,13 +25,57 @@
         company: 'cleaning_timesheet_company_id'
     };
 
+    // ---------- Helpers ----------
+    function safeStatusText(status) {
+        const s = String(status || 'pending');
+        return s.replace('_', ' ');
+    }
+
+    function shiftStartDateTime(shift_date, start_time) {
+        const t = (start_time || '00:00').slice(0, 5);
+        return new Date(`${shift_date}T${t}:00`);
+    }
+
+    function canManagerCancelShift(shift) {
+        const status = String(shift.status || '').toLowerCase();
+        if (['cancelled', 'completed'].includes(status)) return false;
+
+        if (!shift.shift_date || !shift.start_time) return false;
+        const start = shiftStartDateTime(shift.shift_date, shift.start_time);
+        const diffHours = (start.getTime() - new Date().getTime()) / (1000 * 60 * 60);
+        return diffHours >= 1;
+    }
+
+    async function doManagerCancel(shiftId) {
+        // Use cancel module if present (adds notifications + checks)
+        if (typeof window.cancelShiftAsManager === 'function') {
+            await window.cancelShiftAsManager(shiftId);
+            return;
+        }
+
+        // Fallback: just cancel in DB
+        const { error } = await supabase
+            .from('shifts')
+            .update({ status: 'cancelled' })
+            .eq('id', shiftId);
+
+        if (error) throw error;
+    }
+
     // Initialize App
     document.addEventListener('DOMContentLoaded', async function () {
         console.log('✅ DOM Ready');
 
-        const { createClient } = window.supabase;
-        supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-        window.supabaseClient = supabase;
+        // ✅ Reuse existing Supabase client to avoid duplicate GoTrue instances
+        if (window.supabaseClient && window.supabaseClient.auth) {
+            supabase = window.supabaseClient;
+        } else {
+            const { createClient } = window.supabase;
+            supabase = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+            window.supabaseClient = supabase;
+        }
+
+        // Make CONFIG available globally for modules that expect it
         window.CONFIG = CONFIG;
 
         // Load role and company from localStorage
@@ -50,10 +94,12 @@
         const isAuthenticated = !!token;
 
         // If not authenticated and on dashboard page, redirect to login
-        const isDashboardPage = window.location.pathname.includes('manager.html') ||
+        const isDashboardPage =
+            window.location.pathname.includes('manager.html') ||
             window.location.pathname.includes('employee.html');
 
-        const isAuthPage = window.location.pathname.includes('login.html') ||
+        const isAuthPage =
+            window.location.pathname.includes('login.html') ||
             window.location.pathname.includes('register.html');
 
         if (!isAuthenticated && isDashboardPage) {
@@ -92,6 +138,8 @@
 
         // Setup settings form only if it exists
         setupCompanySettingsForm();
+
+        console.log('🎉 Script loaded');
     });
 
     // Load and apply company branding
@@ -272,10 +320,10 @@
             const { data: shifts, error } = await supabase
                 .from('shifts')
                 .select(`
-                *,
-                locations (name),
-                staff (name, email)
-            `)
+                    id, company_id, shift_date, start_time, duration, status, notes, staff_id, recurring_shift_id,
+                    locations (name),
+                    staff (name, email)
+                `)
                 .eq('company_id', currentCompanyId)
                 .gte('shift_date', new Date().toISOString().split('T')[0])
                 .order('shift_date', { ascending: true })
@@ -286,47 +334,87 @@
 
             if (!shifts || shifts.length === 0) {
                 shiftsList.innerHTML = `
-                <div style="text-align: center; padding: 40px; color: #666;">
-                    <i class="fas fa-calendar" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
-                    <p>No upcoming shifts scheduled.</p>
-                    <p style="font-size: 0.9rem;">Create your first shift using the "Create Shift" button.</p>
-                </div>
-            `;
+                    <div style="text-align: center; padding: 40px; color: #666;">
+                        <i class="fas fa-calendar" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
+                        <p>No upcoming shifts scheduled.</p>
+                        <p style="font-size: 0.9rem;">Create your first shift using the "Create Shift" button.</p>
+                    </div>
+                `;
                 return;
             }
 
             let html = '';
             shifts.forEach(shift => {
                 const locationName = shift.locations?.name || 'Unknown Location';
-                const staffName = shift.staff?.name || shift.staff?.email || 'Unassigned';
-                const statusClass = (typeof getShiftStatusClass === 'function') ? getShiftStatusClass(shift.status) : 'status-pending';
+
+                const isOffered = !shift.staff_id;
+                const staffName = isOffered ? 'Offered' : (shift.staff?.name || shift.staff?.email || 'Unassigned');
+
+                const statusClass = (typeof getShiftStatusClass === 'function')
+                    ? getShiftStatusClass(isOffered ? 'pending' : shift.status)
+                    : 'status-pending';
+
+                const statusText = isOffered ? 'offered' : safeStatusText(shift.status);
+
+                const recurringBadge = shift.recurring_shift_id
+                    ? `<span class="offer-badge">RECURRING</span>`
+                    : '';
+
+                const cancelBtn = canManagerCancelShift(shift)
+                    ? `<div class="shift-actions-employee" style="margin-top:12px;">
+                           <button class="btn btn-sm btn-danger manager-cancel-btn" data-id="${shift.id}">
+                               <i class="fas fa-ban"></i> Cancel Shift
+                           </button>
+                       </div>`
+                    : '';
 
                 html += `
-                <div class="shift-item">
-                    <div class="shift-info">
-                        <h4>${escapeHtml(locationName)} 
-                            <span class="shift-status ${statusClass}">${shift.status.replace('_', ' ')}</span>
-                        </h4>
-                        <p>
-                            <i class="far fa-calendar"></i> ${formatDate(shift.shift_date)} 
-                            • <i class="far fa-clock"></i> ${formatTime(shift.start_time)} 
-                            • ${shift.duration} hours
-                            • <i class="fas fa-user"></i> ${escapeHtml(staffName)}
-                        </p>
-                        ${shift.notes ? `<p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
-                            <i class="fas fa-sticky-note"></i> ${escapeHtml(shift.notes)}
-                        </p>` : ''}
+                    <div class="shift-item" data-shift-id="${shift.id}">
+                        <div class="shift-info">
+                            <h4>${escapeHtml(locationName)} 
+                                ${recurringBadge}
+                                <span class="shift-status ${statusClass}">${statusText}</span>
+                            </h4>
+                            <p>
+                                <i class="far fa-calendar"></i> ${formatDate(shift.shift_date)} 
+                                • <i class="far fa-clock"></i> ${formatTime(shift.start_time)} 
+                                • ${shift.duration} hours
+                                • <i class="fas fa-user"></i> ${escapeHtml(staffName)}
+                            </p>
+                            ${shift.notes ? `<p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
+                                <i class="fas fa-sticky-note"></i> ${escapeHtml(shift.notes)}
+                            </p>` : ''}
+                            ${cancelBtn}
+                        </div>
                     </div>
-                </div>
-            `;
+                `;
             });
 
             shiftsList.innerHTML = html;
+
+            // Hook cancel buttons
+            shiftsList.querySelectorAll('.manager-cancel-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const id = btn.getAttribute('data-id');
+                    try {
+                        if (!confirm('Cancel this shift?')) return;
+                        await doManagerCancel(id);
+                        showMessage('✅ Shift cancelled', 'success');
+                        await loadManagerUpcomingShifts();
+                    } catch (e) {
+                        console.error(e);
+                        showMessage('❌ ' + (e.message || 'Cancel failed'), 'error');
+                    }
+                });
+            });
 
         } catch (err) {
             console.error('Error loading manager shifts:', err);
         }
     }
+
+    // ✅ Expose for modules/manager-shifts.js to call after creating a shift
+    window.loadManagerUpcomingShifts = loadManagerUpcomingShifts;
 
     async function loadEmployeeDashboard() {
         console.log('Loading employee dashboard...');
@@ -397,36 +485,36 @@
             const statsCards = document.querySelectorAll('.stat-card');
             if (statsCards.length >= 4) {
                 statsCards[0].innerHTML = `
-                <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
-                <div class="stat-info">
-                    <h3>Completed Shifts</h3>
-                    <div class="stat-value">${completedCount || 0}</div>
-                </div>
-            `;
+                    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+                    <div class="stat-info">
+                        <h3>Completed Shifts</h3>
+                        <div class="stat-value">${completedCount || 0}</div>
+                    </div>
+                `;
 
                 statsCards[1].innerHTML = `
-                <div class="stat-icon"><i class="fas fa-map-marker-alt"></i></div>
-                <div class="stat-info">
-                    <h3>Locations</h3>
-                    <div class="stat-value">${locationCount || 0}</div>
-                </div>
-            `;
+                    <div class="stat-icon"><i class="fas fa-map-marker-alt"></i></div>
+                    <div class="stat-info">
+                        <h3>Locations</h3>
+                        <div class="stat-value">${locationCount || 0}</div>
+                    </div>
+                `;
 
                 statsCards[2].innerHTML = `
-                <div class="stat-icon"><i class="fas fa-file-invoice-dollar"></i></div>
-                <div class="stat-info">
-                    <h3>Timesheets</h3>
-                    <div class="stat-value">${timesheetCount || 0}</div>
-                </div>
-            `;
+                    <div class="stat-icon"><i class="fas fa-file-invoice-dollar"></i></div>
+                    <div class="stat-info">
+                        <h3>Timesheets</h3>
+                        <div class="stat-value">${timesheetCount || 0}</div>
+                    </div>
+                `;
 
                 statsCards[3].innerHTML = `
-                <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
-                <div class="stat-info">
-                    <h3>Total Earned</h3>
-                    <div class="stat-value">$${totalEarnings.toFixed(2)}</div>
-                </div>
-            `;
+                    <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
+                    <div class="stat-info">
+                        <h3>Total Earned</h3>
+                        <div class="stat-value">$${totalEarnings.toFixed(2)}</div>
+                    </div>
+                `;
 
                 statsCards.forEach(card => card.classList.remove('loading'));
             }
@@ -492,11 +580,11 @@
             let html = '';
             periods.forEach(period => {
                 html += `
-                <div class="period-block" data-period="${period.id}">
-                    <i class="fas ${period.icon}"></i>
-                    <span>${period.label}</span>
-                </div>
-            `;
+                    <div class="period-block" data-period="${period.id}">
+                        <i class="fas ${period.icon}"></i>
+                        <span>${period.label}</span>
+                    </div>
+                `;
             });
 
             container.innerHTML = html;
@@ -571,28 +659,28 @@
 
     function showCustomDatesPopup() {
         const html = `
-        <div class="modal-content">
-            <h2>Select Custom Dates</h2>
-            <form id="customDatesForm">
-                <div class="form-group">
-                    <label for="customStartDate">Start Date</label>
-                    <input type="date" id="customStartDate" required>
-                </div>
-                <div class="form-group">
-                    <label for="customEndDate">End Date</label>
-                    <input type="date" id="customEndDate" required>
-                </div>
-                <div style="margin-top:20px; display:flex; gap:10px;">
-                    <button type="submit" class="btn btn-primary" style="flex:1;">
-                        <i class="fas fa-check"></i> Apply Dates
-                    </button>
-                    <button type="button" class="btn cancel-btn" style="flex:1; background:#6c757d; color:white;">
-                        <i class="fas fa-times"></i> Cancel
-                    </button>
-                </div>
-            </form>
-        </div>
-    `;
+            <div class="modal-content">
+                <h2>Select Custom Dates</h2>
+                <form id="customDatesForm">
+                    <div class="form-group">
+                        <label for="customStartDate">Start Date</label>
+                        <input type="date" id="customStartDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="customEndDate">End Date</label>
+                        <input type="date" id="customEndDate" required>
+                    </div>
+                    <div style="margin-top:20px; display:flex; gap:10px;">
+                        <button type="submit" class="btn btn-primary" style="flex:1;">
+                            <i class="fas fa-check"></i> Apply Dates
+                        </button>
+                        <button type="button" class="btn cancel-btn" style="flex:1; background:#6c757d; color:white;">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        `;
 
         showModal(html);
 
@@ -980,6 +1068,4 @@
             showMessage('Help documentation – coming soon', 'info');
         };
     }
-
-    console.log('🎉 Script loaded');
 })();
