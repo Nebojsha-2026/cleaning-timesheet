@@ -1,14 +1,6 @@
 // modules/auth.js
 console.log('🔐 Auth module loading...');
 
-/**
- * IMPORTANT NOTES
- * - On GitHub Pages, supabase-js UMD exposes window.supabase (library), NOT a client.
- * - We must call window.supabase.createClient(URL, KEY) to get a client with .auth
- * - login.html currently does NOT load script.js, so we must provide config fallback here.
- */
-
-// ✅ Use the SAME localStorage keys your login.html already checks
 const STORAGE = {
   TOKEN: 'cleaning_timesheet_token',
   USER: 'cleaning_timesheet_user',
@@ -16,46 +8,32 @@ const STORAGE = {
   COMPANY: 'cleaning_timesheet_company_id',
 };
 
-// ✅ Fallback config (matches your script.js)
-const FALLBACK_CONFIG = {
-  SUPABASE_URL: 'https://hqmtigcjyqckqdzepcdu.supabase.co',
-  SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbXRpZ2NqeXFja3FkemVwY2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwODgwMjYsImV4cCI6MjA4NDY2NDAyNn0.Rs6yv54hZyXzqqWQM4m-Z4g3gKqacBeDfHiMfpOuFRw',
+const SUPABASE_FALLBACK = {
+  URL: 'https://hqmtigcjyqckqdzepcdu.supabase.co',
+  KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhxbXRpZ2NqeXFja3FkemVwY2R1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkwODgwMjYsImV4cCI6MjA4NDY2NDAyNn0.Rs6yv54hZyXzqqWQM4m-Z4g3gKqacBeDfHiMfpOuFRw',
 };
 
 let supabaseClient = null;
 
-function getConfig() {
-  // If script.js is loaded, it defines CONFIG (global). Sometimes you also have window.CONFIG.
-  const cfg = window.CONFIG || (typeof CONFIG !== 'undefined' ? CONFIG : null);
-  return {
-    SUPABASE_URL: cfg?.SUPABASE_URL || FALLBACK_CONFIG.SUPABASE_URL,
-    SUPABASE_KEY: cfg?.SUPABASE_KEY || FALLBACK_CONFIG.SUPABASE_KEY,
-  };
-}
-
-function initSupabaseClient() {
-  // If another file already created the client, reuse it
+function ensureClient() {
+  // Reuse existing global client (prevents Multiple GoTrueClient instances)
   if (window.supabaseClient && window.supabaseClient.auth) {
     supabaseClient = window.supabaseClient;
-    console.log('✅ Supabase client reused (window.supabaseClient)');
     return;
   }
 
-  // UMD library should exist as window.supabase with createClient
   if (!window.supabase || typeof window.supabase.createClient !== 'function') {
     console.error('❌ Supabase library not loaded. Check supabase.min.js script tag.');
     return;
   }
 
-  const { SUPABASE_URL, SUPABASE_KEY } = getConfig();
+  const cfg = window.CONFIG || {};
+  const url = cfg.SUPABASE_URL || SUPABASE_FALLBACK.URL;
+  const key = cfg.SUPABASE_KEY || SUPABASE_FALLBACK.KEY;
 
-  window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  window.supabaseClient = window.supabase.createClient(url, key);
   supabaseClient = window.supabaseClient;
-
-  console.log('✅ Supabase client initialized');
 }
-
-initSupabaseClient();
 
 function clearAuthStorage() {
   localStorage.removeItem(STORAGE.TOKEN);
@@ -64,23 +42,19 @@ function clearAuthStorage() {
   localStorage.removeItem(STORAGE.COMPANY);
 }
 
-async function fetchProfileAndPersist(user) {
-  if (!supabaseClient?.auth) throw new Error('Supabase client not ready');
-
+async function persistSession(user) {
   const { data: profile, error } = await supabaseClient
     .from('profiles')
     .select('company_id, role')
     .eq('id', user.id)
     .single();
 
-  if (error) {
-    console.warn('Profile fetch failed:', error.message);
-  }
+  // Profile might not exist briefly – don’t hard-fail
+  if (error) console.warn('Profile fetch failed:', error.message);
 
   const role = profile?.role || 'employee';
   const companyId = profile?.company_id || null;
 
-  // Store tokens & user
   const { data: { session } } = await supabaseClient.auth.getSession();
   const token = session?.access_token || '';
 
@@ -105,12 +79,10 @@ function isInviteAcceptPage() {
 
 async function initializeAuth() {
   try {
-    if (!supabaseClient?.auth) {
-      console.error('❌ Supabase client not ready in initializeAuth');
-      return;
-    }
+    ensureClient();
+    if (!supabaseClient?.auth) return;
 
-    // If user just logged out in this tab, block any racey auto re-login for this load
+    // If we JUST logged out, force-clean the session and stop any auto-redirect
     if (sessionStorage.getItem('just_logged_out') === '1') {
       console.log('🧹 just_logged_out present: ensuring signed-out state');
       sessionStorage.removeItem('just_logged_out');
@@ -119,12 +91,10 @@ async function initializeAuth() {
       return;
     }
 
-    // Check session
     const { data: { session } } = await supabaseClient.auth.getSession();
     if (session?.user) {
-      await fetchProfileAndPersist(session.user);
+      await persistSession(session.user);
 
-      // Redirect away from login/register
       if (isAuthPage() && !isInviteAcceptPage()) {
         const role = localStorage.getItem(STORAGE.ROLE) || 'employee';
         window.location.href = (role === 'manager') ? 'manager.html' : 'employee.html';
@@ -132,7 +102,6 @@ async function initializeAuth() {
       }
     }
 
-    // Listen for auth changes
     supabaseClient.auth.onAuthStateChange(async (event, session2) => {
       console.log('Auth event:', event, session2 ? 'has session' : 'no session');
 
@@ -142,7 +111,7 @@ async function initializeAuth() {
       }
 
       if (session2?.user) {
-        await fetchProfileAndPersist(session2.user);
+        await persistSession(session2.user);
 
         if (isAuthPage() && !isInviteAcceptPage()) {
           const role = localStorage.getItem(STORAGE.ROLE) || 'employee';
@@ -150,9 +119,7 @@ async function initializeAuth() {
         }
       } else {
         clearAuthStorage();
-        if (!isAuthPage() && !isInviteAcceptPage()) {
-          window.location.href = 'login.html';
-        }
+        if (!isAuthPage() && !isInviteAcceptPage()) window.location.href = 'login.html';
       }
     });
 
@@ -161,22 +128,26 @@ async function initializeAuth() {
   }
 }
 
-// Login
+// ✅ Login must return {success:true/false} because login.html expects it
 async function login(email, password) {
-  if (!supabaseClient?.auth) throw new Error('Supabase client not ready');
+  try {
+    ensureClient();
+    if (!supabaseClient?.auth) return { success: false, error: 'Supabase client not ready' };
 
-  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-  if (error) throw error;
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) return { success: false, error: error.message };
 
-  await fetchProfileAndPersist(data.user);
-  return data.user;
+    const meta = await persistSession(data.user);
+    return { success: true, user: data.user, ...meta };
+  } catch (e) {
+    return { success: false, error: e.message || 'Login failed' };
+  }
 }
 
-// Logout
 async function logout() {
   sessionStorage.setItem('just_logged_out', '1');
-
   try {
+    ensureClient();
     if (supabaseClient?.auth) await supabaseClient.auth.signOut();
   } catch (e) {
     console.warn('signOut error:', e?.message || e);
@@ -186,36 +157,23 @@ async function logout() {
   window.location.href = 'login.html';
 }
 
-// Helpers
-function isAuthenticated() {
-  return !!localStorage.getItem(STORAGE.TOKEN);
-}
-
-function getUserRole() {
-  return localStorage.getItem(STORAGE.ROLE) || 'employee';
-}
-
-function getCurrentCompanyId() {
-  return localStorage.getItem(STORAGE.COMPANY) || null;
-}
-
 function protectRoute(requiredRole = null) {
-  if (!isAuthenticated()) {
+  const token = localStorage.getItem(STORAGE.TOKEN);
+  if (!token) {
     window.location.href = 'login.html';
     return false;
   }
 
-  const role = getUserRole();
+  const role = localStorage.getItem(STORAGE.ROLE) || 'employee';
   if (requiredRole && role !== requiredRole) {
     window.location.href = (role === 'manager') ? 'manager.html' : 'employee.html';
     return false;
   }
-
   return true;
 }
 
-// Start auth initialization shortly after load
-setTimeout(initializeAuth, 300);
+ensureClient();
+setTimeout(initializeAuth, 200);
 
 console.log('✅ Auth module loaded');
 
@@ -223,8 +181,5 @@ window.auth = {
   login,
   logout,
   protectRoute,
-  isAuthenticated,
-  getUserRole,
-  getCurrentCompanyId,
   initializeAuth,
 };
