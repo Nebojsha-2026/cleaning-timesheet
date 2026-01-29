@@ -1,5 +1,5 @@
 // modules/utils.js
-// Utility functions shared across modules
+console.log('🧰 Utils module loading...');
 
 // Helper function to escape HTML to prevent XSS
 function escapeHtml(text) {
@@ -10,55 +10,27 @@ function escapeHtml(text) {
 }
 
 // Format date for display (Australian style)
-function formatDate(dateString) {
+function formatDate(dateInput) {
   try {
-    if (dateString instanceof Date) {
-      return dateString.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
-    }
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+    const d = (dateInput instanceof Date) ? dateInput : new Date(dateInput);
+    return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
   } catch {
-    return dateString;
+    return String(dateInput || '');
   }
 }
 
-// Format time (e.g. 14:30 → 2:30 PM)
+// Format time for display
 function formatTime(timeString) {
   if (!timeString) return '';
-  const [hours, minutes] = String(timeString).split(':');
-  const hour = parseInt(hours, 10);
+  const t = String(timeString).slice(0, 5);
+  const [hh, mm] = t.split(':');
+  const hour = parseInt(hh || '0', 10);
   const ampm = hour >= 12 ? 'PM' : 'AM';
   const displayHour = hour % 12 || 12;
-  return `${displayHour}:${minutes} ${ampm}`;
+  return `${displayHour}:${mm || '00'} ${ampm}`;
 }
 
-// Get start of week (Monday)
-function getStartOfWeek(date = new Date()) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  return new Date(d.setDate(diff));
-}
-
-// Get end of week (Sunday)
-function getEndOfWeek(date = new Date()) {
-  const start = getStartOfWeek(date);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  return end;
-}
-
-// Get start of month
-function getStartOfMonth(date = new Date()) {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
-}
-
-// Get end of month
-function getEndOfMonth(date = new Date()) {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
-}
-
-// Show message to user
+// Global toast message
 function showMessage(text, type = 'info') {
   const existing = document.getElementById('globalMessage');
   if (existing) existing.remove();
@@ -72,54 +44,48 @@ function showMessage(text, type = 'info') {
   container.style.top = '20px';
   container.style.left = '50%';
   container.style.transform = 'translateX(-50%)';
-  container.style.zIndex = '9999';
+  container.style.zIndex = '999999';
   container.style.padding = '12px 24px';
   container.style.borderRadius = '8px';
   container.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
   container.style.maxWidth = '90%';
   container.style.textAlign = 'center';
-  container.style.fontWeight = '500';
 
-  if (type === 'success') {
-    container.style.background = '#d4edda';
-    container.style.color = '#155724';
-    container.style.border = '1px solid #c3e6cb';
-  } else if (type === 'error') {
-    container.style.background = '#f8d7da';
-    container.style.color = '#721c24';
-    container.style.border = '1px solid #f5c6cb';
-  } else {
-    container.style.background = '#fff3cd';
-    container.style.color = '#856404';
-    container.style.border = '1px solid #ffeeba';
-  }
+  // Basic colors
+  if (type === 'success') container.style.background = '#d4edda';
+  else if (type === 'error') container.style.background = '#f8d7da';
+  else container.style.background = '#d1ecf1';
 
   document.body.appendChild(container);
 
   setTimeout(() => {
-    container.style.opacity = '0';
-    container.style.transition = 'opacity 0.5s';
-    setTimeout(() => container.remove(), 500);
-  }, 5000);
+    if (container && container.parentNode) container.remove();
+  }, 3500);
 }
 
-// Modal helpers (FIXED)
+// Proper closeModal (module-safe)
 function closeModal() {
   const modal = document.querySelector('.modal');
   if (modal) modal.remove();
 }
 
-function showModal(content) {
+// Modal system
+function showModal(contentHtml) {
+  // close any existing modal first
   closeModal();
 
   const modal = document.createElement('div');
   modal.className = 'modal';
-  modal.innerHTML = content;
+
+  // Allow passing either a full modal-content wrapper OR just inner html
+  const isAlreadyWrapped = String(contentHtml || '').includes('modal-content');
+  modal.innerHTML = isAlreadyWrapped ? contentHtml : `<div class="modal-content">${contentHtml}</div>`;
 
   modal.addEventListener('click', function (e) {
     if (e.target === modal) closeModal();
   });
 
+  // Optional container (if you add one later)
   const modalsContainer = document.getElementById('modalsContainer');
   if (modalsContainer) modalsContainer.appendChild(modal);
   else document.body.appendChild(modal);
@@ -128,23 +94,63 @@ function showModal(content) {
 // Email validation helper
 function validateEmail(email) {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return re.test(email);
+  return re.test(String(email || '').trim());
 }
 
-// Export to window so every script can see them (CRITICAL)
+// Connection status UI helper (safe if elements missing)
+function updateConnectionStatus(isConnected) {
+  const statusDiv = document.getElementById('connectionStatus');
+  if (statusDiv) {
+    statusDiv.innerHTML = isConnected
+      ? '<i class="fas fa-wifi"></i><span>Connected</span>'
+      : '<i class="fas fa-wifi"></i><span>Disconnected</span>';
+    statusDiv.style.color = isConnected ? '#28a745' : '#dc3545';
+  }
+
+  const apiStatus = document.getElementById('apiStatus');
+  if (apiStatus) {
+    apiStatus.textContent = isConnected ? 'Connected' : 'Disconnected';
+    apiStatus.style.color = isConnected ? '#28a745' : '#dc3545';
+  }
+
+  const lastUpdated = document.getElementById('lastUpdated');
+  if (lastUpdated) lastUpdated.textContent = new Date().toLocaleTimeString();
+}
+
+// Test database connection (expects window.supabaseClient already exists)
+async function testConnection() {
+  try {
+    console.log('🔌 Testing Supabase connection...');
+    if (!window.supabaseClient) throw new Error('Supabase client not initialized');
+
+    const { error } = await window.supabaseClient
+      .from('locations')
+      .select('id', { count: 'exact', head: true });
+
+    if (error) throw error;
+
+    console.log('✅ Database connection successful');
+    updateConnectionStatus(true);
+    return true;
+  } catch (error) {
+    console.error('❌ Database connection failed:', error);
+    updateConnectionStatus(false);
+    showMessage('Cannot connect to database: ' + (error?.message || error), 'error');
+    return false;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* ✅ Export to window (CRITICAL because script.js is NOT a module)     */
+/* ------------------------------------------------------------------ */
 window.escapeHtml = escapeHtml;
 window.formatDate = formatDate;
 window.formatTime = formatTime;
-
-window.getStartOfWeek = getStartOfWeek;
-window.getEndOfWeek = getEndOfWeek;
-window.getStartOfMonth = getStartOfMonth;
-window.getEndOfMonth = getEndOfMonth;
-
 window.showMessage = showMessage;
 window.showModal = showModal;
 window.closeModal = closeModal;
-
 window.validateEmail = validateEmail;
+window.updateConnectionStatus = updateConnectionStatus;
+window.testConnection = testConnection;
 
 console.log('✅ Utils module loaded');
