@@ -125,13 +125,19 @@ body {
 }
 
 /* =========================================================
-   User menu (3-line dropdown)
+   User menu (3-line dropdown) — unified + compatible
+   Supports BOTH:
+     - .menu-btn + .dropdown
+     - .user-menu-button + .user-menu-dropdown
    ========================================================= */
 .user-menu {
     position: relative;
+    display: inline-block;
 }
 
-.menu-btn {
+/* Button (supports both class names) */
+.menu-btn,
+.user-menu-button {
     border: 1px solid #e9ecef;
     background: white;
     border-radius: 10px;
@@ -140,20 +146,24 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 10px;
-    font-weight: 700;
+    font-weight: 800;
     color: #333;
 }
 
-.menu-btn:hover {
+.menu-btn:hover,
+.user-menu-button:hover {
     box-shadow: 0 8px 18px rgba(0,0,0,0.08);
 }
 
-.menu-btn i {
+.menu-btn i,
+.user-menu-button i {
     color: var(--primary-color);
     font-size: 1.1rem;
 }
 
-.dropdown {
+/* Dropdown panel (supports both class names) */
+.dropdown,
+.user-menu-dropdown {
     position: absolute;
     right: 0;
     top: calc(100% + 10px);
@@ -167,12 +177,17 @@ body {
     z-index: 99999;
 }
 
-.dropdown.open {
+/* Open state (supports both) */
+.dropdown.open,
+.user-menu-dropdown.open {
     display: block;
 }
 
+/* Items */
 .dropdown a,
-.dropdown button {
+.dropdown button,
+.user-menu-dropdown a,
+.user-menu-dropdown button {
     width: 100%;
     border: 0;
     background: transparent;
@@ -188,20 +203,26 @@ body {
 }
 
 .dropdown a:hover,
-.dropdown button:hover {
+.dropdown button:hover,
+.user-menu-dropdown a:hover,
+.user-menu-dropdown button:hover {
     background: #f8f9fa;
 }
 
-.dropdown .danger {
+.dropdown .danger,
+.user-menu-dropdown .danger,
+.user-menu-dropdown button.danger {
     color: #b02a37;
-    font-weight: 800;
+    font-weight: 900;
 }
 
-.dropdown .danger i {
+.dropdown .danger i,
+.user-menu-dropdown .danger i {
     color: #b02a37;
 }
 
-.dropdown .divider {
+.dropdown .divider,
+.user-menu-dropdown .divider {
     height: 1px;
     background: #e9ecef;
 }
@@ -246,7 +267,7 @@ body {
     font-size: 0.9rem;
     color: #666;
     margin-bottom: 4px;
-    font-weight: 800;
+    font-weight: 900;
 }
 
 .stat-value {
@@ -307,7 +328,7 @@ body {
     display: block;
     margin-bottom: 8px;
     color: #333;
-    font-weight: 800;
+    font-weight: 900;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -350,7 +371,7 @@ select {
     border: none;
     border-radius: 10px;
     font-size: 1rem;
-    font-weight: 800;
+    font-weight: 900;
     cursor: pointer;
     transition: all 0.25s;
     display: inline-flex;
@@ -425,21 +446,9 @@ select {
 }
 
 .action-btn span {
-    font-weight: 800;
+    font-weight: 900;
     font-size: 0.9rem;
 }
-
-/* Messages */
-.message {
-    padding: 15px;
-    border-radius: 8px;
-    margin: 15px 0;
-    display: none;
-}
-
-.message.success { display: block; background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-.message.error { display: block; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-.message.info { display: block; background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
 
 /* Footer */
 .footer {
@@ -568,28 +577,7 @@ select {
     grid-template-columns: 1fr;
     gap: 12px;
 }
+
 @media (min-width: 720px) {
     .modal-inline { grid-template-columns: 1fr 1fr; }
 }
-.user-menu { position: relative; display: inline-block; }
-.user-menu-button {
-  border: none; background: rgba(255,255,255,0.15);
-  color: white; padding: 10px 12px; border-radius: 10px;
-  cursor: pointer;
-}
-.user-menu-dropdown {
-  position: absolute; right: 0; top: 46px;
-  background: white; border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.18);
-  min-width: 180px; overflow: hidden;
-  display: none; z-index: 9999;
-}
-.user-menu-dropdown.open { display: block; }
-.user-menu-dropdown button {
-  width: 100%; text-align: left;
-  border: none; background: transparent;
-  padding: 12px 14px; cursor: pointer;
-  display: flex; gap: 10px; align-items: center;
-}
-.user-menu-dropdown button:hover { background: #f3f4f6; }
-.user-menu-dropdown button.danger { color: #dc3545; font-weight: 600; }
