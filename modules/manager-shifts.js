@@ -66,12 +66,6 @@ async function ms_loadLocations(companyId) {
 }
 
 function ms_buildCreateShiftModal({ employees, locations }) {
-    const locationOptions = locations.map(l =>
-        `<option value="${l.id}" data-rate="${l.hourly_rate || 0}" data-hours="${l.default_hours || 0}">
-            ${ms_escapeHtml(l.name)} (Rate: $${ms_money(l.hourly_rate || 0)}/hr)
-         </option>`
-    ).join('');
-
     const employeeOptions = employees.map(e =>
         `<option value="${e.id}">${ms_escapeHtml(e.name || e.email || 'Employee')}</option>`
     ).join('');
@@ -85,6 +79,11 @@ function ms_buildCreateShiftModal({ employees, locations }) {
             </span>
         </label>
     `).join('');
+
+    // datalist for locations
+    const datalist = (locations || []).map(l =>
+        `<option value="${ms_escapeHtml(l.name)}"></option>`
+    ).join('');
 
     const today = new Date();
     const yyyy = today.getFullYear();
@@ -102,35 +101,39 @@ function ms_buildCreateShiftModal({ employees, locations }) {
       <form id="createShiftForm" style="margin-top:16px;">
         <div class="form-group">
           <label>Location</label>
-          <select id="msLocation" required>
-            <option value="">Select location...</option>
-            ${locationOptions}
-          </select>
+          <input id="msLocationName" list="msLocationList" placeholder="Type a location name..." required />
+          <datalist id="msLocationList">${datalist}</datalist>
+          <input type="hidden" id="msLocationId" value="" />
+          <p style="color:#666; margin-top:6px; font-size:0.9rem;">
+            If the location doesn’t exist yet, it will be created automatically when you save the shift.
+          </p>
         </div>
 
-        <div class="form-group">
-          <label>Shift Date</label>
-          <input type="date" id="msDate" value="${todayStr}" required />
+        <div class="modal-inline">
+          <div class="form-group">
+            <label>Shift Date</label>
+            <input type="date" id="msDate" value="${todayStr}" required />
+          </div>
+          <div class="form-group">
+            <label>Start Time</label>
+            <input type="time" id="msStartTime" value="09:00" required />
+          </div>
         </div>
 
-        <div class="form-group">
-          <label>Start Time</label>
-          <input type="time" id="msStartTime" value="09:00" required />
-        </div>
-
-        <div class="form-group">
-          <label>Duration (hours)</label>
-          <input type="number" id="msDuration" min="0.25" step="0.25" placeholder="e.g. 3" required />
-        </div>
-
-        <div class="form-group">
-          <label>Rate per hour (AUD)</label>
-          <input type="number" id="msRate" min="0" step="0.01" placeholder="e.g. 23.00" required />
+        <div class="modal-inline">
+          <div class="form-group">
+            <label>Duration (hours)</label>
+            <input type="number" id="msDuration" min="0.25" step="0.25" placeholder="e.g. 3" required />
+          </div>
+          <div class="form-group">
+            <label>Rate per hour (AUD)</label>
+            <input type="number" id="msRate" min="0" step="0.01" placeholder="e.g. 23.00" required />
+          </div>
         </div>
 
         <div class="form-group">
           <label>Total Amount (AUD)</label>
-          <input type="text" id="msTotal" readonly />
+          <input type="text" id="msTotal" readonly value="$0.00" />
         </div>
 
         <div class="form-group">
@@ -180,11 +183,11 @@ function ms_buildCreateShiftModal({ employees, locations }) {
           </p>
         </div>
 
-        <div style="margin-top:18px; display:flex; gap:10px;">
-          <button type="submit" class="btn btn-primary" id="msSubmitBtn" style="flex:1;">
+        <div style="margin-top:18px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button type="submit" class="btn btn-primary" id="msSubmitBtn" style="flex:1; min-width:220px;">
             <i class="fas fa-save"></i> Create Shift
           </button>
-          <button type="button" class="btn" id="msCancelBtn" style="flex:1; background:#6c757d; color:white;">
+          <button type="button" class="btn" id="msCancelBtn" style="flex:1; min-width:220px; background:#6c757d; color:white;">
             <i class="fas fa-times"></i> Cancel
           </button>
         </div>
@@ -193,10 +196,57 @@ function ms_buildCreateShiftModal({ employees, locations }) {
     `;
 }
 
-async function ms_createShiftAndOffers({ company_id, location_id, shift_date, start_time, duration, hourly_rate, total_amount, notes, mode, assigned_staff_id, offered_staff_ids }) {
+async function ms_findLocationByName(company_id, name) {
+    const supabase = ms_getSupabase();
+    const trimmed = (name || '').trim();
+    if (!trimmed) return null;
+
+    const { data, error } = await supabase
+        .from('locations')
+        .select('id, name, hourly_rate, default_hours')
+        .eq('company_id', company_id)
+        .ilike('name', trimmed)
+        .limit(1);
+
+    if (error) throw new Error(error.message);
+    return (data && data.length > 0) ? data[0] : null;
+}
+
+async function ms_createLocation({ company_id, name, hourly_rate, default_hours }) {
+    const supabase = ms_getSupabase();
+    const payload = {
+        company_id,
+        name: name.trim(),
+        hourly_rate: Number(hourly_rate || 0),
+        default_hours: Number(default_hours || 0),
+        is_active: true
+    };
+
+    const { data, error } = await supabase
+        .from('locations')
+        .insert([payload])
+        .select('id, name, hourly_rate, default_hours')
+        .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+}
+
+async function ms_createShiftAndOffers({
+    company_id,
+    location_id,
+    shift_date,
+    start_time,
+    duration,
+    hourly_rate,
+    total_amount,
+    notes,
+    mode,
+    assigned_staff_id,
+    offered_staff_ids
+}) {
     const supabase = ms_getSupabase();
 
-    // Insert shift
     const baseShift = {
         company_id,
         location_id,
@@ -213,7 +263,6 @@ async function ms_createShiftAndOffers({ company_id, location_id, shift_date, st
         baseShift.status = 'confirmed';
         baseShift.confirmed_at = new Date().toISOString();
     } else {
-        // offered
         baseShift.staff_id = null;
         baseShift.status = 'pending';
     }
@@ -227,7 +276,6 @@ async function ms_createShiftAndOffers({ company_id, location_id, shift_date, st
     if (insErr) throw new Error(insErr.message);
     const shiftId = inserted.id;
 
-    // Insert offers (if offer mode)
     if (mode === 'offer') {
         if (!offered_staff_ids || offered_staff_ids.length === 0) {
             throw new Error('Please select at least one employee to offer the shift to.');
@@ -250,7 +298,6 @@ async function ms_createShiftAndOffers({ company_id, location_id, shift_date, st
     return shiftId;
 }
 
-// Expose function used by manager.html
 window.showCreateShiftModal = async function () {
     try {
         if (window.auth && typeof window.auth.protectRoute === 'function') {
@@ -264,7 +311,6 @@ window.showCreateShiftModal = async function () {
         }
 
         const { company_id } = await ms_getManagerProfile();
-
         const [employees, locations] = await Promise.all([
             ms_loadEmployees(company_id),
             ms_loadLocations(company_id),
@@ -275,35 +321,43 @@ window.showCreateShiftModal = async function () {
         const cancelBtn = document.getElementById('msCancelBtn');
         cancelBtn?.addEventListener('click', window.closeModal);
 
-        const locSelect = document.getElementById('msLocation');
         const durationInput = document.getElementById('msDuration');
         const rateInput = document.getElementById('msRate');
         const totalInput = document.getElementById('msTotal');
 
-        // Auto set duration/rate from selected location defaults
-        locSelect?.addEventListener('change', () => {
-            const opt = locSelect.options[locSelect.selectedIndex];
-            const rate = Number(opt?.getAttribute('data-rate') || 0);
-            const hours = Number(opt?.getAttribute('data-hours') || 0);
-
-            if (hours && (!durationInput.value || Number(durationInput.value) === 0)) {
-                durationInput.value = String(hours);
-            }
-            if (rate && (!rateInput.value || Number(rateInput.value) === 0)) {
-                rateInput.value = String(rate.toFixed(2));
-            }
-            ms_recalcTotal();
-        });
-
         function ms_recalcTotal() {
             const d = Number(durationInput.value || 0);
             const r = Number(rateInput.value || 0);
-            const total = d * r;
-            totalInput.value = `$${ms_money(total)}`;
+            totalInput.value = `$${ms_money(d * r)}`;
         }
 
         durationInput?.addEventListener('input', ms_recalcTotal);
         rateInput?.addEventListener('input', ms_recalcTotal);
+
+        // Location input: if matches existing location exactly, use its defaults
+        const locName = document.getElementById('msLocationName');
+        const locIdHidden = document.getElementById('msLocationId');
+
+        const locationsByName = new Map((locations || []).map(l => [String(l.name || '').toLowerCase(), l]));
+
+        locName?.addEventListener('input', () => {
+            const key = String(locName.value || '').trim().toLowerCase();
+            const match = locationsByName.get(key);
+
+            if (match) {
+                locIdHidden.value = match.id;
+                // Pre-fill defaults if fields are blank
+                if (match.default_hours && (!durationInput.value || Number(durationInput.value) === 0)) {
+                    durationInput.value = String(match.default_hours);
+                }
+                if (match.hourly_rate && (!rateInput.value || Number(rateInput.value) === 0)) {
+                    rateInput.value = String(Number(match.hourly_rate).toFixed(2));
+                }
+                ms_recalcTotal();
+            } else {
+                locIdHidden.value = '';
+            }
+        });
 
         // Toggle assign vs offer blocks
         const assignBlock = document.getElementById('msAssignBlock');
@@ -332,9 +386,6 @@ window.showCreateShiftModal = async function () {
             if (!cb.checked) offerAll.checked = false;
         }));
 
-        // Pre-fill total once if location default exists
-        ms_recalcTotal();
-
         // Submit
         const form = document.getElementById('createShiftForm');
         form?.addEventListener('submit', async (e) => {
@@ -348,20 +399,41 @@ window.showCreateShiftModal = async function () {
             try {
                 const mode = document.querySelector('input[name="assignType"]:checked')?.value || 'assign';
 
-                const location_id = document.getElementById('msLocation').value;
+                const locationName = String(document.getElementById('msLocationName').value || '').trim();
+                if (!locationName) throw new Error('Please enter a location name');
+
                 const shift_date = document.getElementById('msDate').value;
                 const start_time = document.getElementById('msStartTime').value;
                 const duration = Number(document.getElementById('msDuration').value);
                 const hourly_rate = Number(document.getElementById('msRate').value);
                 const notes = document.getElementById('msNotes').value.trim();
 
-                if (!location_id) throw new Error('Please select a location');
                 if (!shift_date) throw new Error('Please select a date');
                 if (!start_time) throw new Error('Please select a start time');
                 if (!duration || duration <= 0) throw new Error('Duration must be > 0');
                 if (hourly_rate < 0) throw new Error('Rate must be >= 0');
 
                 const total_amount = duration * hourly_rate;
+
+                // Determine location_id: use existing match OR create new
+                let location_id = locIdHidden.value || '';
+
+                if (!location_id) {
+                    // try exact lookup to avoid duplicates with different casing
+                    const existing = await ms_findLocationByName(company_id, locationName);
+                    if (existing?.id) {
+                        location_id = existing.id;
+                    } else {
+                        const created = await ms_createLocation({
+                            company_id,
+                            name: locationName,
+                            hourly_rate,
+                            default_hours: duration
+                        });
+                        location_id = created.id;
+                        window.showMessage?.(`✅ Location created: ${created.name}`, 'success');
+                    }
+                }
 
                 let assigned_staff_id = null;
                 let offered_staff_ids = [];
@@ -391,7 +463,6 @@ window.showCreateShiftModal = async function () {
                 window.showMessage?.('✅ Shift created!', 'success');
                 window.closeModal();
 
-                // Refresh manager list if available
                 if (typeof window.refreshShifts === 'function') {
                     await window.refreshShifts();
                 }
