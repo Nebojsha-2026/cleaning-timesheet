@@ -299,7 +299,7 @@
             shifts.forEach(shift => {
                 const locationName = shift.locations?.name || 'Unknown Location';
                 const staffName = shift.staff?.name || shift.staff?.email || 'Unassigned';
-                const statusClass = getShiftStatusClass ? getShiftStatusClass(shift.status) : 'status-pending';
+                const statusClass = (typeof getShiftStatusClass === 'function') ? getShiftStatusClass(shift.status) : 'status-pending';
 
                 html += `
                 <div class="shift-item">
@@ -332,31 +332,17 @@
         console.log('Loading employee dashboard...');
 
         try {
-            // Get current user
             const { data: { user } } = await supabase.auth.getUser();
 
             if (user?.id) {
                 currentEmployeeId = user.id;
 
-                // Update stats
                 await updateEmployeeStats();
 
-                // Load shifts if function exists
-                if (typeof loadMyShifts === 'function') {
-                    await loadMyShifts();
-                }
+                if (typeof loadMyShifts === 'function') await loadMyShifts();
+                if (typeof loadPastShifts === 'function') await loadPastShifts();
+                if (typeof loadLocations === 'function') await loadLocations();
 
-                // Load past shifts if function exists
-                if (typeof loadPastShifts === 'function') {
-                    await loadPastShifts();
-                }
-
-                // Load locations if function exists
-                if (typeof loadLocations === 'function') {
-                    await loadLocations();
-                }
-
-                // Setup timesheet form
                 setupTimesheetForm();
             }
         } catch (err) {
@@ -366,11 +352,9 @@
 
     async function updateEmployeeStats() {
         try {
-            // Get current user
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
-            // Get staff record
             const { data: staff, error: staffError } = await supabase
                 .from('staff')
                 .select('id, hourly_rate')
@@ -382,7 +366,6 @@
                 return;
             }
 
-            // Get completed shifts count and earnings
             const { data: completedShifts, error: shiftsError } = await supabase
                 .from('shifts')
                 .select('duration, locations(hourly_rate)')
@@ -401,19 +384,16 @@
                 });
             }
 
-            // Get locations count
             const { count: locationCount } = await supabase
                 .from('locations')
                 .select('*', { count: 'exact', head: true })
                 .eq('is_active', true);
 
-            // Get timesheets count
             const { count: timesheetCount } = await supabase
                 .from('timesheets')
                 .select('*', { count: 'exact', head: true })
                 .eq('staff_id', staff.id);
 
-            // Update UI elements if they exist
             const statsCards = document.querySelectorAll('.stat-card');
             if (statsCards.length >= 4) {
                 statsCards[0].innerHTML = `
@@ -448,7 +428,6 @@
                 </div>
             `;
 
-                // Remove loading class
                 statsCards.forEach(card => card.classList.remove('loading'));
             }
         } catch (err) {
@@ -460,10 +439,8 @@
         const form = document.getElementById('timesheetForm');
         if (!form) return;
 
-        // Load available periods
         loadTimesheetPeriods();
 
-        // Setup email checkbox
         const emailCheckbox = document.getElementById('sendEmail');
         if (emailCheckbox) {
             emailCheckbox.addEventListener('change', function () {
@@ -474,13 +451,11 @@
             });
         }
 
-        // Setup custom dates button
         const customDatesBtn = document.getElementById('customDatesBtn');
         if (customDatesBtn) {
             customDatesBtn.addEventListener('click', showCustomDatesPopup);
         }
 
-        // Handle form submission
         form.addEventListener('submit', handleGenerateTimesheet);
     }
 
@@ -489,7 +464,6 @@
         if (!container) return;
 
         try {
-            // Get current user's pay frequency from staff record
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
@@ -506,7 +480,6 @@
             if (staff?.timesheet_monthly) periods.push({ id: 'monthly', label: 'This Month', icon: 'fa-calendar' });
             if (staff?.timesheet_custom) periods.push({ id: 'custom', label: 'Custom', icon: 'fa-calendar-day' });
 
-            // Default periods if none specified
             if (periods.length === 0) {
                 periods.push(
                     { id: 'weekly', label: 'This Week', icon: 'fa-calendar-week' },
@@ -528,7 +501,6 @@
 
             container.innerHTML = html;
 
-            // Add click handlers
             document.querySelectorAll('.period-block').forEach(block => {
                 block.addEventListener('click', function () {
                     const period = this.getAttribute('data-period');
@@ -536,7 +508,6 @@
                 });
             });
 
-            // Select first period by default
             if (periods.length > 0) {
                 selectTimesheetPeriod(periods[0].id);
             }
@@ -548,15 +519,12 @@
     }
 
     function selectTimesheetPeriod(period) {
-        // Update selected state
         document.querySelectorAll('.period-block').forEach(block => {
             block.classList.toggle('selected', block.getAttribute('data-period') === period);
         });
 
-        // Update hidden input
         document.getElementById('timesheetPeriod').value = period;
 
-        // Show/hide sections
         const customDatesSection = document.getElementById('customDatesSection');
         const autoDatesSection = document.getElementById('autoDatesSection');
 
@@ -567,7 +535,6 @@
             if (customDatesSection) customDatesSection.style.display = 'none';
             if (autoDatesSection) autoDatesSection.style.display = 'block';
 
-            // Calculate and display dates
             const today = new Date();
             let startDate, endDate;
 
@@ -676,15 +643,9 @@
             const sendEmail = document.getElementById('sendEmail')?.checked || false;
             const emailAddress = sendEmail ? document.getElementById('emailAddress')?.value.trim() : null;
 
-            if (!startDate || !endDate) {
-                throw new Error('Please select start and end dates');
-            }
+            if (!startDate || !endDate) throw new Error('Please select start and end dates');
+            if (sendEmail && (!emailAddress || !validateEmail(emailAddress))) throw new Error('Please enter a valid email address');
 
-            if (sendEmail && (!emailAddress || !validateEmail(emailAddress))) {
-                throw new Error('Please enter a valid email address');
-            }
-
-            // Get current user's staff record
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) throw new Error('User not found');
 
@@ -696,35 +657,25 @@
 
             if (staffError) throw new Error('Staff record not found');
 
-            // Get entries for the period
             const { data: entries, error: entriesError } = await supabase
                 .from('entries')
-                .select(`
-                *,
-                locations (name, hourly_rate)
-            `)
+                .select(`*, locations (name, hourly_rate)`)
                 .eq('staff_id', staff.id)
                 .gte('work_date', startDate)
                 .lte('work_date', endDate)
                 .order('work_date', { ascending: true });
 
             if (entriesError) throw entriesError;
+            if (!entries || entries.length === 0) throw new Error('No entries found for selected period');
 
-            if (!entries || entries.length === 0) {
-                throw new Error('No entries found for selected period');
-            }
-
-            // Calculate totals
             const totalHours = entries.reduce((sum, e) => sum + parseFloat(e.hours), 0);
             const totalEarnings = entries.reduce((sum, e) => {
                 const rate = e.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE;
                 return sum + (parseFloat(e.hours) * rate);
             }, 0);
 
-            // Generate reference number
             const refNumber = 'TS' + new Date().getTime().toString().slice(-8);
 
-            // Create timesheet record
             const insertData = {
                 company_id: currentCompanyId,
                 staff_id: staff.id,
@@ -738,44 +689,14 @@
 
             if (sendEmail && emailAddress) {
                 insertData.email_address = emailAddress;
-                insertData.email_sent = false; // Will be sent by backend trigger
+                insertData.email_sent = false;
             }
 
-            const { data: timesheet, error: tsError } = await supabase
-                .from('timesheets')
-                .insert([insertData])
-                .select()
-                .single();
-
+            const { error: tsError } = await supabase.from('timesheets').insert([insertData]);
             if (tsError) throw tsError;
 
-            // Prepare timesheet details for display
-            const timesheetDetails = {
-                refNumber,
-                startDate,
-                endDate,
-                totalHours: totalHours.toFixed(2),
-                totalEarnings: totalEarnings.toFixed(2),
-                entriesCount: entries.length,
-                entries: entries.map(entry => ({
-                    date: formatDate(entry.work_date),
-                    location: entry.locations?.name || 'Unknown',
-                    hours: entry.hours,
-                    rate: entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE,
-                    earnings: (entry.hours * (entry.locations?.hourly_rate || CONFIG.DEFAULT_HOURLY_RATE)).toFixed(2),
-                    notes: entry.notes || ''
-                }))
-            };
-
             showMessage(`✅ Timesheet ${refNumber} generated!`, 'success');
-
-            // Update stats
             await updateEmployeeStats();
-
-            // Show timesheet details
-            if (typeof viewTimesheetDetails === 'function') {
-                viewTimesheetDetails(timesheetDetails);
-            }
 
         } catch (error) {
             console.error('❌ Timesheet generation error:', error);
@@ -786,11 +707,10 @@
         }
     }
 
-    // Test database connection
     async function testConnection() {
         try {
             console.log('🔌 Testing Supabase connection...');
-            const { data, error } = await supabase
+            const { error } = await supabase
                 .from('locations')
                 .select('count', { count: 'exact', head: true });
 
@@ -798,25 +718,20 @@
 
             console.log('✅ Database connection successful');
 
-            // Update connection status if element exists
             const statusDiv = document.getElementById('connectionStatus');
             if (statusDiv) {
                 statusDiv.innerHTML = '<i class="fas fa-wifi"></i><span>Connected</span>';
                 statusDiv.style.color = '#28a745';
             }
 
-            // Update API status
             const apiStatus = document.getElementById('apiStatus');
             if (apiStatus) {
                 apiStatus.textContent = 'Connected';
                 apiStatus.style.color = '#28a745';
             }
 
-            // Update last updated time
             const lastUpdated = document.getElementById('lastUpdated');
-            if (lastUpdated) {
-                lastUpdated.textContent = new Date().toLocaleTimeString();
-            }
+            if (lastUpdated) lastUpdated.textContent = new Date().toLocaleTimeString();
 
             return true;
         } catch (error) {
@@ -838,7 +753,6 @@
         }
     }
 
-    // Company settings form
     function setupCompanySettingsForm() {
         const form = document.getElementById('companySettingsForm');
         if (!form) return;
@@ -918,28 +832,6 @@
         await loadCompanyBranding();
     }
 
-    function previewBrandingChanges() {
-        const primary = document.getElementById('primaryColor')?.value || '#667eea';
-        const secondary = document.getElementById('secondaryColor')?.value || '#764ba2';
-        const title = document.getElementById('companyTitle')?.value.trim() || 'Cleaning Timesheet';
-
-        document.documentElement.style.setProperty('--primary-color', primary);
-        document.documentElement.style.setProperty('--secondary-color', secondary);
-
-        const appTitle = document.getElementById('appTitle');
-        if (appTitle) {
-            const icon = appTitle.querySelector('i');
-            if (icon) {
-                appTitle.innerHTML = `<i class="${icon.className}"></i> ${title}`;
-            } else {
-                appTitle.textContent = title;
-            }
-        }
-
-        showMessage('Preview applied!', 'info');
-    }
-
-    // Helper functions
     function getStartOfWeek(date) {
         const d = new Date(date);
         const day = d.getDay();
@@ -957,14 +849,14 @@
     function getStartOfFortnight(date) {
         const d = new Date(date);
         const day = d.getDay();
-        const diff = d.getDate() - day + (day === 0 ? -6 : 1) - 7; // Previous Monday
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1) - 7;
         return new Date(d.setDate(diff));
     }
 
     function getEndOfFortnight(date) {
         const start = getStartOfFortnight(date);
         const end = new Date(start);
-        end.setDate(start.getDate() + 13); // 14 days total
+        end.setDate(start.getDate() + 13);
         return end;
     }
 
@@ -1012,70 +904,82 @@
         return re.test(email);
     }
 
-    // Action functions (exposed)
-    window.showInviteEmployeeModal = function () {
-        showMessage('Invite employee – coming soon', 'info');
-    };
+    // ✅ Action functions (exposed) — only define placeholders if NOT already defined by modules
+    if (typeof window.showInviteEmployeeModal !== 'function') {
+        window.showInviteEmployeeModal = function () {
+            showMessage('Invite employee – coming soon', 'info');
+        };
+    }
 
-    window.showCreateShiftModal = function () {
-        showMessage('Create shift – coming soon', 'info');
-    };
+    if (typeof window.showCreateShiftModal !== 'function') {
+        window.showCreateShiftModal = function () {
+            showMessage('Create shift – coming soon', 'info');
+        };
+    }
 
-    window.viewAllTimesheets = function () {
-        if (typeof viewTimesheets === 'function') {
-            viewTimesheets();
-        } else {
-            showMessage('Timesheets – coming soon', 'info');
-        }
-    };
-
-    window.showCompanySettings = function () {
-        const card = document.getElementById('companySettingsCard');
-        if (card) {
-            card.style.display = 'block';
-            card.scrollIntoView({ behavior: 'smooth' });
-        }
-    };
-
-    window.refreshShifts = async function () {
-        showMessage('Refreshing shifts...', 'info');
-
-        if (currentUserRole === 'manager') {
-            await loadManagerUpcomingShifts();
-        } else {
-            if (typeof refreshMyShifts === 'function') {
-                await refreshMyShifts();
+    if (typeof window.viewAllTimesheets !== 'function') {
+        window.viewAllTimesheets = function () {
+            if (typeof viewTimesheets === 'function') {
+                viewTimesheets();
+            } else {
+                showMessage('Timesheets – coming soon', 'info');
             }
-            if (typeof refreshPastShifts === 'function') {
-                await refreshPastShifts();
+        };
+    }
+
+    if (typeof window.showCompanySettings !== 'function') {
+        window.showCompanySettings = function () {
+            const card = document.getElementById('companySettingsCard');
+            if (card) {
+                card.style.display = 'block';
+                card.scrollIntoView({ behavior: 'smooth' });
             }
-        }
+        };
+    }
 
-        showMessage('✅ Shifts refreshed!', 'success');
-    };
+    if (typeof window.refreshShifts !== 'function') {
+        window.refreshShifts = async function () {
+            showMessage('Refreshing shifts...', 'info');
 
-    window.generateTimesheet = function () {
-        const form = document.getElementById('timesheetForm');
-        if (form) {
-            form.scrollIntoView({ behavior: 'smooth' });
-        }
-    };
+            if (currentUserRole === 'manager') {
+                await loadManagerUpcomingShifts();
+            } else {
+                if (typeof refreshMyShifts === 'function') await refreshMyShifts();
+                if (typeof refreshPastShifts === 'function') await refreshPastShifts();
+            }
 
-    window.viewLocations = function () {
-        if (typeof viewLocations === 'function') {
-            viewLocations();
-        } else {
-            showMessage('Locations – coming soon', 'info');
-        }
-    };
+            showMessage('✅ Shifts refreshed!', 'success');
+        };
+    }
 
-    window.showSettings = function () {
-        showMessage('Settings – coming soon', 'info');
-    };
+    if (typeof window.generateTimesheet !== 'function') {
+        window.generateTimesheet = function () {
+            const form = document.getElementById('timesheetForm');
+            if (form) form.scrollIntoView({ behavior: 'smooth' });
+        };
+    }
 
-    window.showHelp = function () {
-        showMessage('Help documentation – coming soon', 'info');
-    };
+    if (typeof window.viewLocations !== 'function') {
+        window.viewLocations = function () {
+            if (typeof viewLocations === 'function') {
+                viewLocations();
+            } else {
+                showMessage('Locations – coming soon', 'info');
+            }
+        };
+    }
+
+    if (typeof window.showSettings !== 'function') {
+        window.showSettings = function () {
+            showMessage('Settings – coming soon', 'info');
+        };
+    }
+
+    if (typeof window.showHelp !== 'function') {
+        window.showHelp = function () {
+            showMessage('Help documentation – coming soon', 'info');
+        };
+    }
 
     console.log('🎉 Script loaded');
 })();
