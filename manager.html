@@ -163,21 +163,53 @@
                                 <i class="fas fa-user-plus"></i>
                                 <span>Invite Employee</span>
                             </button>
+<button class="action-btn" onclick="showEmployeesModal()">
+                                <i class="fas fa-user-friends"></i>
+                                <span>Employees</span>
+                            </button>
                             <button class="action-btn" onclick="showCreateShiftModal()">
                                 <i class="fas fa-plus-circle"></i>
                                 <span>Create Shift</span>
+                            </button>
+                            <button class="action-btn" onclick="showEditShiftsModal()">
+                                <i class="fas fa-pen-to-square"></i>
+                                <span>Edit Shifts</span>
                             </button>
                             <button class="action-btn" onclick="viewAllTimesheets()">
                                 <i class="fas fa-file-invoice-dollar"></i>
                                 <span>Timesheets</span>
                             </button>
-                            <button class="action-btn" onclick="showCompanySettings()">
-                                <i class="fas fa-cog"></i>
-                                <span>Company Settings</span>
-                            </button>
                         </div>
                     </div>
                 </div>
+<div class="card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-wallet"></i> Payroll Snapshot</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="summary-grid">
+                            <div>
+                                <p class="summary-label">Next payout</p>
+                                <p class="summary-value">$2,460.00</p>
+                                <p class="summary-meta">Weekly • Due in 4 days</p>
+                            </div>
+                            <div>
+                                <p class="summary-label">Timesheets pending</p>
+                                <p class="summary-value">3</p>
+                                <p class="summary-meta">Review and approve</p>
+                            </div>
+                            <div>
+                                <p class="summary-label">Total hours logged</p>
+                                <p class="summary-value">168 hrs</p>
+                                <p class="summary-meta">Last 14 days</p>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary btn-block" onclick="viewAllTimesheets()">
+                            <i class="fas fa-file-invoice"></i> Review Timesheets
+                        </button>
+                    </div>
+                </div>
+                
 <div class="card">
                     <div class="card-header">
                         <h2><i class="fas fa-user-shield"></i> Team Management</h2>
