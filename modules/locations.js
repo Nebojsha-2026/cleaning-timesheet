@@ -4,27 +4,44 @@
 async function loadLocations() {
     try {
         console.log('📍 Loading locations...');
-      
+
         const { data: locations, error } = await window.supabaseClient
             .from('locations')
             .select('*')
             .eq('is_active', true)
             .order('name');
-      
+
         if (error) throw error;
-      
-        const datalist = document.getElementById('locationList') || createLocationDatalist();
-      
+
+        // Always keep locations available globally even if no UI exists on this page
+        window.appLocations = locations || [];
+
+        // Only attempt to create datalist if the page has an input#location (manager create shift modal)
+        const input = document.getElementById('location');
+        const existingDatalist = document.getElementById('locationList');
+
+        // If no location input on this page (employee dashboard), just exit safely
+        if (!input && !existingDatalist) {
+            console.log('ℹ️ No #location input found on this page — skipping datalist render.');
+            console.log('✅ Locations loaded:', locations?.length || 0);
+            return;
+        }
+
+        const datalist = existingDatalist || createLocationDatalist();
+        if (!datalist) {
+            console.log('ℹ️ Could not create location datalist (missing input).');
+            console.log('✅ Locations loaded:', locations?.length || 0);
+            return;
+        }
+
         if (locations && locations.length > 0) {
             datalist.innerHTML = locations.map(location =>
                 `<option value="${location.name}">${location.name} (${location.default_hours} hrs - $${location.hourly_rate}/hr)</option>`
             ).join('');
-          
-            window.appLocations = locations;
         }
-      
+
         console.log('✅ Locations loaded:', locations?.length || 0);
-      
+
     } catch (error) {
         console.error('❌ Error loading locations:', error);
     }
@@ -33,6 +50,12 @@ async function loadLocations() {
 // Create location datalist
 function createLocationDatalist() {
     const input = document.getElementById('location');
+    if (!input) return null;
+
+    // If it already exists, return it
+    const existing = document.getElementById('locationList');
+    if (existing) return existing;
+
     const datalist = document.createElement('datalist');
     datalist.id = 'locationList';
     input.setAttribute('list', 'locationList');
@@ -49,21 +72,21 @@ async function findOrCreateLocation(name, defaultHours = 2.0, hourlyRate = windo
             .eq('name', name)
             .eq('is_active', true)
             .limit(1);
-      
+
         if (findError) throw findError;
         if (existing?.length > 0) return existing[0].id;
-      
+
         const { data: newLoc, error: createError } = await window.supabaseClient
             .from('locations')
             .insert([{ name, default_hours: defaultHours, hourly_rate: hourlyRate, is_active: true }])
             .select()
             .single();
-      
+
         if (createError) throw createError;
-      
+
         await loadLocations();
         return newLoc.id;
-      
+
     } catch (error) {
         console.error('❌ Location error:', error);
         throw new Error('Could not find or create location');
@@ -118,7 +141,7 @@ window.viewLocations = async function() {
         `;
 
         showModal(html);
-        
+
         setTimeout(() => {
             document.querySelectorAll('.edit-location').forEach(button => {
                 button.addEventListener('click', function() {
@@ -126,7 +149,7 @@ window.viewLocations = async function() {
                     editLocation(id);
                 });
             });
-            
+
             document.querySelectorAll('.delete-location').forEach(button => {
                 button.addEventListener('click', function() {
                     const id = this.getAttribute('data-id');
@@ -206,7 +229,7 @@ window.editLocation = async function(id) {
             showMessage('✅ Location updated!', 'success');
             await loadLocations();
         });
-        
+
         document.querySelector('.cancel-btn').addEventListener('click', closeModal);
     } catch (error) {
         console.error('❌ Error editing location:', error);
@@ -237,14 +260,14 @@ window.deleteLocation = function(id) {
     `;
 
     showModal(html);
-    
+
     setTimeout(() => {
         const modalContent = document.querySelector('.modal-content');
         const locationId = modalContent.getAttribute('data-location-id');
-        
+
         document.querySelector('.confirm-delete-location-btn').addEventListener('click', async function() {
             console.log("Confirming delete for location ID:", locationId);
-            
+
             try {
                 const { error: entriesError } = await window.supabaseClient
                     .from('entries')
@@ -270,7 +293,7 @@ window.deleteLocation = function(id) {
                 showMessage('❌ Error deleting location: ' + error.message, 'error');
             }
         });
-        
+
         document.querySelector('.cancel-btn').addEventListener('click', closeModal);
     }, 100);
 };
