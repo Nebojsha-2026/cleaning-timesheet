@@ -524,6 +524,13 @@
         const form = document.getElementById('timesheetForm');
         if (!form) return;
 
+        const periodHidden = document.getElementById('timesheetPeriod');
+        if (!periodHidden) {
+            return;
+        }
+
+        loadTimesheetPeriods();
+
         setupAutoDateRange();
         updatePayFrequency();
         updateAutoDates();
@@ -1376,5 +1383,6 @@
         }
     };
 })();
+
 
 
