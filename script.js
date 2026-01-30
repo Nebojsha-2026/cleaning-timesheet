@@ -429,17 +429,17 @@
                     ? `<span class="offer-badge">RECURRING</span>`
                     : '';
 
-                const cancelBtn = canManagerCancelShift(shift)␊
-                    ? `<div class="shift-actions-employee" style="margin-top:12px;">␊
-                           <button class="btn btn-sm btn-danger manager-cancel-btn" data-id="${shift.id}">␊
-                               <i class="fas fa-ban"></i> Cancel Shift␊
-                           </button>␊
-                       </div>`␊
-                    : '';␊
+                const cancelBtn = canManagerCancelShift(shift)
+                    ? `<div class="shift-actions-employee" style="margin-top:12px;">
+                           <button class="btn btn-sm btn-danger manager-cancel-btn" data-id="${shift.id}">
+                               <i class="fas fa-ban"></i> Cancel Shift
+                           </button>
+                       </div>`
+                    : '';
 
-                html += `␊
-                    <div class="shift-item" data-shift-id="${shift.id}">␊
-                        <div class="shift-info">␊
+                html += `
+                    <div class="shift-item" data-shift-id="${shift.id}">
+                        <div class="shift-info">
                         
                             <h4>${escapeHtml(locationName)} 
                                 ${recurringBadge}
@@ -1374,3 +1374,4 @@
         }
     };
 })();
+
