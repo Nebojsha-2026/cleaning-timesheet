@@ -393,10 +393,11 @@
                 `)
                 .eq('company_id', currentCompanyId)
                 .gte('shift_date', new Date().toISOString().split('T')[0])
+                .in('status', ['confirmed', 'pending'])
                 .order('shift_date', { ascending: true })
                 .order('start_time', { ascending: true })
-                .limit(10);
-
+                .limit(5);
+            
             if (error) throw error;
 
             if (!shifts || shifts.length === 0) {
@@ -415,29 +416,31 @@
                 const locationName = shift.locations?.name || 'Unknown Location';
 
                 const isOffered = !shift.staff_id;
+                if (!isOffered && String(shift.status || '').toLowerCase() !== 'confirmed') return;
                 const staffName = isOffered ? 'Offered' : (shift.staff?.name || shift.staff?.email || 'Unassigned');
-
+                
                 const statusClass = (typeof getShiftStatusClass === 'function')
                     ? getShiftStatusClass(isOffered ? 'pending' : shift.status)
                     : 'status-pending';
 
-                const statusText = isOffered ? 'offered' : safeStatusText(shift.status);
+               const statusText = isOffered ? 'offered' : safeStatusText(shift.status);␊
 
                 const recurringBadge = shift.recurring_shift_id
                     ? `<span class="offer-badge">RECURRING</span>`
                     : '';
 
-                const cancelBtn = canManagerCancelShift(shift)
-                    ? `<div class="shift-actions-employee" style="margin-top:12px;">
-                           <button class="btn btn-sm btn-danger manager-cancel-btn" data-id="${shift.id}">
-                               <i class="fas fa-ban"></i> Cancel Shift
-                           </button>
-                       </div>`
-                    : '';
+                const cancelBtn = canManagerCancelShift(shift)␊
+                    ? `<div class="shift-actions-employee" style="margin-top:12px;">␊
+                           <button class="btn btn-sm btn-danger manager-cancel-btn" data-id="${shift.id}">␊
+                               <i class="fas fa-ban"></i> Cancel Shift␊
+                           </button>␊
+                       </div>`␊
+                    : '';␊
 
-                html += `
-                    <div class="shift-item" data-shift-id="${shift.id}">
-                        <div class="shift-info">
+                html += `␊
+                    <div class="shift-item" data-shift-id="${shift.id}">␊
+                        <div class="shift-info">␊
+                        
                             <h4>${escapeHtml(locationName)} 
                                 ${recurringBadge}
                                 <span class="shift-status ${statusClass}">${statusText}</span>
@@ -457,8 +460,14 @@
                 `;
             });
 
-            shiftsList.innerHTML = html;
-
+            shiftsList.innerHTML = html || `
+                <div style="text-align: center; padding: 40px; color: #666;">
+                    <i class="fas fa-calendar" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
+                    <p>No upcoming confirmed or offered shifts.</p>
+                    <p style="font-size: 0.9rem;">Create your first shift using the "Create Shift" button.</p>
+                </div>
+            `;
+            
             // Hook cancel buttons
             shiftsList.querySelectorAll('.manager-cancel-btn').forEach(btn => {
                 btn.addEventListener('click', async () => {
@@ -986,7 +995,7 @@
         };
     }
 
-    window.showSettings = function () {
+   window.showSettings = function () {
         if (typeof window.showModal !== 'function') {
             if (typeof window.showCompanySettings === 'function') {
                 window.showCompanySettings();
@@ -1242,6 +1251,118 @@
         `;
 
         window.showModal(editHtml);
+    };
+
+    window.showAllShiftsModal = async function () {
+        if (typeof window.showModal !== 'function') {
+            alert('Modal system not loaded (utils.js).');
+            return;
+        }
+
+        window.showModal(`
+            <div class="modal-content">
+                <h2><i class="fas fa-clipboard-list"></i> All Shifts</h2>
+                <p style="color:#64748b; margin-top:6px;">
+                    Showing confirmed, offered, and cancelled shifts from the past 30 days.
+                </p>
+                <div id="allShiftsList" style="margin-top:16px;">
+                    <div class="loading-simple" style="padding:20px 0;">
+                        <div class="spinner-small"></div>
+                        Loading shifts...
+                    </div>
+                </div>
+                <div style="margin-top:20px;">
+                    <button type="button" class="btn" onclick="closeModal()" style="width:100%; background:#6c757d; color:white;">
+                        Close
+                    </button>
+                </div>
+            </div>
+        `);
+
+        if (!supabase) {
+            window.showMessage?.('Supabase not ready yet.', 'error');
+            return;
+        }
+
+        if (!currentCompanyId) {
+            window.showMessage?.('No company selected for this account.', 'error');
+            return;
+        }
+
+        try {
+            const since = new Date();
+            since.setDate(since.getDate() - 30);
+
+            const { data: shifts, error } = await supabase
+                .from('shifts')
+                .select(`
+                    id, company_id, shift_date, start_time, duration, status, notes, staff_id, recurring_shift_id,
+                    locations (name),
+                    staff (name, email)
+                `)
+                .eq('company_id', currentCompanyId)
+                .gte('shift_date', since.toISOString().split('T')[0])
+                .in('status', ['confirmed', 'pending', 'cancelled'])
+                .order('shift_date', { ascending: false })
+                .order('start_time', { ascending: false });
+
+            if (error) throw error;
+
+            const list = document.getElementById('allShiftsList');
+            if (!list) return;
+
+            if (!shifts || shifts.length === 0) {
+                list.innerHTML = `
+                    <div style="text-align:center; color:#666; padding:20px 0;">
+                        No shifts found in the last 30 days.
+                    </div>
+                `;
+                return;
+            }
+
+            list.innerHTML = shifts.map((shift) => {
+                const locationName = shift.locations?.name || 'Unknown Location';
+                const isOffered = !shift.staff_id;
+                const staffName = isOffered ? 'Offered' : (shift.staff?.name || shift.staff?.email || 'Unassigned');
+                const status = isOffered ? 'offered' : safeStatusText(shift.status);
+                const statusClass = (typeof getShiftStatusClass === 'function')
+                    ? getShiftStatusClass(isOffered ? 'pending' : shift.status)
+                    : 'status-pending';
+                const recurringBadge = shift.recurring_shift_id
+                    ? `<span class="offer-badge">RECURRING</span>`
+                    : '';
+
+                return `
+                    <div class="shift-item">
+                        <div class="shift-info">
+                            <h4>${escapeHtml(locationName)}
+                                ${recurringBadge}
+                                <span class="shift-status ${statusClass}">${status}</span>
+                            </h4>
+                            <p>
+                                <i class="far fa-calendar"></i> ${formatDate(shift.shift_date)}
+                                • <i class="far fa-clock"></i> ${formatTime(shift.start_time)}
+                                • ${shift.duration} hours
+                                • <i class="fas fa-user"></i> ${escapeHtml(staffName)}
+                            </p>
+                            ${shift.notes ? `<p style="color: #666; font-size: 0.9rem; margin-top: 5px;">
+                                <i class="fas fa-sticky-note"></i> ${escapeHtml(shift.notes)}
+                            </p>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch (err) {
+            console.error(err);
+            const list = document.getElementById('allShiftsList');
+            if (list) {
+                list.innerHTML = `
+                    <div style="text-align:center; color:#666; padding:20px 0;">
+                        Unable to load shifts. ${err.message || ''}
+                    </div>
+                `;
+            }
+        }
     };
 
     window.safeLogout = function () {
