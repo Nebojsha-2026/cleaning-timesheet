@@ -505,7 +505,9 @@
             if (user?.id) {
                 currentEmployeeId = user.id;
 
-                await updateEmployeeStats();
+                 if (typeof updateEmployeeStats === 'function') {
+                    await updateEmployeeStats();
+                }
 
                 if (typeof loadMyShifts === 'function') await loadMyShifts();
                 if (typeof loadPastShifts === 'function') await loadPastShifts();
@@ -1374,4 +1376,5 @@
         }
     };
 })();
+
 
