@@ -159,7 +159,7 @@ function showSampleShifts() {
 
 // Update upcoming shifts display
 function updateUpcomingShiftsDisplay(shifts) {
-    const container = document.getElementById('upcomingShiftsList');
+    const container = document.getElementById('myShiftsList');
     if (!container) return;
 
     if (!shifts || shifts.length === 0) {
