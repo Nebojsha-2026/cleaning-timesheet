@@ -423,7 +423,7 @@
                     ? getShiftStatusClass(isOffered ? 'pending' : shift.status)
                     : 'status-pending';
 
-               const statusText = isOffered ? 'offered' : safeStatusText(shift.status);␊
+               const statusText = isOffered ? 'offered' : safeStatusText(shift.status);
 
                 const recurringBadge = shift.recurring_shift_id
                     ? `<span class="offer-badge">RECURRING</span>`
@@ -1374,3 +1374,4 @@
         }
     };
 })();
+
