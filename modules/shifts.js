@@ -6,6 +6,7 @@ let appStaff = [];
 let myShifts = [];
 let pastShifts = [];
 let currentShiftId = null;
+let currentStaffId = null;
 
 // Build a JS Date for the shift start (local time)
 function getShiftStartDateTime(shift) {
@@ -81,7 +82,9 @@ async function loadMyShifts() {
             showSampleShifts();
             return;
         }
-
+        
+        currentStaffId = staff.id;
+        
         // Get shifts for current employee
         const today = new Date().toISOString().split('T')[0];
         const { data: shifts, error } = await window.supabaseClient
@@ -95,14 +98,58 @@ async function loadMyShifts() {
             .order('shift_date', { ascending: true })
             .order('start_time', { ascending: true })
             .limit(10);
+const { data: offeredRows, error: offeredError } = await window.supabaseClient
+            .from('shift_offers')
+            .select(`
+                status,
+                shifts:shift_id (
+                    id,
+                    company_id,
+                    shift_date,
+                    start_time,
+                    duration,
+                    status,
+                    notes,
+                    recurring_shift_id,
+                    locations (name, notes)
+                )
+            `)
+            .eq('staff_id', staff.id)
+            .eq('status', 'offered')
+            .gte('shifts.shift_date', today)
+            .order('shift_date', { ascending: true, foreignTable: 'shifts' })
+            .order('start_time', { ascending: true, foreignTable: 'shifts' });
 
         if (error) {
             console.error('Error loading shifts:', error);
             showSampleShifts();
             return [];
         }
+if (offeredError) {
+            console.warn('Error loading shift offers:', offeredError);
+        }
 
-        myShifts = shifts || [];
+        const offeredShifts = (offeredRows || [])
+            .map(row => row.shifts)
+            .filter(Boolean);
+
+        const combined = [...(shifts || []), ...offeredShifts];
+        const byId = new Map();
+        combined.forEach(shiftItem => {
+            if (!shiftItem || !shiftItem.id) return;
+            if (!byId.has(shiftItem.id)) {
+                byId.set(shiftItem.id, shiftItem);
+            }
+        });
+
+        myShifts = Array.from(byId.values())
+            .sort((a, b) => {
+                const dateA = `${a.shift_date || ''}T${(a.start_time || '00:00').slice(0, 5)}`;
+                const dateB = `${b.shift_date || ''}T${(b.start_time || '00:00').slice(0, 5)}`;
+                return new Date(dateA) - new Date(dateB);
+            })
+            .slice(0, 10);
+        
         updateUpcomingShiftsDisplay(myShifts);
         updateEmployeeStats(myShifts);
 
@@ -250,7 +297,7 @@ function updateUpcomingShiftsDisplay(shifts) {
         document.querySelectorAll('.accept-shift-btn').forEach(button => {
             button.addEventListener('click', function() {
                 const id = this.getAttribute('data-id');
-                updateShiftStatus(id, 'confirmed');
+                acceptOfferedShift(id);
             });
         });
 
@@ -407,7 +454,62 @@ async function updateShiftStatus(shiftId, newStatus) {
 
 // Decline shift (placeholder)
 async function declineShift(shiftId) {
-    showMessage('Decline shift – coming soon', 'info');
+    try {
+        if (!currentStaffId) {
+            showMessage('Unable to decline shift. Staff profile not loaded.', 'error');
+            return;
+        }
+
+        const { error } = await window.supabaseClient
+            .from('shift_offers')
+            .update({ status: 'declined', responded_at: new Date().toISOString() })
+            .eq('shift_id', shiftId)
+            .eq('staff_id', currentStaffId);
+
+        if (error) throw error;
+
+        showMessage('✅ Shift declined', 'success');
+        await loadMyShifts();
+    } catch (error) {
+        console.error('Error declining shift:', error);
+        showMessage('❌ Error declining shift', 'error');
+    }
+}
+
+async function acceptOfferedShift(shiftId) {
+    try {
+        if (!currentStaffId) {
+            showMessage('Unable to accept shift. Staff profile not loaded.', 'error');
+            return;
+        }
+
+        const updates = {
+            staff_id: currentStaffId,
+            status: 'confirmed',
+            confirmed_at: new Date().toISOString()
+        };
+
+        const { error: shiftError } = await window.supabaseClient
+            .from('shifts')
+            .update(updates)
+            .eq('id', shiftId);
+
+        if (shiftError) throw shiftError;
+
+        const { error: offerError } = await window.supabaseClient
+            .from('shift_offers')
+            .update({ status: 'accepted', responded_at: new Date().toISOString() })
+            .eq('shift_id', shiftId)
+            .eq('staff_id', currentStaffId);
+
+        if (offerError) throw offerError;
+
+        await loadMyShifts();
+        showMessage('✅ Shift accepted', 'success');
+    } catch (error) {
+        console.error('Error accepting shift:', error);
+        showMessage('❌ Error accepting shift', 'error');
+    }
 }
 
 // Start specific shift
