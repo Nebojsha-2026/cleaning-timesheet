@@ -157,20 +157,36 @@ async function logout() {
   window.location.href = 'login.html';
 }
 
-function protectRoute(requiredRole = null) {
-  const token = localStorage.getItem(STORAGE.TOKEN);
-  if (!token) {
+// modules/auth.js
+
+async function protectRoute(requiredRole = null) {
+  ensureClient();
+  if (!supabaseClient?.auth) {
     window.location.href = 'login.html';
     return false;
   }
+
+  const { data: { session } } = await supabaseClient.auth.getSession();
+
+  // ✅ Source of truth: Supabase session
+  if (!session?.user) {
+    clearAuthStorage();
+    window.location.href = 'login.html';
+    return false;
+  }
+
+  // Keep local role/company fresh (so rest of app can still read localStorage)
+  await persistSession(session.user);
 
   const role = localStorage.getItem(STORAGE.ROLE) || 'employee';
   if (requiredRole && role !== requiredRole) {
     window.location.href = (role === 'manager') ? 'manager.html' : 'employee.html';
     return false;
   }
+
   return true;
 }
+
 
 ensureClient();
 setTimeout(initializeAuth, 200);
