@@ -19,12 +19,12 @@ function ensureClient() {
   // Reuse existing global client (prevents Multiple GoTrueClient instances)
   if (window.supabaseClient && window.supabaseClient.auth) {
     supabaseClient = window.supabaseClient;
-    return;
+    return true;
   }
 
   if (!window.supabase || typeof window.supabase.createClient !== 'function') {
     console.error('❌ Supabase library not loaded. Check supabase.min.js script tag.');
-    return;
+    return false;
   }
 
   const cfg = window.CONFIG || {};
@@ -33,6 +33,7 @@ function ensureClient() {
 
   window.supabaseClient = window.supabase.createClient(url, key);
   supabaseClient = window.supabaseClient;
+  return true;
 }
 
 function clearAuthStorage() {
@@ -42,29 +43,37 @@ function clearAuthStorage() {
   localStorage.removeItem(STORAGE.COMPANY);
 }
 
-async function persistSession(user) {
+async function persistSession(user, session) {
+  ensureClient();
+  if (!supabaseClient) throw new Error('Supabase client not ready');
+
+  // If session not provided, get it once (fallback)
+  let sess = session;
+  if (!sess) {
+    const { data } = await supabaseClient.auth.getSession();
+    sess = data?.session || null;
+  }
+
   const { data: profile, error } = await supabaseClient
     .from('profiles')
     .select('company_id, role')
     .eq('id', user.id)
     .single();
 
-  // Profile might not exist briefly – don’t hard-fail
   if (error) console.warn('Profile fetch failed:', error.message);
 
   const role = profile?.role || 'employee';
   const companyId = profile?.company_id || null;
-
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  const token = session?.access_token || '';
+  const token = sess?.access_token || '';
 
   localStorage.setItem(STORAGE.TOKEN, token);
   localStorage.setItem(STORAGE.USER, JSON.stringify({ id: user.id, email: user.email }));
   localStorage.setItem(STORAGE.ROLE, role);
+
   if (companyId) localStorage.setItem(STORAGE.COMPANY, companyId);
+  else localStorage.removeItem(STORAGE.COMPANY);
 
   console.log(`✅ Session handled: ${user.email} Role: ${role} Company: ${companyId}`);
-
   return { role, companyId, token };
 }
 
@@ -79,8 +88,7 @@ function isInviteAcceptPage() {
 
 async function initializeAuth() {
   try {
-    ensureClient();
-    if (!supabaseClient?.auth) return;
+    if (!ensureClient() || !supabaseClient?.auth) return;
 
     // If we JUST logged out, force-clean the session and stop any auto-redirect
     if (sessionStorage.getItem('just_logged_out') === '1') {
@@ -92,8 +100,9 @@ async function initializeAuth() {
     }
 
     const { data: { session } } = await supabaseClient.auth.getSession();
+
     if (session?.user) {
-      await persistSession(session.user);
+      await persistSession(session.user, session);
 
       if (isAuthPage() && !isInviteAcceptPage()) {
         const role = localStorage.getItem(STORAGE.ROLE) || 'employee';
@@ -111,7 +120,7 @@ async function initializeAuth() {
       }
 
       if (session2?.user) {
-        await persistSession(session2.user);
+        await persistSession(session2.user, session2);
 
         if (isAuthPage() && !isInviteAcceptPage()) {
           const role = localStorage.getItem(STORAGE.ROLE) || 'employee';
@@ -131,13 +140,12 @@ async function initializeAuth() {
 // ✅ Login must return {success:true/false} because login.html expects it
 async function login(email, password) {
   try {
-    ensureClient();
-    if (!supabaseClient?.auth) return { success: false, error: 'Supabase client not ready' };
+    if (!ensureClient() || !supabaseClient?.auth) return { success: false, error: 'Supabase client not ready' };
 
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) return { success: false, error: error.message };
 
-    const meta = await persistSession(data.user);
+    const meta = await persistSession(data.user, data.session);
     return { success: true, user: data.user, ...meta };
   } catch (e) {
     return { success: false, error: e.message || 'Login failed' };
@@ -147,8 +155,7 @@ async function login(email, password) {
 async function logout() {
   sessionStorage.setItem('just_logged_out', '1');
   try {
-    ensureClient();
-    if (supabaseClient?.auth) await supabaseClient.auth.signOut();
+    if (ensureClient() && supabaseClient?.auth) await supabaseClient.auth.signOut();
   } catch (e) {
     console.warn('signOut error:', e?.message || e);
   }
@@ -157,11 +164,8 @@ async function logout() {
   window.location.href = 'login.html';
 }
 
-// modules/auth.js
-
 async function protectRoute(requiredRole = null) {
-  ensureClient();
-  if (!supabaseClient?.auth) {
+  if (!ensureClient() || !supabaseClient?.auth) {
     window.location.href = 'login.html';
     return false;
   }
@@ -176,7 +180,7 @@ async function protectRoute(requiredRole = null) {
   }
 
   // Keep local role/company fresh (so rest of app can still read localStorage)
-  await persistSession(session.user);
+  await persistSession(session.user, session);
 
   const role = localStorage.getItem(STORAGE.ROLE) || 'employee';
   if (requiredRole && role !== requiredRole) {
@@ -187,9 +191,8 @@ async function protectRoute(requiredRole = null) {
   return true;
 }
 
-
 ensureClient();
-setTimeout(initializeAuth, 200);
+initializeAuth();
 
 console.log('✅ Auth module loaded');
 
