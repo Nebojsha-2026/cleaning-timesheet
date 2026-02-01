@@ -136,8 +136,8 @@ async function createInvitation(employeeEmail) {
 
 window.showInviteEmployeeModal = function () {
     if (window.auth && typeof window.auth.protectRoute === 'function') {
-        const ok = window.auth.protectRoute('manager');
-        if (!ok) return;
+       const ok = await window.auth.protectRoute('manager');
+       if (!ok) return;
     }
 
     if (typeof window.showModal !== 'function' || typeof window.closeModal !== 'function') {
