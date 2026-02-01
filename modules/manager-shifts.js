@@ -330,7 +330,7 @@ async function ms_createShiftAndOffers({
 window.showCreateShiftModal = async function () {
     try {
         if (window.auth && typeof window.auth.protectRoute === 'function') {
-            const ok = window.auth.protectRoute('manager');
+            const ok = await window.auth.protectRoute('manager');
             if (!ok) return;
         }
 
