@@ -1,4 +1,4 @@
-(function () {
+(async function () {
     // Configuration
     const CONFIG = {
         SUPABASE_URL: 'https://hqmtigcjyqckqdzepcdu.supabase.co',
@@ -148,7 +148,7 @@
         console.log('Detected role:', currentUserRole);
         console.log('Detected company ID:', currentCompanyId);
 
-        // Check if user is authenticated (✅ via Supabase session)
+        // Check if user is authenticated (✅ Supabase session is the truth)
 const { data: { session } } = await supabase.auth.getSession();
 const isAuthenticated = !!session?.user;
 
@@ -1383,6 +1383,7 @@ const isAuthenticated = !!session?.user;
         }
     };
 })();
+
 
 
 
