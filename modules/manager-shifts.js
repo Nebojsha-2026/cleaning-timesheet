@@ -19,8 +19,10 @@ function ms_getSupabase() {
 
 async function ms_getManagerProfile() {
     const supabase = ms_getSupabase();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not logged in');
+    const { data: { session } } = await supabase.auth.getSession();
+const user = session?.user;
+if (!user) throw new Error('Not logged in');
+
 
     const { data: profile, error } = await supabase
         .from('profiles')
