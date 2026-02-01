@@ -78,26 +78,30 @@ async function doLogout() {
 }
 
 function ensureManagerMenuBound() {
-  const dropdown = document.querySelector(".user-menu-dropdown");
-  if (!dropdown) return;
+  // Bind at document level so it survives dropdown DOM changes and tab restore.
+  if (document.documentElement.dataset.managerMenuBound === "1") return;
+  document.documentElement.dataset.managerMenuBound = "1";
 
-  // Prevent duplicate listeners (important when page is restored from cache)
-  if (dropdown.dataset.bound === "1") return;
-  dropdown.dataset.bound = "1";
+  document.addEventListener(
+    "click",
+    async (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if (!btn) return;
 
-  dropdown.addEventListener("click", async (e) => {
-    const btn = e.target.closest("button");
-    if (!btn) return;
+      // Only on manager page
+      if (!isManagerPage()) return;
 
-    const action = btn.dataset.action;
-    if (!action) return;
+      const action = btn.dataset.action;
+      if (!action) return;
 
-    e.preventDefault();
+      e.preventDefault();
 
-    if (action === "help") showHelpModal();
-    if (action === "settings") openSettingsPanel();
-    if (action === "logout") await doLogout();
-  });
+      if (action === "help") showHelpModal();
+      if (action === "settings") openSettingsPanel();
+      if (action === "logout") await doLogout();
+    },
+    true // ✅ capture: runs even if other handlers interfere/bubble-stop
+  );
 }
 
 function isManagerPage() {
@@ -113,4 +117,10 @@ document.addEventListener("DOMContentLoaded", () => {
 window.addEventListener("pageshow", () => {
   if (!isManagerPage()) return;
   ensureManagerMenuBound();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && isManagerPage()) {
+    ensureManagerMenuBound();
+  }
 });
