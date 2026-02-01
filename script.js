@@ -148,9 +148,9 @@
         console.log('Detected role:', currentUserRole);
         console.log('Detected company ID:', currentCompanyId);
 
-        // Check if user is authenticated
-        const token = localStorage.getItem(STORAGE_KEYS.token);
-        const isAuthenticated = !!token;
+        // Check if user is authenticated (✅ via Supabase session)
+const { data: { session } } = await supabase.auth.getSession();
+const isAuthenticated = !!session?.user;
 
         // If not authenticated and on dashboard page, redirect to login
         const isDashboardPage =
@@ -1383,6 +1383,7 @@
         }
     };
 })();
+
 
 
 
