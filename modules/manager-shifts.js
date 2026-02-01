@@ -2,7 +2,19 @@
 console.log('🗓️ Manager Shifts module loading...');
 
 function ms_getSupabase() {
-    return window.supabaseClient;
+    // Ensure global client exists (works even after tab restore / reload ordering)
+    if (window.supabaseClient && window.supabaseClient.auth) return window.supabaseClient;
+
+    // Try to create it if Supabase UMD is loaded and CONFIG exists
+    if (window.supabase && typeof window.supabase.createClient === 'function') {
+        const cfg = window.CONFIG || {};
+        if (cfg.SUPABASE_URL && cfg.SUPABASE_KEY) {
+            window.supabaseClient = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_KEY);
+            return window.supabaseClient;
+        }
+    }
+
+    throw new Error('Supabase client not initialized. Make sure script.js or auth.js creates window.supabaseClient.');
 }
 
 async function ms_getManagerProfile() {
