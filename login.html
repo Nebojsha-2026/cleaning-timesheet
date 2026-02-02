@@ -60,19 +60,24 @@
             document.getElementById('loadingScreen').style.display = 'none';
             document.querySelector('.container').style.display = 'block';
 
-            // Check if already logged in
-            const token = localStorage.getItem('cleaning_timesheet_token');
-            if (token) {
-            // Get role and redirect
-            const role = localStorage.getItem('cleaning_timesheet_role') || 'employee';
-            console.log('Already logged in as:', role);
-            if (role === 'manager') {
-            window.location.href = 'manager.html';
-            } else {
-            window.location.href = 'employee.html';
-            }
-            return;
-            }
+            // ✅ Check if already logged in (Supabase session is truth)
+try {
+  const { data: { session } } = await window.supabaseClient.auth.getSession();
+  if (session?.user) {
+    // Ensure role/company cache is fresh
+    if (window.auth && typeof window.auth.initializeAuth === 'function') {
+      await window.auth.initializeAuth();
+    }
+
+    const role = localStorage.getItem('cleaning_timesheet_role') || 'employee';
+    console.log('Already logged in (session) as:', role);
+
+    window.location.href = (role === 'manager') ? 'manager.html' : 'employee.html';
+    return;
+  }
+} catch (e) {
+  console.warn('Session check failed:', e?.message || e);
+}
 
             const form = document.getElementById('loginForm');
             const messageDiv = document.getElementById('loginMessage');
