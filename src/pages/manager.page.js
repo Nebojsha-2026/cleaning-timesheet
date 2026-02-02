@@ -1,5 +1,9 @@
 // src/pages/manager.page.js
+console.log("📄 Manager page script loading...");
 
+/**
+ * HELP MODAL
+ */
 function showHelpModal() {
   if (typeof window.showModal === "function") {
     window.showModal(`
@@ -13,7 +17,7 @@ function showHelpModal() {
           <li><b>Invite Employee</b> to generate an invite link.</li>
           <li><b>Create Shift</b> to assign or offer shifts.</li>
           <li><b>Settings</b> to update branding & pay frequency.</li>
-          <li><b>Timesheets</b> to manage employee submissions.</li>
+          <li><b>Timesheets</b> to view and manage generated invoices.</li>
         </ul>
 
         <div style="margin-top:18px; display:flex; gap:10px;">
@@ -32,6 +36,9 @@ function showHelpModal() {
   }
 }
 
+/**
+ * SETTINGS PANEL
+ */
 function openSettingsPanel() {
   const card = document.getElementById("companySettingsCard");
   if (card) {
@@ -51,11 +58,17 @@ function openSettingsPanel() {
   }
 }
 
+/**
+ * LOGOUT (always prefer auth.js logout)
+ */
 async function doLogout() {
-  // Prefer your auth module logout (handles just_logged_out flag)
-  if (window.auth && typeof window.auth.logout === "function") {
-    await window.auth.logout();
-    return;
+  try {
+    if (window.auth && typeof window.auth.logout === "function") {
+      await window.auth.logout();
+      return;
+    }
+  } catch (e) {
+    console.warn("auth.logout failed:", e?.message || e);
   }
 
   // Fallback: Supabase signOut
@@ -64,11 +77,13 @@ async function doLogout() {
       await window.supabaseClient.auth.signOut();
     }
   } catch (e) {
-    console.warn("signOut error:", e?.message || e);
+    console.warn("supabase signOut error:", e?.message || e);
   }
 
+  // Fallback storage cleanup
   try {
     localStorage.removeItem("cleaning_timesheet_token");
+    localStorage.removeItem("cleaning_timesheet_user");
     localStorage.removeItem("cleaning_timesheet_role");
     localStorage.removeItem("cleaning_timesheet_company_id");
   } catch {}
@@ -76,141 +91,200 @@ async function doLogout() {
   window.location.href = "login.html";
 }
 
-function isManagerPage() {
-  return (window.location.pathname || "").includes("manager.html");
+/**
+ * QUICK ACTIONS (Create Shift / Timesheets)
+ * These wrappers ensure we call the correct function even if some file loads late.
+ */
+async function openCreateShift() {
+  if (typeof window.showCreateShiftModal === "function") {
+    await window.showCreateShiftModal();
+    return;
+  }
+  if (typeof window.showMessage === "function") {
+    window.showMessage("Create Shift function not loaded yet.", "error");
+  } else {
+    alert("Create Shift function not loaded yet.");
+  }
+}
+
+async function openTimesheets() {
+  // Your timesheets.js exposes window.viewTimesheets()
+  if (typeof window.viewAllTimesheets === "function") {
+    // if you kept viewAllTimesheets wrapper
+    await window.viewAllTimesheets();
+    return;
+  }
+  if (typeof window.viewTimesheets === "function") {
+    await window.viewTimesheets();
+    return;
+  }
+
+  if (typeof window.showMessage === "function") {
+    window.showMessage("Timesheets function not loaded yet.", "error");
+  } else {
+    alert("Timesheets function not loaded yet.");
+  }
 }
 
 /**
- * IMPORTANT:
- * Use delegated handler with a wide selector so it works even after bfcache restore,
- * and regardless of whether the menu items are <button>, <a>, <div>, etc.
+ * MANAGER PAGE DETECTION
  */
-function ensureManagerMenuBound() {
-  if (document.documentElement.dataset.managerMenuBound === "1") return;
-  document.documentElement.dataset.managerMenuBound = "1";
+function isManagerPage() {
+  return (window.location.pathname || "").toLowerCase().includes("manager.html");
+}
 
+/**
+ * STRONG BINDING:
+ * - capture-phase click delegation (survives dropdown DOM changes / overlays)
+ * - also binds Quick Action buttons by label as a fallback (if inline onclick breaks)
+ */
+function bindManagerActionsOnce() {
+  if (!isManagerPage()) return;
+
+  if (document.documentElement.dataset.managerActionsBound === "1") return;
+  document.documentElement.dataset.managerActionsBound = "1";
+
+  console.log("✅ Binding manager actions (capture delegation + fallbacks)");
+
+  // 1) Capture-phase delegation for menu buttons/links
   document.addEventListener(
     "click",
     async (e) => {
       if (!isManagerPage()) return;
 
-      // ✅ Wide match: any element with data-action, not just buttons
-      const el = e.target.closest("[data-action]");
+      const el =
+        e.target.closest("[data-action]") ||
+        e.target.closest("[onclick]") ||
+        e.target.closest("a") ||
+        e.target.closest("button");
+
       if (!el) return;
 
-      const action = el.dataset.action;
-      if (!action) return;
+      const action = el.getAttribute("data-action") || "";
 
-      e.preventDefault();
+      // Handle common menu patterns:
+      // - data-action="logout|help|settings"
+      // - onclick="safeLogout()" etc.
+      // - inner text "Logout" etc.
+      const onclick = (el.getAttribute("onclick") || "").toLowerCase();
+      const text = (el.textContent || "").trim().toLowerCase();
 
-      try {
-        if (action === "help") {
-          showHelpModal();
-          return;
-        }
+      const wantsLogout =
+        action === "logout" ||
+        onclick.includes("logout") ||
+        onclick.includes("safelogout") ||
+        text === "logout" ||
+        text.includes("log out");
 
-        if (action === "settings") {
-          openSettingsPanel();
-          return;
-        }
+      const wantsHelp =
+        action === "help" ||
+        onclick.includes("help") ||
+        text === "help";
 
-        if (action === "logout") {
-          await doLogout();
-          return;
-        }
+      const wantsSettings =
+        action === "settings" ||
+        onclick.includes("settings") ||
+        onclick.includes("showcompanysettings") ||
+        text.includes("settings");
 
-        // ✅ Create shift (expects manager-shifts.js to attach window.showCreateShiftModal)
-        if (action === "create-shift" || action === "createShift" || action === "create_shift") {
-          if (typeof window.showCreateShiftModal === "function") {
-            await window.showCreateShiftModal();
-          } else {
-            console.error("showCreateShiftModal is not defined. Is modules/manager-shifts.js loaded?");
-            if (typeof window.showMessage === "function") {
-              window.showMessage("Create Shift module not loaded.", "error");
-            } else {
-              alert("Create Shift module not loaded.");
-            }
-          }
-          return;
-        }
+      // Quick actions:
+      const wantsCreateShift =
+        onclick.includes("showcreateshiftmodal") ||
+        text.includes("create shift");
 
-        // ✅ Timesheets
-        // If you have a timesheets page: timesheets.html
-        // If you later switch to an in-page panel, update this handler only.
-        if (action === "timesheets") {
-          window.location.href = "timesheets.html";
-          return;
-        }
+      const wantsTimesheets =
+        onclick.includes("viewalltimesheets") ||
+        text.includes("timesheets");
 
-        // Unknown action: no-op, but log so you can see mis-typed values
-        console.warn("Unknown manager action:", action);
-      } catch (err) {
-        console.error(err);
-        if (typeof window.showMessage === "function") {
-          window.showMessage("❌ " + (err?.message || "Action failed"), "error");
-        } else {
-          alert(err?.message || "Action failed");
-        }
+      if (wantsLogout) {
+        e.preventDefault();
+        e.stopPropagation();
+        await doLogout();
+        return;
+      }
+
+      if (wantsHelp) {
+        e.preventDefault();
+        e.stopPropagation();
+        showHelpModal();
+        return;
+      }
+
+      if (wantsSettings) {
+        e.preventDefault();
+        e.stopPropagation();
+        openSettingsPanel();
+        return;
+      }
+
+      if (wantsCreateShift) {
+        e.preventDefault();
+        e.stopPropagation();
+        await openCreateShift();
+        return;
+      }
+
+      if (wantsTimesheets) {
+        e.preventDefault();
+        e.stopPropagation();
+        await openTimesheets();
+        return;
       }
     },
-    true // capture: runs even if something stops bubbling
+    true // capture-phase = survives other handlers
   );
-}
 
-/**
- * Optional: support legacy IDs if your HTML doesn't have data-action attributes everywhere.
- * This fixes buttons even if they have ids instead of data-action.
- */
-function ensureLegacyButtonBindings() {
-  if (!isManagerPage()) return;
+  // 2) Fallback bindings for the Quick Action grid buttons (by label)
+  // This fixes cases where inline onclick is ignored or overwritten.
+  const actionButtons = Array.from(document.querySelectorAll(".action-btn"));
+  actionButtons.forEach((btn) => {
+    const label = (btn.textContent || "").trim().toLowerCase();
 
-  const bind = (id, handler) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.onclick = handler; // overwrite to prevent duplicates
-  };
+    if (label.includes("create shift")) {
+      btn.addEventListener(
+        "click",
+        async (e) => {
+          e.preventDefault();
+          await openCreateShift();
+        },
+        true
+      );
+    }
 
-  bind("logoutBtn", async (e) => {
-    e?.preventDefault();
-    await doLogout();
-  });
-
-  bind("createShiftBtn", async (e) => {
-    e?.preventDefault();
-    if (typeof window.showCreateShiftModal === "function") {
-      await window.showCreateShiftModal();
+    if (label.includes("timesheets")) {
+      btn.addEventListener(
+        "click",
+        async (e) => {
+          e.preventDefault();
+          await openTimesheets();
+        },
+        true
+      );
     }
   });
 
-  bind("timesheetsBtn", (e) => {
-    e?.preventDefault();
-    window.location.href = "timesheets.html";
-  });
-
-  bind("settingsBtn", (e) => {
-    e?.preventDefault();
-    openSettingsPanel();
-  });
-
-  bind("helpBtn", (e) => {
-    e?.preventDefault();
-    showHelpModal();
-  });
+  // 3) Expose globals so your HTML onclicks always resolve
+  window.safeLogout = doLogout;       // menu calls safeLogout()
+  window.showHelp = showHelpModal;    // if menu calls showHelp()
+  window.showSettings = openSettingsPanel; // if menu calls showSettings()
 }
 
-function bootManagerPage() {
+document.addEventListener("DOMContentLoaded", () => {
   if (!isManagerPage()) return;
-
-  ensureManagerMenuBound();
-  ensureLegacyButtonBindings(); // safe, no harm if ids don't exist
-}
-
-document.addEventListener("DOMContentLoaded", bootManagerPage);
-
-// ✅ Fires on bfcache restore (tab switch, back/forward)
-window.addEventListener("pageshow", bootManagerPage);
-
-// ✅ Extra safety: when tab becomes visible again
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") bootManagerPage();
+  bindManagerActionsOnce();
 });
+
+// BFCache restore
+window.addEventListener("pageshow", () => {
+  if (!isManagerPage()) return;
+  // Allow rebinding after restore (but keep it idempotent)
+  bindManagerActionsOnce();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && isManagerPage()) {
+    bindManagerActionsOnce();
+  }
+});
+
+console.log("✅ Manager page script loaded");
