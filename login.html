@@ -63,15 +63,15 @@
             // Check if already logged in
             const token = localStorage.getItem('cleaning_timesheet_token');
             if (token) {
-                // Get role and redirect
-                const role = localStorage.getItem('cleaning_timesheet_role') || 'employee';
-                console.log('Already logged in as:', role);
-                if (role === 'manager') {
-                    window.location.href = 'manager.html';
-                } else {
-                    window.location.href = 'employee.html';
-                }
-                return;
+            // Get role and redirect
+            const role = localStorage.getItem('cleaning_timesheet_role') || 'employee';
+            console.log('Already logged in as:', role);
+            if (role === 'manager') {
+            window.location.href = 'manager.html';
+            } else {
+            window.location.href = 'employee.html';
+            }
+            return;
             }
 
             const form = document.getElementById('loginForm');
