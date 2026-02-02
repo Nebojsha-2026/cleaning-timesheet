@@ -1,227 +1,254 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manager Dashboard - Cleaning Timesheet</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manager Dashboard - Cleaning Timesheet</title>
+
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 </head>
+
 <body>
-    <!-- Loading Screen -->
-    <div id="managerLoadingScreen" class="loading-screen">
-  <div class="loading-content">
-    <div class="spinner"></div>
-    <h2>Loading Manager Dashboard...</h2>
-    <p>Connecting to your company data...</p>
+  <!-- Loading Screen -->
+  <div id="managerLoadingScreen" class="loading-screen">
+    <div class="loading-content">
+      <div class="spinner"></div>
+      <h2>Loading Manager Dashboard...</h2>
+      <p>Connecting to your company data...</p>
+    </div>
   </div>
-</div>
 
-    <div id="managerApp" style="display:none;">
-  <!-- PASTE all your existing dashboard HTML here -->
-</div>
-        <!-- Header -->
-        <header class="header" id="mainHeader">
-            <div class="header-content">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <img id="companyLogo" src="" alt="Company Logo" style="max-height: 48px; display: none;">
-                    <h1 id="appTitle"><i class="fas fa-broom"></i> Cleaning Timesheet</h1>
-                </div>
-                <p class="subtitle">Manager Dashboard • Manage your team & schedule</p>
+  <!-- ✅ REAL APP (everything goes inside here) -->
+  <div id="managerApp" style="display:none;">
 
-                <div class="header-stats">
-                    <div class="stat-badge">
-                        <i class="fas fa-users"></i>
-                        <span id="currentCompanyName">Company loading...</span>
-                    </div>
-                    <div class="stat-badge">
-                        <i class="fas fa-calendar"></i>
-                        <span id="currentDate">Today</span>
-                    </div>
-                    <div class="stat-badge" id="connectionStatus">
-                        <i class="fas fa-wifi"></i>
-                        <span>Connecting...</span>
-                    </div>
-
-                    <!-- ✅ 3-line menu -->
-                    <div class="user-menu">
-                        <button class="user-menu-button" title="Menu">
-                            <i class="fas fa-bars"></i>
-                        </button>
-                        <div class="user-menu-dropdown">
-                            <button data-action="help"><i class="fas fa-question-circle"></i> Help</button>
-                            <button data-action="settings"><i class="fas fa-cog"></i> Settings</button>
-                            <button data-action="logout" class="danger"><i class="fas fa-sign-out-alt"></i> Logout</button>
-
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-        </header>
-
-        <!-- Stats Row -->
-        <div class="stats-row">
-            <div class="stat-card">
-                <div class="stat-icon"><i class="fas fa-users"></i></div>
-                <div class="stat-info">
-                    <h3>Active Employees</h3>
-                    <div class="stat-value" id="statEmployees">0</div>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon"><i class="fas fa-calendar-check"></i></div>
-                <div class="stat-info">
-                    <h3>Upcoming Shifts</h3>
-                    <div class="stat-value" id="statUpcomingShifts">0</div>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon"><i class="fas fa-clock"></i></div>
-                <div class="stat-info">
-                    <h3>Scheduled Hours (30d)</h3>
-                    <div class="stat-value" id="statHours">0</div>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon"><i class="fas fa-envelope-open-text"></i></div>
-                <div class="stat-info">
-                    <h3>Pending Invites</h3>
-                    <div class="stat-value" id="statPendingInvites">0</div>
-                </div>
-            </div>
+    <!-- Header -->
+    <header class="header" id="mainHeader">
+      <div class="header-content">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <img id="companyLogo" src="" alt="Company Logo" style="max-height:48px; display:none;">
+          <h1 id="appTitle"><i class="fas fa-broom"></i> Cleaning Timesheet</h1>
         </div>
 
-        <!-- Two Column Layout -->
-        <div class="two-column">
-            <!-- Left Column -->
-            <div class="column">
-                <div class="card">
-                    <div class="card-header">
-                        <h2><i class="fas fa-calendar-alt"></i> Upcoming Shifts (All Staff)</h2>
-                        <button class="btn-icon" onclick="refreshShifts()"><i class="fas fa-sync-alt"></i></button>
-                    </div>
-                    <div class="card-body">
-                        <div id="upcomingShiftsList" class="shifts-list">
-                            <div class="loading-simple">
-                                <div class="spinner-small"></div>
-                                Loading shifts...
-                            </div>
-                        </div>
-                    </div>
-                </div>
+        <p class="subtitle">Manager Dashboard • Manage your team & schedule</p>
 
-                <div class="card">
-                    <div class="card-header">
-                        <h2><i class="fas fa-history"></i> Recent Activity</h2>
-                    </div>
-                    <div class="card-body">
-                        <div id="activityFeed">
-                            <p style="text-align:center; color:#666; padding:30px 0;">
-                                Activity log coming soon...
-                            </p>
-                        </div>
-                    </div>
-                </div>
+        <div class="header-stats">
+          <div class="stat-badge">
+            <i class="fas fa-users"></i>
+            <span id="currentCompanyName">Company loading...</span>
+          </div>
+
+          <div class="stat-badge">
+            <i class="fas fa-calendar"></i>
+            <span id="currentDate">Today</span>
+          </div>
+
+          <div class="stat-badge" id="connectionStatus">
+            <i class="fas fa-wifi"></i>
+            <span>Connecting...</span>
+          </div>
+
+          <!-- ✅ 3-line menu -->
+          <div class="user-menu">
+            <button class="user-menu-button" title="Menu">
+              <i class="fas fa-bars"></i>
+            </button>
+
+            <div class="user-menu-dropdown">
+              <button data-action="help"><i class="fas fa-question-circle"></i> Help</button>
+              <button data-action="settings"><i class="fas fa-cog"></i> Settings</button>
+              <button data-action="logout" class="danger"><i class="fas fa-sign-out-alt"></i> Logout</button>
             </div>
-
-            <!-- Right Column -->
-            <div class="column">
-                <div class="card">
-                    <div class="card-header">
-                        <h2><i class="fas fa-bolt"></i> Quick Actions</h2>
-                    </div>
-                    <div class="card-body">
-                        <div class="actions-grid">
-                            <button class="action-btn" onclick="showInviteEmployeeModal()">
-                                <i class="fas fa-user-plus"></i>
-                                <span>Invite Employee</span>
-                            </button>
-                            <button class="action-btn" onclick="showEmployeesModal()">
-                                <i class="fas fa-user-friends"></i>
-                                <span>Employees</span>
-                            </button>
-                            <button class="action-btn" onclick="showCreateShiftModal()">
-                                <i class="fas fa-plus-circle"></i>
-                                <span>Create Shift</span>
-                            </button>
-                            <button class="action-btn" onclick="showEditShiftsModal()">
-                                <i class="fas fa-pen-to-square"></i>
-                                <span>Edit Shifts</span>
-                            </button>
-                            <button class="action-btn" onclick="showAllShiftsModal()">
-                                <i class="fas fa-clipboard-list"></i>
-                                <span>Shifts</span>
-                            </button>
-                            <button class="action-btn" onclick="viewAllTimesheets()">
-                                <i class="fas fa-file-invoice-dollar"></i>
-                                <span>Timesheets</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card" id="companySettingsCard" style="display:none;">
-                    <div class="card-header">
-                        <h2><i class="fas fa-building"></i> Company Settings</h2>
-                    </div>
-                    <div class="card-body">
-                        <form id="companySettingsForm">
-                            <div class="form-group">
-                                <label for="companyTitle">Company / App Title</label>
-                                <input type="text" id="companyTitle" placeholder="Cleaning Timesheet" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Primary Color</label>
-                                <input type="color" id="primaryColor" value="#667eea">
-                            </div>
-                            <div class="form-group">
-                                <label>Secondary Color</label>
-                                <input type="color" id="secondaryColor" value="#764ba2">
-                            </div>
-                            <div class="form-group">
-                                <label for="defaultPayFrequency">Default Pay Frequency</label>
-                                <select id="defaultPayFrequency">
-                                    <option value="weekly">Weekly</option>
-                                    <option value="fortnightly">Fortnightly</option>
-                                    <option value="monthly">Monthly</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="logoUpload">Company Logo</label>
-                                <input type="file" id="logoUpload" accept="image/*">
-                                <div id="logoPreview" style="margin-top:10px;"></div>
-                            </div>
-                            <button type="submit" class="btn btn-primary" style="width:100%;">
-                                <i class="fas fa-save"></i> Save Settings
-                            </button>
-                        </form>
-                    </div>
-                </div>
-
-            </div>
+          </div>
         </div>
+
+      </div>
+    </header>
+
+    <!-- Stats Row -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-users"></i></div>
+        <div class="stat-info">
+          <h3>Active Employees</h3>
+          <div class="stat-value" id="statEmployees">0</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-calendar-check"></i></div>
+        <div class="stat-info">
+          <h3>Upcoming Shifts</h3>
+          <div class="stat-value" id="statUpcomingShifts">0</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-clock"></i></div>
+        <div class="stat-info">
+          <h3>Scheduled Hours (30d)</h3>
+          <div class="stat-value" id="statHours">0</div>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-envelope-open-text"></i></div>
+        <div class="stat-info">
+          <h3>Pending Invites</h3>
+          <div class="stat-value" id="statPendingInvites">0</div>
+        </div>
+      </div>
     </div>
 
-    <!-- Scripts -->
-<script src="config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
+    <!-- Two Column Layout -->
+    <div class="two-column">
+      <!-- Left Column -->
+      <div class="column">
 
-<script src="modules/utils.js"></script>
-<script src="modules/auth.js"></script>
+        <div class="card">
+          <div class="card-header">
+            <h2><i class="fas fa-calendar-alt"></i> Upcoming Shifts (All Staff)</h2>
+            <button class="btn-icon" onclick="refreshShifts()"><i class="fas fa-sync-alt"></i></button>
+          </div>
 
-<script src="modules/shifts.js"></script>
-<script src="modules/timesheets.js"></script>
-<script src="modules/locations.js"></script>
-<script src="modules/entries.js"></script>
-<script src="modules/employee-management.js"></script>
-<script src="modules/manager-shifts.js"></script>
-<script src="modules/cancel-shifts.js"></script>
+          <div class="card-body">
+            <div id="upcomingShiftsList" class="shifts-list">
+              <div class="loading-simple">
+                <div class="spinner-small"></div>
+                Loading shifts...
+              </div>
+            </div>
+          </div>
+        </div>
 
-<script src="src/pages/manager.page.js"></script>
+        <div class="card">
+          <div class="card-header">
+            <h2><i class="fas fa-history"></i> Recent Activity</h2>
+          </div>
 
-<!-- If script.js still contains old token checks, it MUST be last -->
-<script src="script.js"></script>
+          <div class="card-body">
+            <div id="activityFeed">
+              <p style="text-align:center; color:#666; padding:30px 0;">
+                Activity log coming soon...
+              </p>
+            </div>
+          </div>
+        </div>
 
+      </div>
+
+      <!-- Right Column -->
+      <div class="column">
+
+        <div class="card">
+          <div class="card-header">
+            <h2><i class="fas fa-bolt"></i> Quick Actions</h2>
+          </div>
+
+          <div class="card-body">
+            <div class="actions-grid">
+              <button class="action-btn" onclick="showInviteEmployeeModal()">
+                <i class="fas fa-user-plus"></i>
+                <span>Invite Employee</span>
+              </button>
+
+              <button class="action-btn" onclick="showEmployeesModal()">
+                <i class="fas fa-user-friends"></i>
+                <span>Employees</span>
+              </button>
+
+              <button class="action-btn" onclick="showCreateShiftModal()">
+                <i class="fas fa-plus-circle"></i>
+                <span>Create Shift</span>
+              </button>
+
+              <button class="action-btn" onclick="showEditShiftsModal()">
+                <i class="fas fa-pen-to-square"></i>
+                <span>Edit Shifts</span>
+              </button>
+
+              <button class="action-btn" onclick="showAllShiftsModal()">
+                <i class="fas fa-clipboard-list"></i>
+                <span>Shifts</span>
+              </button>
+
+              <button class="action-btn" onclick="viewAllTimesheets()">
+                <i class="fas fa-file-invoice-dollar"></i>
+                <span>Timesheets</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Company Settings card (hidden by default) -->
+        <div class="card" id="companySettingsCard" style="display:none;">
+          <div class="card-header">
+            <h2><i class="fas fa-building"></i> Company Settings</h2>
+          </div>
+
+          <div class="card-body">
+            <form id="companySettingsForm">
+              <div class="form-group">
+                <label for="companyTitle">Company / App Title</label>
+                <input type="text" id="companyTitle" placeholder="Cleaning Timesheet" required />
+              </div>
+
+              <div class="form-group">
+                <label>Primary Color</label>
+                <input type="color" id="primaryColor" value="#667eea" />
+              </div>
+
+              <div class="form-group">
+                <label>Secondary Color</label>
+                <input type="color" id="secondaryColor" value="#764ba2" />
+              </div>
+
+              <div class="form-group">
+                <label for="defaultPayFrequency">Default Pay Frequency</label>
+                <select id="defaultPayFrequency">
+                  <option value="weekly">Weekly</option>
+                  <option value="fortnightly">Fortnightly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="logoUpload">Company Logo</label>
+                <input type="file" id="logoUpload" accept="image/*" />
+                <div id="logoPreview" style="margin-top:10px;"></div>
+              </div>
+
+              <button type="submit" class="btn btn-primary" style="width:100%;">
+                <i class="fas fa-save"></i> Save Settings
+              </button>
+            </form>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+  <!-- ✅ END managerApp -->
+
+  <!-- Scripts -->
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
+
+  <script src="modules/utils.js"></script>
+  <script src="modules/auth.js"></script>
+
+  <script src="modules/shifts.js"></script>
+  <script src="modules/timesheets.js"></script>
+  <script src="modules/locations.js"></script>
+  <script src="modules/entries.js"></script>
+  <script src="modules/employee-management.js"></script>
+  <script src="modules/manager-shifts.js"></script>
+  <script src="modules/cancel-shifts.js"></script>
+
+  <script src="src/pages/manager.page.js"></script>
+
+  <!-- Keep glue last -->
+  <script src="script.js"></script>
 </body>
 </html>
