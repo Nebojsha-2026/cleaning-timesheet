@@ -13,6 +13,7 @@ function showHelpModal() {
           <li><b>Invite Employee</b> to generate an invite link.</li>
           <li><b>Create Shift</b> to assign or offer shifts.</li>
           <li><b>Settings</b> to update branding & pay frequency.</li>
+          <li><b>Timesheets</b> to manage employee submissions.</li>
         </ul>
 
         <div style="margin-top:18px; display:flex; gap:10px;">
@@ -32,7 +33,6 @@ function showHelpModal() {
 }
 
 function openSettingsPanel() {
-  // Manager page contains this but it's hidden by default in manager.html
   const card = document.getElementById("companySettingsCard");
   if (card) {
     card.style.display = "block";
@@ -52,7 +52,7 @@ function openSettingsPanel() {
 }
 
 async function doLogout() {
-  // Prefer your existing auth module logout (it handles just_logged_out flag).
+  // Prefer your auth module logout (handles just_logged_out flag)
   if (window.auth && typeof window.auth.logout === "function") {
     await window.auth.logout();
     return;
@@ -67,7 +67,6 @@ async function doLogout() {
     console.warn("signOut error:", e?.message || e);
   }
 
-  // Cleanup local keys (fallback only)
   try {
     localStorage.removeItem("cleaning_timesheet_token");
     localStorage.removeItem("cleaning_timesheet_role");
@@ -77,50 +76,141 @@ async function doLogout() {
   window.location.href = "login.html";
 }
 
+function isManagerPage() {
+  return (window.location.pathname || "").includes("manager.html");
+}
+
+/**
+ * IMPORTANT:
+ * Use delegated handler with a wide selector so it works even after bfcache restore,
+ * and regardless of whether the menu items are <button>, <a>, <div>, etc.
+ */
 function ensureManagerMenuBound() {
-  // Bind at document level so it survives dropdown DOM changes and tab restore.
   if (document.documentElement.dataset.managerMenuBound === "1") return;
   document.documentElement.dataset.managerMenuBound = "1";
 
   document.addEventListener(
     "click",
     async (e) => {
-      const btn = e.target.closest("button[data-action]");
-      if (!btn) return;
-
-      // Only on manager page
       if (!isManagerPage()) return;
 
-      const action = btn.dataset.action;
+      // ✅ Wide match: any element with data-action, not just buttons
+      const el = e.target.closest("[data-action]");
+      if (!el) return;
+
+      const action = el.dataset.action;
       if (!action) return;
 
       e.preventDefault();
 
-      if (action === "help") showHelpModal();
-      if (action === "settings") openSettingsPanel();
-      if (action === "logout") await doLogout();
+      try {
+        if (action === "help") {
+          showHelpModal();
+          return;
+        }
+
+        if (action === "settings") {
+          openSettingsPanel();
+          return;
+        }
+
+        if (action === "logout") {
+          await doLogout();
+          return;
+        }
+
+        // ✅ Create shift (expects manager-shifts.js to attach window.showCreateShiftModal)
+        if (action === "create-shift" || action === "createShift" || action === "create_shift") {
+          if (typeof window.showCreateShiftModal === "function") {
+            await window.showCreateShiftModal();
+          } else {
+            console.error("showCreateShiftModal is not defined. Is modules/manager-shifts.js loaded?");
+            if (typeof window.showMessage === "function") {
+              window.showMessage("Create Shift module not loaded.", "error");
+            } else {
+              alert("Create Shift module not loaded.");
+            }
+          }
+          return;
+        }
+
+        // ✅ Timesheets
+        // If you have a timesheets page: timesheets.html
+        // If you later switch to an in-page panel, update this handler only.
+        if (action === "timesheets") {
+          window.location.href = "timesheets.html";
+          return;
+        }
+
+        // Unknown action: no-op, but log so you can see mis-typed values
+        console.warn("Unknown manager action:", action);
+      } catch (err) {
+        console.error(err);
+        if (typeof window.showMessage === "function") {
+          window.showMessage("❌ " + (err?.message || "Action failed"), "error");
+        } else {
+          alert(err?.message || "Action failed");
+        }
+      }
     },
-    true // ✅ capture: runs even if other handlers interfere/bubble-stop
+    true // capture: runs even if something stops bubbling
   );
 }
 
-function isManagerPage() {
-  return (window.location.pathname || "").includes("manager.html");
+/**
+ * Optional: support legacy IDs if your HTML doesn't have data-action attributes everywhere.
+ * This fixes buttons even if they have ids instead of data-action.
+ */
+function ensureLegacyButtonBindings() {
+  if (!isManagerPage()) return;
+
+  const bind = (id, handler) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.onclick = handler; // overwrite to prevent duplicates
+  };
+
+  bind("logoutBtn", async (e) => {
+    e?.preventDefault();
+    await doLogout();
+  });
+
+  bind("createShiftBtn", async (e) => {
+    e?.preventDefault();
+    if (typeof window.showCreateShiftModal === "function") {
+      await window.showCreateShiftModal();
+    }
+  });
+
+  bind("timesheetsBtn", (e) => {
+    e?.preventDefault();
+    window.location.href = "timesheets.html";
+  });
+
+  bind("settingsBtn", (e) => {
+    e?.preventDefault();
+    openSettingsPanel();
+  });
+
+  bind("helpBtn", (e) => {
+    e?.preventDefault();
+    showHelpModal();
+  });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+function bootManagerPage() {
   if (!isManagerPage()) return;
-  ensureManagerMenuBound();
-});
 
-// Fires when Chrome restores the page after tab switching / back-forward cache
-window.addEventListener("pageshow", () => {
-  if (!isManagerPage()) return;
   ensureManagerMenuBound();
-});
+  ensureLegacyButtonBindings(); // safe, no harm if ids don't exist
+}
 
+document.addEventListener("DOMContentLoaded", bootManagerPage);
+
+// ✅ Fires on bfcache restore (tab switch, back/forward)
+window.addEventListener("pageshow", bootManagerPage);
+
+// ✅ Extra safety: when tab becomes visible again
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && isManagerPage()) {
-    ensureManagerMenuBound();
-  }
+  if (document.visibilityState === "visible") bootManagerPage();
 });
