@@ -148,24 +148,44 @@
         console.log('Detected role:', currentUserRole);
         console.log('Detected company ID:', currentCompanyId);
 
-        // Check if user is authenticated (✅ Supabase session is the truth)
-const { data: { session } } = await supabase.auth.getSession();
-const isAuthenticated = !!session?.user;
+        // ✅ Auth check must use Supabase session (NOT localStorage token)
+const isDashboardPage =
+  window.location.pathname.includes('manager.html') ||
+  window.location.pathname.includes('employee.html');
 
-        // If not authenticated and on dashboard page, redirect to login
-        const isDashboardPage =
-            window.location.pathname.includes('manager.html') ||
-            window.location.pathname.includes('employee.html');
+const isAuthPage =
+  window.location.pathname.includes('login.html') ||
+  window.location.pathname.includes('register.html');
 
-        const isAuthPage =
-            window.location.pathname.includes('login.html') ||
-            window.location.pathname.includes('register.html');
+let sessionUser = null;
 
-        if (!isAuthenticated && isDashboardPage) {
-            console.log('Not authenticated, redirecting to login');
-            window.location.href = 'login.html';
-            return;
-        }
+try {
+  const { data: { session } } = await supabase.auth.getSession();
+  sessionUser = session?.user || null;
+
+  // Keep your legacy localStorage token in sync (so older code still works)
+  const accessToken = session?.access_token || '';
+  if (accessToken) localStorage.setItem(STORAGE_KEYS.token, accessToken);
+  else localStorage.removeItem(STORAGE_KEYS.token);
+
+} catch (e) {
+  console.warn('Session check failed:', e?.message || e);
+}
+
+const isAuthenticated = !!sessionUser;
+
+if (!isAuthenticated && isDashboardPage) {
+  console.log('Not authenticated (no Supabase session), redirecting to login');
+  window.location.href = 'login.html';
+  return;
+}
+
+if (isAuthenticated && isAuthPage) {
+  // Already logged in, redirect to appropriate dashboard
+  currentUserRole = localStorage.getItem(STORAGE_KEYS.role) || 'employee';
+  window.location.href = (currentUserRole === 'manager') ? 'manager.html' : 'employee.html';
+  return;
+}
 
         if (isAuthenticated && isAuthPage) {
             // Already logged in, redirect to appropriate dashboard
@@ -1383,6 +1403,7 @@ const isAuthenticated = !!session?.user;
         }
     };
 })();
+
 
 
 
