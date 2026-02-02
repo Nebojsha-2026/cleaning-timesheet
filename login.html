@@ -1,132 +1,145 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Worklynx Timesheet</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login - Worklynx Timesheet</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 </head>
+
 <body>
-    <!-- Loading Screen -->
-    <div id="loadingScreen" class="loading-screen">
-        <div class="loading-content">
-            <div class="spinner"></div>
-            <h2>Connecting to Worklynx</h2>
-            <p>Please wait...</p>
-        </div>
+  <!-- Loading Screen -->
+  <div id="loadingScreen" class="loading-screen">
+    <div class="loading-content">
+      <div class="spinner"></div>
+      <h2>Connecting to Worklynx</h2>
+      <p>Please wait...</p>
     </div>
+  </div>
 
-    <div class="container" style="display: none; max-width: 500px; margin-top: 100px;">
-        <div class="card">
-            <div class="card-header">
-                <h2><i class="fas fa-sign-in-alt"></i> Login</h2>
-            </div>
-            <div class="card-body">
-                <form id="loginForm">
-                    <div class="form-group">
-                        <label for="email"><i class="fas fa-envelope"></i> Email</label>
-                        <input type="email" id="email" placeholder="your@email.com" required>
-                    </div>
+  <div class="container" style="display: none; max-width: 500px; margin-top: 100px;">
+    <div class="card">
+      <div class="card-header">
+        <h2><i class="fas fa-sign-in-alt"></i> Login</h2>
+      </div>
 
-                    <div class="form-group">
-                        <label for="password"><i class="fas fa-lock"></i> Password</label>
-                        <input type="password" id="password" placeholder="••••••••" required>
-                    </div>
+      <div class="card-body">
+        <form id="loginForm">
+          <div class="form-group">
+            <label for="email"><i class="fas fa-envelope"></i> Email</label>
+            <input type="email" id="email" placeholder="your@email.com" required />
+          </div>
 
-                    <button type="submit" class="btn btn-primary btn-block" id="loginBtn">
-                        <i class="fas fa-sign-in-alt"></i> Login
-                    </button>
+          <div class="form-group">
+            <label for="password"><i class="fas fa-lock"></i> Password</label>
+            <input type="password" id="password" placeholder="••••••••" required />
+          </div>
 
-                    <div style="text-align: center; margin-top: 20px;">
-                        <a href="register.html" style="color: var(--primary-color); text-decoration: none;">
-                            Don't have an account? Register here
-                        </a>
-                    </div>
+          <button type="submit" class="btn btn-primary btn-block" id="loginBtn">
+            <i class="fas fa-sign-in-alt"></i> Login
+          </button>
 
-                    <div id="loginMessage" class="message" style="margin-top: 20px; display: none;"></div>
-                </form>
-            </div>
-        </div>
+          <div style="text-align: center; margin-top: 20px;">
+            <a href="register.html" style="color: var(--primary-color); text-decoration: none;">
+              Don't have an account? Register here
+            </a>
+          </div>
+
+          <div id="loginMessage" class="message" style="margin-top: 20px; display: none;"></div>
+        </form>
+      </div>
     </div>
-    
-    <script src="config.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
-    <script src="modules/utils.js"></script>
-    <script src="modules/auth.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', async () => {
-            // Hide loading screen
-            document.getElementById('loadingScreen').style.display = 'none';
-            document.querySelector('.container').style.display = 'block';
+  </div>
 
-            // ✅ Check if already logged in (Supabase session is truth)
-try {
-  const { data: { session } } = await window.supabaseClient.auth.getSession();
-  if (session?.user) {
-    // Ensure role/company cache is fresh
-    if (window.auth && typeof window.auth.initializeAuth === 'function') {
-      await window.auth.initializeAuth();
-    }
+  <!-- Order matters -->
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
+  <script src="modules/utils.js"></script>
+  <script src="modules/auth.js"></script>
 
-    const role = localStorage.getItem('cleaning_timesheet_role') || 'employee';
-    console.log('Already logged in (session) as:', role);
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      // Show UI
+      document.getElementById('loadingScreen').style.display = 'none';
+      document.querySelector('.container').style.display = 'block';
 
-    window.location.href = (role === 'manager') ? 'manager.html' : 'employee.html';
-    return;
-  }
-} catch (e) {
-  console.warn('Session check failed:', e?.message || e);
-}
+      const messageDiv = document.getElementById('loginMessage');
+      const form = document.getElementById('loginForm');
+      const loginBtn = document.getElementById('loginBtn');
 
-            const form = document.getElementById('loginForm');
-            const messageDiv = document.getElementById('loginMessage');
-            const loginBtn = document.getElementById('loginBtn');
+      function showMsg(text, type) {
+        messageDiv.textContent = text;
+        messageDiv.className = 'message ' + (type || 'info');
+        messageDiv.style.display = 'block';
+      }
 
-            form.addEventListener('submit', async (e) => {
-                e.preventDefault();
+      function setBtnLoading(isLoading) {
+        loginBtn.disabled = !!isLoading;
+        loginBtn.innerHTML = isLoading
+          ? '<i class="fas fa-spinner fa-spin"></i> Logging in...'
+          : '<i class="fas fa-sign-in-alt"></i> Login';
+      }
 
-                const email = document.getElementById('email').value.trim();
-                const password = document.getElementById('password').value;
+      // ✅ Check if already logged in (Supabase session is truth)
+      try {
+        if (!window.supabaseClient?.auth) {
+          console.warn('supabaseClient not ready on login page');
+        } else {
+          const { data: { session } } = await window.supabaseClient.auth.getSession();
 
-                if (!email || !password) {
-                    messageDiv.textContent = 'Please fill in all fields';
-                    messageDiv.className = 'message error';
-                    messageDiv.style.display = 'block';
-                    return;
-                }
+          if (session?.user) {
+            // Ensure role/company cache is fresh
+            if (window.auth && typeof window.auth.initializeAuth === 'function') {
+              await window.auth.initializeAuth();
+            }
 
-                messageDiv.textContent = 'Logging in...';
-                messageDiv.className = 'message info';
-                messageDiv.style.display = 'block';
-                loginBtn.disabled = true;
-                loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+            const role = localStorage.getItem('cleaning_timesheet_role') || 'employee';
+            console.log('Already logged in (session) as:', role);
+            window.location.href = (role === 'manager') ? 'manager.html' : 'employee.html';
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Session check failed:', e?.message || e);
+      }
 
-                const result = await auth.login(email, password);
+      // Login submit
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
 
-                if (result.success) {
-                    messageDiv.textContent = '✅ Success! Redirecting...';
-                    messageDiv.className = 'message success';
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value;
 
-                    // Wait for auth state change to handle redirect
-                    setTimeout(() => {
-                        // Force check after login
-                        const role = localStorage.getItem('cleaning_timesheet_role') || 'employee';
-                        console.log('Login successful, role detected:', role);
-                        if (role === 'manager') {
-                            window.location.href = 'manager.html';
-                        } else {
-                            window.location.href = 'employee.html';
-                        }
-                    }, 1000);
-                } else {
-                    messageDiv.textContent = '❌ ' + (result.error || 'Login failed');
-                    messageDiv.className = 'message error';
-                    loginBtn.disabled = false;
-                    loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
-                }
-            });
-        });
-    </script>
+        if (!email || !password) {
+          showMsg('Please fill in all fields', 'error');
+          return;
+        }
+
+        showMsg('Logging in...', 'info');
+        setBtnLoading(true);
+
+        try {
+          const result = await window.auth.login(email, password);
+
+          if (result.success) {
+            showMsg('✅ Success! Redirecting...', 'success');
+
+            const role = result.role || localStorage.getItem('cleaning_timesheet_role') || 'employee';
+            window.location.href = (role === 'manager') ? 'manager.html' : 'employee.html';
+            return;
+          }
+
+          showMsg('❌ ' + (result.error || 'Login failed'), 'error');
+        } catch (err) {
+          console.error(err);
+          showMsg('❌ ' + (err?.message || 'Login failed'), 'error');
+        } finally {
+          // Only matters if we didn't redirect
+          setBtnLoading(false);
+        }
+      });
+    });
+  </script>
 </body>
 </html>
