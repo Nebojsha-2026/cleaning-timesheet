@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 </head>
-
 <body>
   <!-- Loading Screen -->
   <div id="loadingScreen" class="loading-screen">
@@ -18,12 +17,11 @@
     </div>
   </div>
 
-  <div class="container" style="display: none; max-width: 500px; margin-top: 100px;">
+  <div class="container" style="display:none; max-width: 500px; margin-top: 100px;">
     <div class="card">
       <div class="card-header">
         <h2><i class="fas fa-sign-in-alt"></i> Login</h2>
       </div>
-
       <div class="card-body">
         <form id="loginForm">
           <div class="form-group">
@@ -40,102 +38,80 @@
             <i class="fas fa-sign-in-alt"></i> Login
           </button>
 
-          <div style="text-align: center; margin-top: 20px;">
-            <a href="register.html" style="color: var(--primary-color); text-decoration: none;">
+          <div style="text-align:center; margin-top:20px;">
+            <a href="register.html" style="color:var(--primary-color); text-decoration:none;">
               Don't have an account? Register here
             </a>
           </div>
 
-          <div id="loginMessage" class="message" style="margin-top: 20px; display: none;"></div>
+          <div id="loginMessage" class="message" style="margin-top:20px; display:none;"></div>
         </form>
       </div>
     </div>
   </div>
 
-  <!-- Order matters -->
+  <!-- Scripts (order matters) -->
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
   <script src="modules/utils.js"></script>
   <script src="modules/auth.js"></script>
 
   <script>
-    document.addEventListener('DOMContentLoaded', async () => {
-      // Show UI
-      document.getElementById('loadingScreen').style.display = 'none';
-      document.querySelector('.container').style.display = 'block';
+    document.addEventListener("DOMContentLoaded", async () => {
+      document.getElementById("loadingScreen").style.display = "none";
+      document.querySelector(".container").style.display = "block";
 
-      const messageDiv = document.getElementById('loginMessage');
-      const form = document.getElementById('loginForm');
-      const loginBtn = document.getElementById('loginBtn');
+      const messageDiv = document.getElementById("loginMessage");
+      const form = document.getElementById("loginForm");
+      const loginBtn = document.getElementById("loginBtn");
 
-      function showMsg(text, type) {
+      const showMsg = (text, type) => {
         messageDiv.textContent = text;
-        messageDiv.className = 'message ' + (type || 'info');
-        messageDiv.style.display = 'block';
-      }
+        messageDiv.className = "message " + (type || "info");
+        messageDiv.style.display = "block";
+      };
 
-      function setBtnLoading(isLoading) {
+      const setBtnLoading = (isLoading) => {
         loginBtn.disabled = !!isLoading;
         loginBtn.innerHTML = isLoading
           ? '<i class="fas fa-spinner fa-spin"></i> Logging in...'
           : '<i class="fas fa-sign-in-alt"></i> Login';
-      }
+      };
 
-      // ✅ Check if already logged in (Supabase session is truth)
+      // Let auth.js handle “already logged in” redirect via session
       try {
-        if (!window.supabaseClient?.auth) {
-          console.warn('supabaseClient not ready on login page');
-        } else {
-          const { data: { session } } = await window.supabaseClient.auth.getSession();
+        if (window.auth?.initializeAuth) await window.auth.initializeAuth();
+      } catch (_) {}
 
-          if (session?.user) {
-            // Ensure role/company cache is fresh
-            if (window.auth && typeof window.auth.initializeAuth === 'function') {
-              await window.auth.initializeAuth();
-            }
-
-            const role = localStorage.getItem('cleaning_timesheet_role') || 'employee';
-            console.log('Already logged in (session) as:', role);
-            window.location.href = (role === 'manager') ? 'manager.html' : 'employee.html';
-            return;
-          }
-        }
-      } catch (e) {
-        console.warn('Session check failed:', e?.message || e);
-      }
-
-      // Login submit
-      form.addEventListener('submit', async (e) => {
+      form.addEventListener("submit", async (e) => {
         e.preventDefault();
 
-        const email = document.getElementById('email').value.trim();
-        const password = document.getElementById('password').value;
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value;
 
         if (!email || !password) {
-          showMsg('Please fill in all fields', 'error');
+          showMsg("Please fill in all fields", "error");
           return;
         }
 
-        showMsg('Logging in...', 'info');
+        showMsg("Logging in...", "info");
         setBtnLoading(true);
 
         try {
           const result = await window.auth.login(email, password);
 
           if (result.success) {
-            showMsg('✅ Success! Redirecting...', 'success');
-
-            const role = result.role || localStorage.getItem('cleaning_timesheet_role') || 'employee';
-            window.location.href = (role === 'manager') ? 'manager.html' : 'employee.html';
+            showMsg("✅ Success! Redirecting...", "success");
+            const role = result.role || localStorage.getItem("cleaning_timesheet_role") || "employee";
+            window.location.replace(role === "manager" ? "manager.html" : "employee.html");
             return;
           }
 
-          showMsg('❌ ' + (result.error || 'Login failed'), 'error');
+          showMsg("❌ " + (result.error || "Login failed"), "error");
         } catch (err) {
           console.error(err);
-          showMsg('❌ ' + (err?.message || 'Login failed'), 'error');
+          showMsg("❌ " + (err?.message || "Login failed"), "error");
         } finally {
-          // Only matters if we didn't redirect
           setBtnLoading(false);
         }
       });
