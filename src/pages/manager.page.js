@@ -1,6 +1,19 @@
 // src/pages/manager.page.js
 console.log("📄 Manager page script loading...");
 
+function nukeInvisibleBlockers() {
+  document.querySelectorAll(
+    "#managerLoadingScreen, .loading-screen, .modal-backdrop, .modal-overlay"
+  ).forEach(el => {
+    el.style.display = "none";
+    el.style.pointerEvents = "none";
+    el.remove();
+  });
+  document.body.style.pointerEvents = "auto";
+  console.log("🧹 Invisible overlays removed");
+}
+
+
 function isManagerPage() {
   return (window.location.pathname || "").includes("manager.html");
 }
@@ -149,18 +162,21 @@ async function doLogout() {
    ============================ */
 
 document.addEventListener("DOMContentLoaded", () => {
+  nukeInvisibleBlockers();
   initManagerPage();
   bindManagerActionsSticky();
 });
 
 window.addEventListener("pageshow", () => {
-  console.log("🔁 pageshow → rebind + reinit");
+  console.log("🔁 pageshow → clean + rebind");
+  nukeInvisibleBlockers();
   initManagerPage();
   bindManagerActionsSticky();
 });
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
+    nukeInvisibleBlockers();
     bindManagerActionsSticky();
   }
 });
