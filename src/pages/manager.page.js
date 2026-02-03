@@ -5,83 +5,32 @@ function isManagerPage() {
   return (window.location.pathname || "").toLowerCase().includes("manager.html");
 }
 
-/* -------------------------
-   Safety cleanup: remove invisible blockers
-------------------------- */
-function nukeInvisibleBlockers() {
-  const selectors = [
-    "#managerLoadingScreen",
-    ".loading-screen",
-    ".modal-backdrop",
-    ".modal-overlay",
-    "#modalOverlay",
-    "#modalBackdrop",
-  ];
-
-  selectors.forEach((sel) => {
-    document.querySelectorAll(sel).forEach((el) => {
-      try {
-        el.style.display = "none";
-        el.style.pointerEvents = "none";
-        // remove overlays that might remain in DOM and block clicks
-        el.remove();
-      } catch (_) {}
-    });
-  });
-
-  try {
-    document.body.style.pointerEvents = "auto";
-  } catch (_) {}
-
-  console.log("🧹 Invisible overlays removed");
-}
-
 function hideManagerLoader() {
   const loader = document.getElementById("managerLoadingScreen");
   const app = document.getElementById("managerApp");
-
   if (loader) loader.style.display = "none";
   if (app) app.style.display = "block";
-
   console.log("✅ Manager UI unlocked");
 }
 
-/* -------------------------
-   User menu: open/close dropdown
-------------------------- */
-function rebindUserMenuToggle() {
-  // Bind toggle to every menu button (needed after tab restore)
+function bindUserMenuToggle() {
   document.querySelectorAll(".user-menu-button").forEach((btn) => {
-    btn.onclick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const menu = btn.nextElementSibling; // .user-menu-dropdown
-      if (!menu) return;
-
-      // close other open dropdowns first
-      document.querySelectorAll(".user-menu-dropdown.open").forEach((m) => {
-        if (m !== menu) m.classList.remove("open");
-      });
-
-      menu.classList.toggle("open");
+    btn.onclick = () => {
+      const menu = btn.nextElementSibling;
+      if (menu) menu.classList.toggle("open");
     };
   });
+
+  // close if clicking outside
+  document.addEventListener("click", (e) => {
+    const menuRoot = e.target.closest(".user-menu");
+    if (menuRoot) return;
+    document.querySelectorAll(".user-menu-dropdown.open").forEach((m) => m.classList.remove("open"));
+  }, true);
 }
 
-function closeUserMenus() {
-  document.querySelectorAll(".user-menu-dropdown.open").forEach((m) => m.classList.remove("open"));
-}
-
-/* -------------------------
-   Menu actions
-------------------------- */
 function showHelpModal() {
-  if (!window.showModal) {
-    alert("Modal system not loaded.");
-    return;
-  }
-
+  if (!window.showModal) return alert("Modal system not loaded.");
   window.showModal(`
     <div class="modal-content">
       <h2>Help</h2>
@@ -96,199 +45,101 @@ function showHelpModal() {
       </div>
     </div>
   `);
-
-  document.getElementById("helpCloseBtn")?.addEventListener("click", () => {
-    window.closeModal?.();
-  });
+  document.getElementById("helpCloseBtn")?.addEventListener("click", () => window.closeModal?.());
 }
 
 function openSettingsPanel() {
   const card = document.getElementById("companySettingsCard");
-  if (!card) {
-    window.showMessage?.("Settings panel not found", "error");
-    return;
-  }
+  if (!card) return window.showMessage?.("Settings panel not found", "error");
   card.style.display = "block";
   card.scrollIntoView({ behavior: "smooth", block: "start" });
   window.showMessage?.("Settings opened.", "info");
 }
 
 async function doLogout() {
-  try {
-    if (window.auth?.logout) {
-      await window.auth.logout();
-      return;
-    }
-  } catch (e) {
-    console.warn("auth.logout failed:", e?.message || e);
-  }
-  window.location.href = "login.html";
+  if (window.auth?.logout) return window.auth.logout();
+  window.location.replace("login.html");
 }
 
-/* -------------------------
-   Action router
-------------------------- */
-async function handleManagerAction(action) {
-  switch (action) {
-    // user-menu
-    case "help":
+function bindManagerActions() {
+  if (document.documentElement.dataset.managerBound === "1") return;
+  document.documentElement.dataset.managerBound = "1";
+
+  console.log("✅ Binding manager actions");
+
+  document.addEventListener("click", async (e) => {
+    if (!isManagerPage()) return;
+
+    const btn = e.target.closest("button, .action-btn");
+    if (!btn) return;
+
+    // handle menu buttons by data-action
+    const action = btn.dataset?.action;
+
+    if (action === "help") {
+      e.preventDefault(); e.stopImmediatePropagation();
       showHelpModal();
       return;
-
-    case "settings":
+    }
+    if (action === "settings") {
+      e.preventDefault(); e.stopImmediatePropagation();
       openSettingsPanel();
       return;
-
-    case "logout":
+    }
+    if (action === "logout") {
+      e.preventDefault(); e.stopImmediatePropagation();
       console.log("🚪 Logout clicked");
       await doLogout();
       return;
+    }
 
-    // shifts refresh
-    case "refresh-shifts":
-      console.log("🔄 Refresh shifts clicked");
-      if (typeof window.loadManagerUpcomingShifts === "function") {
-        await window.loadManagerUpcomingShifts();
-      } else if (typeof window.refreshShifts === "function") {
-        await window.refreshShifts();
-      } else if (typeof window.initShifts === "function") {
-        await window.initShifts();
-      } else {
-        window.showMessage?.("Shifts refresh not available yet.", "info");
-      }
-      return;
+    // Quick actions fallback by label (works even if inline onclick breaks)
+    const text = (btn.textContent || "").toLowerCase();
 
-    // quick actions
-    case "invite":
-      console.log("✉️ Invite clicked");
+    if (text.includes("invite")) {
+      e.preventDefault(); e.stopImmediatePropagation();
       window.showInviteEmployeeModal?.();
       return;
-
-    case "employees":
-      console.log("👥 Employees clicked");
-      if (typeof window.showEmployeesModal === "function") {
-        window.showEmployeesModal();
-      } else if (typeof window.openEmployeesModal === "function") {
-        window.openEmployeesModal();
-      } else if (typeof window.showEmployeeManagementModal === "function") {
-        window.showEmployeeManagementModal();
-      } else {
-        window.showMessage?.("Employees modal not loaded yet.", "error");
-      }
+    }
+    if (text.includes("employees")) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      if (typeof window.showEmployeesModal === "function") window.showEmployeesModal();
+      else window.showMessage?.("Employees modal not loaded yet.", "error");
       return;
-
-    case "create-shift":
-      console.log("➕ Create shift clicked");
+    }
+    if (text.includes("create shift")) {
+      e.preventDefault(); e.stopImmediatePropagation();
       window.showCreateShiftModal?.();
       return;
-
-    case "edit-shifts":
-      console.log("✏️ Edit shifts clicked");
+    }
+    if (text.includes("edit shifts")) {
+      e.preventDefault(); e.stopImmediatePropagation();
       window.showEditShiftsModal?.();
       return;
-
-    case "shifts":
-      console.log("📋 Shifts clicked");
+    }
+    if (text.trim() === "shifts" || text.includes("shifts")) {
+      e.preventDefault(); e.stopImmediatePropagation();
       window.showAllShiftsModal?.();
       return;
-
-    case "timesheets":
-      console.log("📄 Timesheets clicked");
+    }
+    if (text.includes("timesheet")) {
+      e.preventDefault(); e.stopImmediatePropagation();
       window.viewAllTimesheets?.();
       return;
-
-    default:
-      return;
-  }
+    }
+  }, true);
 }
 
-/* -------------------------
-   Infer action for legacy buttons (no data-action)
-------------------------- */
-function inferActionFromButton(btn) {
-  // 1) data-action wins
-  const da = btn?.dataset?.action;
-  if (da) return da;
-
-  // 2) onclick mapping (if present)
-  const oc = btn.getAttribute?.("onclick") || "";
-  const ocl = oc.toLowerCase();
-  if (ocl.includes("showinviteemployeemodal")) return "invite";
-  if (ocl.includes("showemployeesmodal")) return "employees";
-  if (ocl.includes("showcreateshiftmodal")) return "create-shift";
-  if (ocl.includes("showeditshiftsmodal")) return "edit-shifts";
-  if (ocl.includes("showallshiftsmodal")) return "shifts";
-  if (ocl.includes("viewalltimesheets")) return "timesheets";
-  if (ocl.includes("refreshshifts") || ocl.includes("loadmanagerupcomingshifts")) return "refresh-shifts";
-
-  // 3) text fallback
-  const text = (btn.textContent || "").trim().toLowerCase();
-  if (text.includes("invite")) return "invite";
-  if (text.includes("employee")) return "employees";
-  if (text.includes("create shift")) return "create-shift";
-  if (text.includes("edit shifts")) return "edit-shifts";
-  if (text === "shifts" || text.includes("shifts")) return "shifts";
-  if (text.includes("timesheet")) return "timesheets";
-
-  return null;
-}
-
-/* -------------------------
-   Sticky click delegation (capture)
-------------------------- */
-function bindManagerActionsSticky() {
-  // always rebind menu toggle (needed after BFCache restore)
-  rebindUserMenuToggle();
-
-  // bind the document click handler only once
-  if (document.documentElement.dataset.managerActionsBound === "1") return;
-  document.documentElement.dataset.managerActionsBound = "1";
-
-  console.log("✅ Binding manager actions (capture delegation)");
-
-  document.addEventListener(
-    "click",
-    async (e) => {
-      if (!isManagerPage()) return;
-
-      // close dropdown if click is outside menu
-      if (!e.target.closest(".user-menu")) {
-        closeUserMenus();
-      }
-
-      const btn = e.target.closest("button, .action-btn");
-      if (!btn) return;
-
-      const action = inferActionFromButton(btn);
-      if (!action) return;
-
-      // For our routed actions, prevent default + stop competing handlers
-      e.preventDefault();
-      e.stopImmediatePropagation();
-
-      await handleManagerAction(action);
-    },
-    true
-  );
-}
-
-/* -------------------------
-   Init manager page
-------------------------- */
 async function initManagerPage() {
   try {
     if (!isManagerPage()) return;
 
-    // clean overlays early
-    nukeInvisibleBlockers();
-
-    // protect route
+    // only protect once on entry + BFCache restore (not every visibility change)
     if (window.auth?.protectRoute) {
       const ok = await window.auth.protectRoute("manager");
       if (!ok) return;
     }
 
-    // init modules if they exist
     if (typeof window.initShifts === "function") await window.initShifts();
     if (typeof window.initTimesheets === "function") await window.initTimesheets();
 
@@ -299,32 +150,21 @@ async function initManagerPage() {
   }
 }
 
-/* -------------------------
-   Lifecycle hooks
-------------------------- */
 document.addEventListener("DOMContentLoaded", () => {
   if (!isManagerPage()) return;
-  bindManagerActionsSticky();
+  bindUserMenuToggle();
+  bindManagerActions();
   initManagerPage();
 });
 
 window.addEventListener("pageshow", (e) => {
   if (!isManagerPage()) return;
-
-  // BFCache restore: DO NOT clone DOM (it breaks state). Just rebind + cleanup.
-  console.log("🔁 pageshow (bfcache?):", !!e.persisted);
-
-  nukeInvisibleBlockers();
-  rebindUserMenuToggle();
-  // click handler already bound once; no need to reset the flag
-  initManagerPage();
-});
-
-document.addEventListener("visibilitychange", () => {
-  if (!isManagerPage()) return;
-  if (document.visibilityState === "visible") {
-    nukeInvisibleBlockers();
-    rebindUserMenuToggle();
+  // BFCache restore path
+  if (e.persisted) {
+    bindUserMenuToggle();
+    // don’t rebind document handler (it’s once) but safe:
+    bindManagerActions();
+    initManagerPage();
   }
 });
 
