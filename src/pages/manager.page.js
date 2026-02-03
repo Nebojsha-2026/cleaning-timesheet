@@ -5,6 +5,9 @@ function isManagerPage() {
   return (window.location.pathname || "").toLowerCase().includes("manager.html");
 }
 
+/* -------------------------
+   Safety cleanup: remove invisible blockers
+------------------------- */
 function nukeInvisibleBlockers() {
   const selectors = [
     "#managerLoadingScreen",
@@ -18,6 +21,8 @@ function nukeInvisibleBlockers() {
   selectors.forEach((sel) => {
     document.querySelectorAll(sel).forEach((el) => {
       try {
+        // If it's the real loader, we'll hide it later via hideManagerLoader().
+        // But if it gets stuck as an invisible overlay, kill it.
         el.style.display = "none";
         el.style.pointerEvents = "none";
         el.remove();
@@ -46,7 +51,11 @@ function hideManagerLoader() {
    Menu actions
 ------------------------- */
 function showHelpModal() {
-  if (!window.showModal) return alert("Modal system not loaded.");
+  if (!window.showModal) {
+    alert("Modal system not loaded.");
+    return;
+  }
+
   window.showModal(`
     <div class="modal-content">
       <h2>Help</h2>
@@ -61,6 +70,7 @@ function showHelpModal() {
       </div>
     </div>
   `);
+
   document.getElementById("helpCloseBtn")?.addEventListener("click", () => {
     window.closeModal?.();
   });
@@ -86,11 +96,94 @@ async function doLogout() {
   } catch (e) {
     console.warn("auth.logout failed:", e?.message || e);
   }
+
+  // Fallback
   window.location.href = "login.html";
 }
 
 /* -------------------------
-   Sticky click delegation
+   Action router (data-action only)
+------------------------- */
+async function handleManagerAction(action) {
+  switch (action) {
+    // User menu
+    case "help":
+      showHelpModal();
+      return;
+
+    case "settings":
+      openSettingsPanel();
+      return;
+
+    case "logout":
+      console.log("🚪 Logout clicked");
+      await doLogout();
+      return;
+
+    // Header / list controls
+    case "refresh-shifts":
+      console.log("🔄 Refresh shifts clicked");
+      // prefer whichever exists in your modules
+      if (typeof window.loadManagerUpcomingShifts === "function") {
+        await window.loadManagerUpcomingShifts();
+      } else if (typeof window.refreshShifts === "function") {
+        await window.refreshShifts();
+      } else if (typeof window.initShifts === "function") {
+        await window.initShifts();
+      } else {
+        window.showMessage?.("Shifts refresh not available yet.", "info");
+      }
+      return;
+
+    // Quick actions (right column)
+    case "invite":
+      console.log("✉️ Invite clicked");
+      window.showInviteEmployeeModal?.();
+      return;
+
+    case "employees":
+      console.log("👥 Employees clicked");
+      // IMPORTANT: your module must export one of these to window
+      // We'll try a few likely names.
+      if (typeof window.showEmployeesModal === "function") {
+        window.showEmployeesModal();
+      } else if (typeof window.openEmployeesModal === "function") {
+        window.openEmployeesModal();
+      } else if (typeof window.showEmployeeManagementModal === "function") {
+        window.showEmployeeManagementModal();
+      } else {
+        window.showMessage?.("Employees modal not loaded yet.", "error");
+      }
+      return;
+
+    case "create-shift":
+      console.log("➕ Create shift clicked");
+      window.showCreateShiftModal?.();
+      return;
+
+    case "edit-shifts":
+      console.log("✏️ Edit shifts clicked");
+      window.showEditShiftsModal?.();
+      return;
+
+    case "shifts":
+      console.log("📋 Shifts clicked");
+      window.showAllShiftsModal?.();
+      return;
+
+    case "timesheets":
+      console.log("📄 Timesheets clicked");
+      window.viewAllTimesheets?.();
+      return;
+
+    default:
+      // ignore unknown buttons
+      return;
+  }
+}
+
+/* -------------------------
+   Sticky click delegation (capture)
 ------------------------- */
 function bindManagerActionsSticky() {
   if (document.documentElement.dataset.managerActionsBound === "1") return;
@@ -103,68 +196,21 @@ function bindManagerActionsSticky() {
     async (e) => {
       if (!isManagerPage()) return;
 
-      const btn = e.target.closest("button, .action-btn");
-      if (!btn) return;
+      const el = e.target.closest("[data-action]");
+      if (!el) return;
 
-      // ✅ First: explicit menu action buttons
-      const action = btn.dataset ? btn.dataset.action : null;
+      const action = el.dataset.action;
+      if (!action) return;
 
-      if (action === "help") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        showHelpModal();
-        return;
-      }
+      // Critical: capture + stopImmediatePropagation avoids weird bfcache/tab restore handlers
+      e.preventDefault();
+      e.stopImmediatePropagation();
 
-      if (action === "settings") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        openSettingsPanel();
-        return;
-      }
-
-      if (action === "logout") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        console.log("🚪 Logout clicked");
-        await doLogout();
-        return;
-      }
-
-      // ✅ Then: quick action buttons (fallback by label)
-      const text = (btn.textContent || "").toLowerCase();
-
-      if (text.includes("create shift")) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        console.log("➕ Create shift clicked");
-        window.showCreateShiftModal?.();
-        return;
-      }
-
-      if (text.includes("timesheet")) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        console.log("📄 Timesheets clicked");
-        window.viewAllTimesheets?.();
-        return;
-      }
-
-      // Avoid catching "Edit Shifts" as plain "Shifts" if you want
-      if (text.trim() === "shifts" || text.includes(" all shifts")) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        console.log("📋 Shifts clicked");
-        window.showAllShiftsModal?.();
-        return;
-      }
-
-      if (text.includes("edit shifts")) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        console.log("✏️ Edit shifts clicked");
-        window.showEditShiftsModal?.();
-        return;
+      try {
+        await handleManagerAction(action);
+      } catch (err) {
+        console.error("Action failed:", action, err);
+        window.showMessage?.("Action failed: " + action, "error");
       }
     },
     true
@@ -178,7 +224,7 @@ async function initManagerPage() {
   try {
     if (!isManagerPage()) return;
 
-    // Always clean overlays on init
+    // Clean overlays early
     nukeInvisibleBlockers();
 
     // Protect route
@@ -219,7 +265,7 @@ document.addEventListener("visibilitychange", () => {
   if (!isManagerPage()) return;
   if (document.visibilityState === "visible") {
     nukeInvisibleBlockers();
-    // binding is capture + document-level, but keep call for safety
+    // binding is document-level and capture, but keep call for safety
     bindManagerActionsSticky();
   }
 });
