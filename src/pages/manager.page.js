@@ -191,6 +191,14 @@ function bindManagerActionsSticky() {
 
   console.log("✅ Binding manager actions (capture delegation)");
 
+  // 🔁 Always rebind menu toggle (fixes BFCache dead menu)
+  document.querySelectorAll(".user-menu-button").forEach(btn => {
+    btn.onclick = () => {
+      const menu = btn.nextElementSibling;
+      if (menu) menu.classList.toggle("open");
+    };
+  });
+  
   document.addEventListener(
     "click",
     async (e) => {
@@ -253,13 +261,27 @@ document.addEventListener("DOMContentLoaded", () => {
   initManagerPage();
 });
 
-window.addEventListener("pageshow", () => {
+window.addEventListener("pageshow", (e) => {
   if (!isManagerPage()) return;
-  console.log("🔁 pageshow → clean + rebind");
-  nukeInvisibleBlockers();
-  bindManagerActionsSticky();
-  initManagerPage();
+
+  console.log("🔁 BFCache restore detected:", e.persisted);
+
+  if (e.persisted) {
+    // HARD reset UI shell
+    const app = document.getElementById("managerApp");
+    if (app) {
+      const clone = app.cloneNode(true);
+      app.replaceWith(clone);
+    }
+
+    // rebind everything
+    document.documentElement.dataset.managerActionsBound = "0";
+    nukeInvisibleBlockers();
+    bindManagerActionsSticky();
+    initManagerPage();
+  }
 });
+
 
 document.addEventListener("visibilitychange", () => {
   if (!isManagerPage()) return;
