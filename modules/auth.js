@@ -8,190 +8,166 @@ const STORAGE = {
   COMPANY: "cleaning_timesheet_company_id",
 };
 
-const SUPABASE_FALLBACK = {
-  URL: "https://hqmtigcjyqckqdzepcdu.supabase.co",
-  KEY: "PASTE_YOUR_ANON_KEY_HERE", // keep as fallback only
-};
-
 let supabaseClient = null;
-let authInitBound = false;
+let authListenerBound = false;
 
 function isAuthPage() {
   const p = (window.location.pathname || "").toLowerCase();
   return p.includes("login.html") || p.includes("register.html") || p.includes("forgot-password.html");
 }
+
 function isInviteAcceptPage() {
   return (window.location.pathname || "").toLowerCase().includes("invite-accept.html");
 }
 
 function clearAuthStorage() {
-  localStorage.removeItem(STORAGE.TOKEN);
-  localStorage.removeItem(STORAGE.USER);
-  localStorage.removeItem(STORAGE.ROLE);
-  localStorage.removeItem(STORAGE.COMPANY);
+  try {
+    localStorage.removeItem(STORAGE.TOKEN);
+    localStorage.removeItem(STORAGE.USER);
+    localStorage.removeItem(STORAGE.ROLE);
+    localStorage.removeItem(STORAGE.COMPANY);
+
+    // Also clear supabase auth tokens (project key varies, so clear by pattern)
+    Object.keys(localStorage).forEach((k) => {
+      if (k.startsWith("sb-") && k.endsWith("-auth-token")) localStorage.removeItem(k);
+    });
+  } catch (_) {}
 }
 
 function ensureClient() {
-  // reuse singleton if already exists
+  // reuse
   if (window.supabaseClient?.auth) {
     supabaseClient = window.supabaseClient;
     return true;
   }
 
   if (!window.supabase || typeof window.supabase.createClient !== "function") {
-    console.error("❌ Supabase UMD not loaded. Check supabase.min.js script tag.");
+    console.error("❌ Supabase library not loaded (supabase.min.js).");
     return false;
   }
 
   const cfg = window.CONFIG || {};
-  const url = cfg.SUPABASE_URL || SUPABASE_FALLBACK.URL;
-  const key = cfg.SUPABASE_KEY || SUPABASE_FALLBACK.KEY;
+  const url = cfg.SUPABASE_URL;
+  const key = cfg.SUPABASE_KEY;
 
   if (!url || !key) {
-    console.error("❌ Missing SUPABASE_URL or SUPABASE_KEY (window.CONFIG).");
+    console.error("❌ Missing window.CONFIG.SUPABASE_URL or window.CONFIG.SUPABASE_KEY");
     return false;
   }
 
-  // IMPORTANT: set auth persistence explicitly (avoids tab-switch/bfcache weirdness)
-  window.supabaseClient = window.supabase.createClient(url, key, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      storage: window.localStorage,
-    },
-  });
-
+  window.supabaseClient = window.supabase.createClient(url, key);
   supabaseClient = window.supabaseClient;
   return true;
 }
 
-async function persistSession(user, session) {
-  ensureClient();
-  if (!supabaseClient?.auth) throw new Error("Supabase client not ready");
-
-  let sess = session;
-  if (!sess) {
-    const { data } = await supabaseClient.auth.getSession();
-    sess = data?.session || null;
-  }
-
-  // profile lookup
-  let role = "employee";
-  let companyId = null;
+async function fetchProfile(userId) {
+  if (!ensureClient()) return { role: "employee", companyId: null };
 
   try {
     const { data: profile, error } = await supabaseClient
       .from("profiles")
       .select("company_id, role")
-      .eq("id", user.id)
+      .eq("id", userId)
       .single();
 
     if (error) throw error;
-    role = profile?.role || "employee";
-    companyId = profile?.company_id || null;
+
+    return {
+      role: profile?.role || "employee",
+      companyId: profile?.company_id || null,
+    };
   } catch (e) {
     console.warn("Profile fetch failed:", e?.message || e);
+    return { role: "employee", companyId: null };
   }
+}
 
-  const token = sess?.access_token || "";
+async function persistSession(user, session) {
+  if (!user) return { role: "employee", companyId: null, token: "" };
 
-  localStorage.setItem(STORAGE.TOKEN, token);
-  localStorage.setItem(STORAGE.USER, JSON.stringify({ id: user.id, email: user.email }));
-  localStorage.setItem(STORAGE.ROLE, role);
+  const { role, companyId } = await fetchProfile(user.id);
+  const token = session?.access_token || "";
 
-  if (companyId) localStorage.setItem(STORAGE.COMPANY, companyId);
-  else localStorage.removeItem(STORAGE.COMPANY);
+  try {
+    localStorage.setItem(STORAGE.TOKEN, token);
+    localStorage.setItem(STORAGE.USER, JSON.stringify({ id: user.id, email: user.email }));
+    localStorage.setItem(STORAGE.ROLE, role);
+
+    if (companyId) localStorage.setItem(STORAGE.COMPANY, companyId);
+    else localStorage.removeItem(STORAGE.COMPANY);
+  } catch (_) {}
 
   console.log(`✅ Session handled: ${user.email} Role: ${role} Company: ${companyId}`);
   return { role, companyId, token };
 }
 
-// wait a bit for session to rehydrate after tab restore
-async function waitForSession({ timeoutMs = 1500, stepMs = 150 } = {}) {
-  ensureClient();
-  const start = Date.now();
-
-  while (Date.now() - start < timeoutMs) {
-    const { data } = await supabaseClient.auth.getSession();
-    if (data?.session?.user) return data.session;
-    await new Promise((r) => setTimeout(r, stepMs));
-  }
-  const { data } = await supabaseClient.auth.getSession();
-  return data?.session || null;
+function redirectByRole(role) {
+  const dest = role === "manager" ? "manager.html" : "employee.html";
+  // replace avoids back button weirdness
+  window.location.replace(dest);
 }
 
 async function initializeAuth() {
   try {
-    if (!ensureClient() || !supabaseClient?.auth) return;
+    if (!ensureClient()) return;
 
-    if (authInitBound) return;
-    authInitBound = true;
-
-    // If we just logged out, block any instant re-redirect on the next page
-    if (sessionStorage.getItem("just_logged_out") === "1") {
-      console.log("🧹 just_logged_out present: ensure signed-out state");
-      sessionStorage.removeItem("just_logged_out");
-      try { await supabaseClient.auth.signOut(); } catch (_) {}
-      clearAuthStorage();
+    // If we JUST logged out, ignore any leftover auth events briefly
+    const justOut = Number(sessionStorage.getItem("just_logged_out_ts") || "0");
+    if (justOut && Date.now() - justOut < 5000) {
+      console.log("🧹 just_logged_out_ts present: skipping auto-redirect/auth handling");
       return;
     }
 
-    // First hydration (tab restore safe)
-    const session = await waitForSession({ timeoutMs: 1200, stepMs: 150 });
+    const { data } = await supabaseClient.auth.getSession();
+    const session = data?.session || null;
 
     if (session?.user) {
       await persistSession(session.user, session);
 
-      // if on login/register pages, go to correct dashboard
+      // On auth pages: go straight to dashboard
       if (isAuthPage() && !isInviteAcceptPage()) {
         const role = localStorage.getItem(STORAGE.ROLE) || "employee";
-        window.location.replace(role === "manager" ? "manager.html" : "employee.html");
+        redirectByRole(role);
         return;
       }
-    } else {
-      // no session: clear local cache but don't forcibly redirect from auth pages
-      clearAuthStorage();
     }
 
-    // single auth listener
-    supabaseClient.auth.onAuthStateChange(async (event, session2) => {
-      // if logout flag set, ignore any “ghost” events
-      if (sessionStorage.getItem("just_logged_out") === "1") return;
+    if (!authListenerBound) {
+      authListenerBound = true;
 
-      if (session2?.user) {
-        await persistSession(session2.user, session2);
-
-        if (isAuthPage() && !isInviteAcceptPage()) {
-          const role = localStorage.getItem(STORAGE.ROLE) || "employee";
-          window.location.replace(role === "manager" ? "manager.html" : "employee.html");
+      supabaseClient.auth.onAuthStateChange(async (event, session2) => {
+        const justOut2 = Number(sessionStorage.getItem("just_logged_out_ts") || "0");
+        if (justOut2 && Date.now() - justOut2 < 5000) {
+          console.log("⛔ Ignoring auth event due to recent logout");
+          return;
         }
-      } else {
-        clearAuthStorage();
-        if (!isAuthPage() && !isInviteAcceptPage()) {
-          window.location.replace("login.html");
+
+        console.log("Auth event:", event, session2 ? "has session" : "no session");
+
+        if (session2?.user) {
+          await persistSession(session2.user, session2);
+
+          if (isAuthPage() && !isInviteAcceptPage()) {
+            const role = localStorage.getItem(STORAGE.ROLE) || "employee";
+            redirectByRole(role);
+          }
+        } else {
+          clearAuthStorage();
+          if (!isAuthPage() && !isInviteAcceptPage()) {
+            window.location.replace("login.html?logged_out=1");
+          }
         }
-      }
-    });
-
-    // BFCache restore: allow rehydrate again (but do NOT add another listener)
-    window.addEventListener("pageshow", async (e) => {
-      if (!e.persisted) return;
-      authInitBound = true; // keep listener single
-      const s = await waitForSession({ timeoutMs: 1200, stepMs: 150 });
-      if (s?.user) await persistSession(s.user, s);
-    });
-
+      });
+    }
   } catch (e) {
     console.error("initializeAuth error:", e);
   }
 }
 
+// Login returns {success:true/false}
 async function login(email, password) {
   try {
-    if (!ensureClient() || !supabaseClient?.auth) {
-      return { success: false, error: "Supabase client not ready" };
-    }
+    if (!ensureClient()) return { success: false, error: "Supabase client not ready" };
 
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if (error) return { success: false, error: error.message };
@@ -204,10 +180,11 @@ async function login(email, password) {
 }
 
 async function logout() {
-  sessionStorage.setItem("just_logged_out", "1");
+  // Mark logout to prevent onAuthStateChange redirect race
+  sessionStorage.setItem("just_logged_out_ts", String(Date.now()));
 
   try {
-    if (ensureClient() && supabaseClient?.auth) {
+    if (ensureClient()) {
       await supabaseClient.auth.signOut();
     }
   } catch (e) {
@@ -215,43 +192,44 @@ async function logout() {
   }
 
   clearAuthStorage();
-
-  // Replace (prevents back button returning to cached page)
   window.location.replace("login.html?logged_out=1");
 }
 
 async function protectRoute(requiredRole = null) {
-  if (!ensureClient() || !supabaseClient?.auth) {
+  try {
+    if (!ensureClient()) {
+      window.location.replace("login.html");
+      return false;
+    }
+
+    const { data } = await supabaseClient.auth.getSession();
+    const session = data?.session || null;
+
+    if (!session?.user) {
+      clearAuthStorage();
+      window.location.replace("login.html");
+      return false;
+    }
+
+    // refresh local cache
+    await persistSession(session.user, session);
+
+    const role = localStorage.getItem(STORAGE.ROLE) || "employee";
+    if (requiredRole && role !== requiredRole) {
+      redirectByRole(role);
+      return false;
+    }
+
+    return true;
+  } catch (e) {
+    console.warn("protectRoute error:", e?.message || e);
     window.location.replace("login.html");
     return false;
   }
-
-  // IMPORTANT: retry instead of instantly redirecting (fixes tab-switch)
-  const session = await waitForSession({ timeoutMs: 1500, stepMs: 150 });
-
-  if (!session?.user) {
-    clearAuthStorage();
-    window.location.replace("login.html");
-    return false;
-  }
-
-  // refresh local role/company cache
-  await persistSession(session.user, session);
-
-  const role = localStorage.getItem(STORAGE.ROLE) || "employee";
-  if (requiredRole && role !== requiredRole) {
-    window.location.replace(role === "manager" ? "manager.html" : "employee.html");
-    return false;
-  }
-
-  return true;
 }
 
-// boot
-ensureClient();
+// Boot
 initializeAuth();
-
-console.log("✅ Auth module loaded");
 
 window.auth = {
   login,
@@ -259,3 +237,5 @@ window.auth = {
   protectRoute,
   initializeAuth,
 };
+
+console.log("✅ Auth module loaded");
