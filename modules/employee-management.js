@@ -1,215 +1,156 @@
 // modules/employee-management.js
-console.log('👥 Employee Management module loading...');
+console.log("👥 Employee Management module loading...");
 
 function em_getSupabase() {
-  // Source of truth: window.supabaseClient created by auth.js / script.js
   if (window.supabaseClient?.auth) return window.supabaseClient;
-  if (window.supabase?.auth) return window.supabase; // fallback (older)
-  return null;
+  throw new Error("Supabase client not initialized (auth.js should create window.supabaseClient).");
 }
 
-async function em_getManagerCompanyIdStrict() {
+async function em_getCompanyId() {
+  const companyId = localStorage.getItem("cleaning_timesheet_company_id");
+  if (companyId) return companyId;
+
+  // fallback from profiles
   const supabase = em_getSupabase();
-  if (!supabase) throw new Error('Supabase not ready');
-
-  const { data: { session }, error: sessErr } = await supabase.auth.getSession();
-  if (sessErr) throw new Error(sessErr.message);
-
+  const { data: { session } } = await supabase.auth.getSession();
   const user = session?.user;
-  if (!user) throw new Error('Not logged in');
+  if (!user) throw new Error("Not logged in");
 
-  const { data: profile, error: profileErr } = await supabase
-    .from('profiles')
-    .select('company_id, role')
-    .eq('id', user.id)
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", user.id)
     .single();
 
-  if (profileErr) throw new Error('Profile lookup failed: ' + profileErr.message);
-  if (!profile?.company_id) throw new Error('Your account has no company_id. Please log out and log in again.');
-  if ((profile.role || '').toLowerCase() !== 'manager') throw new Error('You must be a manager to invite employees.');
-
+  if (error) throw error;
+  if (!profile?.company_id) throw new Error("No company linked");
+  localStorage.setItem("cleaning_timesheet_company_id", profile.company_id);
   return profile.company_id;
 }
 
-function em_makeToken(length = 48) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const array = new Uint8Array(length);
-  crypto.getRandomValues(array);
-  return Array.from(array, (x) => chars[x % chars.length]).join('');
+function em_escape(s) {
+  const d = document.createElement("div");
+  d.textContent = s || "";
+  return d.innerHTML;
 }
 
-async function em_countPendingInvites() {
-  const supabase = em_getSupabase();
-  if (!supabase) return;
-
+/* -------------------------
+   Invite Employee (your existing one)
+------------------------- */
+window.showInviteEmployeeModal = async function () {
   try {
-    const companyId = await em_getManagerCompanyIdStrict();
+    if (!window.showModal) return alert("Modal system not loaded.");
 
-    const { count, error } = await supabase
-      .from('invitations')
-      .select('*', { count: 'exact', head: true })
-      .eq('company_id', companyId)
-      .eq('accepted', false);
+    const companyId = await em_getCompanyId();
 
-    if (!error) {
-      const el = document.getElementById('statPendingInvites');
-      if (el) el.textContent = count || 0;
-    }
-  } catch (e) {
-    console.warn('Pending invite count skipped:', e?.message || e);
-  }
-}
+    window.showModal(`
+      <div class="modal-content">
+        <h2><i class="fas fa-user-plus"></i> Invite Employee</h2>
+        <p style="color:#666; margin-top:6px;">
+          Generate an invite link for your company.
+        </p>
 
-function em_buildInviteModalHtml() {
-  return `
-    <div class="modal-content">
-      <h2><i class="fas fa-user-plus"></i> Invite Employee</h2>
-      <p style="color:#666; margin-top:6px;">
-        This generates an invite link you can copy and send to the employee.
-      </p>
-
-      <form id="inviteEmployeeForm" style="margin-top:16px;">
-        <div class="form-group">
-          <label for="inviteName">Employee Name</label>
-          <input type="text" id="inviteName" placeholder="e.g. John Smith" required />
-        </div>
-
-        <div class="form-group">
-          <label for="inviteEmail">Employee Email</label>
-          <input type="email" id="inviteEmail" placeholder="employee@example.com" required />
-        </div>
-
-        <div style="margin-top:18px; display:flex; gap:10px;">
-          <button type="submit" class="btn btn-primary" style="flex:1;">
+        <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-primary" id="emGenInvite" style="flex:1; min-width:220px;">
             <i class="fas fa-link"></i> Generate Invite Link
           </button>
-          <button type="button" class="btn cancel-btn" style="flex:1; background:#6c757d; color:white;">
-            <i class="fas fa-times"></i> Cancel
+          <button class="btn" id="emInviteClose" style="flex:1; min-width:220px; background:#6c757d; color:white;">
+            <i class="fas fa-times"></i> Close
           </button>
         </div>
-      </form>
 
-      <div id="inviteResult" style="display:none; margin-top:16px; padding:12px; background:#f6f7fb; border-radius:8px;">
-        <h3 style="margin:0 0 10px 0; font-size:1rem;">Invite Link</h3>
-        <input type="text" id="inviteLinkOutput" readonly style="width:100%;" />
-        <div style="margin-top:10px; display:flex; gap:10px;">
-          <button type="button" class="btn btn-primary" id="copyInviteBtn" style="flex:1;">
-            <i class="fas fa-copy"></i> Copy Link
-          </button>
-          <button type="button" class="btn" id="closeInviteBtn" style="flex:1; background:#6c757d; color:white;">
-            <i class="fas fa-check"></i> Done
+        <div id="emInviteOut" style="margin-top:14px; display:none;">
+          <label style="display:block; font-weight:900; margin-bottom:8px;">Invite Link</label>
+          <input id="emInviteLink" type="text" readonly style="width:100%;" />
+          <button class="btn btn-outline" id="emCopyInvite" style="margin-top:10px; width:100%;">
+            <i class="fas fa-copy"></i> Copy
           </button>
         </div>
-        <p style="margin-top:10px; color:#666; font-size:0.9rem;">
-          Send this link to the employee. If they already have an account, they can enter their existing password.
-        </p>
       </div>
-    </div>
-  `;
-}
+    `);
 
-async function em_createInvitation(employeeEmail) {
-  const supabase = em_getSupabase();
-  if (!supabase) throw new Error('Supabase not ready');
+    document.getElementById("emInviteClose")?.addEventListener("click", () => window.closeModal?.());
 
-  const companyId = await em_getManagerCompanyIdStrict();
+    document.getElementById("emGenInvite")?.addEventListener("click", async () => {
+      try {
+        const inviteUrl = `${window.location.origin}${window.location.pathname.replace(/\/[^/]*$/, "")}/invite-accept.html?company_id=${encodeURIComponent(companyId)}`;
+        const out = document.getElementById("emInviteOut");
+        const inp = document.getElementById("emInviteLink");
+        if (out) out.style.display = "block";
+        if (inp) inp.value = inviteUrl;
+      } catch (e) {
+        console.error(e);
+        window.showMessage?.("Could not generate invite link", "error");
+      }
+    });
 
-  const token = em_makeToken(56);
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    document.getElementById("emCopyInvite")?.addEventListener("click", async () => {
+      const v = document.getElementById("emInviteLink")?.value || "";
+      try {
+        await navigator.clipboard.writeText(v);
+        window.showMessage?.("Copied!", "success");
+      } catch {
+        window.showMessage?.("Copy failed", "error");
+      }
+    });
 
-  const { error } = await supabase
-    .from('invitations')
-    .insert([{
-      company_id: companyId,
-      email: employeeEmail.toLowerCase(),
-      token,
-      role: 'employee',
-      expires_at: expiresAt.toISOString(),
-      accepted: false
-    }]);
-
-  if (error) throw new Error(error.message);
-
-  const origin = window.location.origin;
-  const pathBase = window.location.pathname.replace(/\/[^/]*$/, '/');
-  const inviteUrl = `${origin}${pathBase}invite-accept.html?token=${encodeURIComponent(token)}`;
-
-  return { token, inviteUrl };
-}
-
-// ✅ IMPORTANT: this MUST be async if we use await inside.
-window.showInviteEmployeeModal = async function () {
-  // protectRoute is async in auth.js → must await
-  if (window.auth && typeof window.auth.protectRoute === 'function') {
-    const ok = await window.auth.protectRoute('manager');
-    if (!ok) return;
+  } catch (e) {
+    console.error(e);
+    window.showMessage?.("Invite system not ready", "error");
   }
-
-  if (typeof window.showModal !== 'function' || typeof window.closeModal !== 'function') {
-    alert('Modal system not loaded (utils.js).');
-    return;
-  }
-
-  window.showModal(em_buildInviteModalHtml());
-
-  const form = document.getElementById('inviteEmployeeForm');
-  const cancelBtn = document.querySelector('.cancel-btn');
-
-  cancelBtn?.addEventListener('click', window.closeModal);
-
-  form?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const name = document.getElementById('inviteName').value.trim();
-    const email = document.getElementById('inviteEmail').value.trim();
-
-    if (!name || !email) {
-      window.showMessage?.('Please fill in name and email', 'error');
-      return;
-    }
-
-    const submitBtn = form.querySelector('button[type="submit"]');
-    const original = submitBtn.innerHTML;
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
-
-    try {
-      const { inviteUrl } = await em_createInvitation(email);
-
-      const result = document.getElementById('inviteResult');
-      const out = document.getElementById('inviteLinkOutput');
-      result.style.display = 'block';
-      out.value = inviteUrl;
-
-      document.getElementById('copyInviteBtn')?.addEventListener('click', async () => {
-        try {
-          await navigator.clipboard.writeText(inviteUrl);
-          window.showMessage?.('✅ Link copied!', 'success');
-        } catch {
-          out.select();
-          document.execCommand('copy');
-          window.showMessage?.('✅ Link copied!', 'success');
-        }
-      });
-
-      document.getElementById('closeInviteBtn')?.addEventListener('click', () => window.closeModal());
-
-      window.showMessage?.('✅ Invite link created!', 'success');
-      await em_countPendingInvites();
-    } catch (err) {
-      console.error(err);
-      window.showMessage?.('❌ ' + (err?.message || 'Invite failed'), 'error');
-    } finally {
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = original;
-    }
-  });
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-  if ((window.location.pathname || '').includes('manager.html')) {
-    setTimeout(em_countPendingInvites, 800);
-  }
-});
+/* -------------------------
+   Employees modal (NEW)
+------------------------- */
+window.showEmployeesModal = async function () {
+  try {
+    if (!window.showModal) return alert("Modal system not loaded.");
 
-console.log('✅ Employee Management module loaded');
+    const supabase = em_getSupabase();
+    const companyId = await em_getCompanyId();
+
+    const { data, error } = await supabase
+      .from("staff")
+      .select("id, name, email, role, is_active")
+      .eq("company_id", companyId)
+      .order("name", { ascending: true });
+
+    if (error) throw error;
+
+    const rows = (data || [])
+      .map((s) => `
+        <div style="padding:10px 12px; border:1px solid #eee; border-radius:12px; margin-bottom:10px;">
+          <div style="font-weight:900;">${em_escape(s.name || "No name")}</div>
+          <div style="color:#666; font-size:0.92rem;">${em_escape(s.email || "")}</div>
+          <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap;">
+            <span class="pill pill-info">${em_escape(s.role || "employee")}</span>
+            <span class="pill ${s.is_active ? "pill-success" : "pill-warning"}">${s.is_active ? "active" : "inactive"}</span>
+          </div>
+        </div>
+      `)
+      .join("");
+
+    window.showModal(`
+      <div class="modal-content">
+        <h2><i class="fas fa-user-friends"></i> Employees</h2>
+        <p style="color:#666; margin-top:6px;">Your company staff list.</p>
+
+        <div style="margin-top:14px; max-height:420px; overflow:auto;">
+          ${rows || `<div style="color:#666;">No employees found yet.</div>`}
+        </div>
+
+        <div style="margin-top:18px;">
+          <button class="btn btn-primary" id="emEmployeesClose" style="width:100%;">Close</button>
+        </div>
+      </div>
+    `);
+
+    document.getElementById("emEmployeesClose")?.addEventListener("click", () => window.closeModal?.());
+  } catch (e) {
+    console.error(e);
+    window.showMessage?.("Employees modal not loaded yet.", "error");
+  }
+};
+
+console.log("✅ Employee Management module loaded");
