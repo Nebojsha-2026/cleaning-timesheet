@@ -54,57 +54,57 @@ async function initManagerPage() {
    ============================ */
 
 function bindManagerActionsSticky() {
-  if (document.documentElement.dataset.managerBound === "1") return;
-  document.documentElement.dataset.managerBound = "1";
+  if (document.documentElement.dataset.managerActionsBound === "1") return;
+  document.documentElement.dataset.managerActionsBound = "1";
 
-  document.addEventListener(
-    "click",
-    async (e) => {
-      if (!isManagerPage()) return;
+  document.addEventListener("click", async (e) => {
+    if (!isManagerPage()) return;
 
-      const btn = e.target.closest("button, .action-btn");
-      if (!btn) return;
+    const btn = e.target.closest("button, .action-btn");
+    if (!btn) return;
 
-      const text = (btn.textContent || "").toLowerCase();
-      const action = btn.dataset?.action || "";
+    // 🔥 Priority: explicit actions
+    const action = btn.dataset.action;
 
-      // MENU (3-line)
-      if (action === "help") {
-        e.stopImmediatePropagation();
-        showHelpModal();
-        return;
-      }
+    if (action === "help") {
+      e.stopImmediatePropagation();
+      showHelpModal();
+      return;
+    }
 
-      if (action === "settings") {
-        e.stopImmediatePropagation();
-        openSettingsPanel();
-        return;
-      }
+    if (action === "settings") {
+      e.stopImmediatePropagation();
+      openSettingsPanel();
+      return;
+    }
 
-      if (action === "logout") {
-        e.stopImmediatePropagation();
-        await doLogout();
-        return;
-      }
+    if (action === "logout") {
+      e.stopImmediatePropagation();
+      console.log("🚪 Logout clicked");
+      await doLogout();
+      return;
+    }
 
-      // QUICK ACTIONS
-      if (text.includes("timesheet")) {
-        e.stopImmediatePropagation();
-        viewAllTimesheets();
-      }
+    // Fallback for action grid
+    const text = btn.textContent?.toLowerCase() || "";
 
-      if (text.includes("create shift")) {
-        e.stopImmediatePropagation();
-        showCreateShiftModal();
-      }
+    if (text.includes("timesheet")) {
+      console.log("📄 Timesheets clicked");
+      viewAllTimesheets();
+    }
 
-      if (text.includes("shifts")) {
-        e.stopImmediatePropagation();
-        showAllShiftsModal();
-      }
-    },
-    true // CAPTURE so Chrome tab restore can’t block it
-  );
+    if (text.includes("create shift")) {
+      console.log("➕ Create shift clicked");
+      showCreateShiftModal();
+    }
+
+    if (text.includes("shifts")) {
+      console.log("📋 Shifts clicked");
+      showAllShiftsModal();
+    }
+
+  }, true);
+}
 
   console.log("✅ Binding manager actions (capture delegation + fallbacks)");
 }
