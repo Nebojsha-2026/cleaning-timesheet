@@ -8,7 +8,6 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 </head>
 <body>
-  <!-- Loading Screen -->
   <div id="loadingScreen" class="loading-screen">
     <div class="loading-content">
       <div class="spinner"></div>
@@ -17,11 +16,12 @@
     </div>
   </div>
 
-  <div class="container" style="display:none; max-width: 500px; margin-top: 100px;">
+  <div class="container" style="display:none; max-width:500px; margin-top:100px;">
     <div class="card">
       <div class="card-header">
         <h2><i class="fas fa-sign-in-alt"></i> Login</h2>
       </div>
+
       <div class="card-body">
         <form id="loginForm">
           <div class="form-group">
@@ -50,7 +50,7 @@
     </div>
   </div>
 
-  <!-- Scripts (order matters) -->
+  <!-- Order matters -->
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
   <script src="modules/utils.js"></script>
@@ -61,27 +61,34 @@
       document.getElementById("loadingScreen").style.display = "none";
       document.querySelector(".container").style.display = "block";
 
-      const messageDiv = document.getElementById("loginMessage");
+      const msg = document.getElementById("loginMessage");
       const form = document.getElementById("loginForm");
-      const loginBtn = document.getElementById("loginBtn");
+      const btn = document.getElementById("loginBtn");
 
-      const showMsg = (text, type) => {
-        messageDiv.textContent = text;
-        messageDiv.className = "message " + (type || "info");
-        messageDiv.style.display = "block";
-      };
-
-      const setBtnLoading = (isLoading) => {
-        loginBtn.disabled = !!isLoading;
-        loginBtn.innerHTML = isLoading
+      function show(text, type) {
+        msg.textContent = text;
+        msg.className = "message " + (type || "info");
+        msg.style.display = "block";
+      }
+      function setLoading(on) {
+        btn.disabled = !!on;
+        btn.innerHTML = on
           ? '<i class="fas fa-spinner fa-spin"></i> Logging in...'
           : '<i class="fas fa-sign-in-alt"></i> Login';
-      };
+      }
 
-      // Let auth.js handle “already logged in” redirect via session
+      // ✅ If a real Supabase session exists, redirect immediately
       try {
-        if (window.auth?.initializeAuth) await window.auth.initializeAuth();
-      } catch (_) {}
+        const { data: { session } } = await window.supabaseClient.auth.getSession();
+        if (session?.user) {
+          await window.auth.initializeAuth();
+          const role = (localStorage.getItem("cleaning_timesheet_role") || "employee").toLowerCase();
+          window.location.href = role === "manager" ? "manager.html" : "employee.html";
+          return;
+        }
+      } catch (e) {
+        console.warn("Session check failed:", e?.message || e);
+      }
 
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -90,29 +97,29 @@
         const password = document.getElementById("password").value;
 
         if (!email || !password) {
-          showMsg("Please fill in all fields", "error");
+          show("Please fill in all fields", "error");
           return;
         }
 
-        showMsg("Logging in...", "info");
-        setBtnLoading(true);
+        show("Logging in...", "info");
+        setLoading(true);
 
         try {
           const result = await window.auth.login(email, password);
 
-          if (result.success) {
-            showMsg("✅ Success! Redirecting...", "success");
-            const role = result.role || localStorage.getItem("cleaning_timesheet_role") || "employee";
-            window.location.replace(role === "manager" ? "manager.html" : "employee.html");
+          if (!result.success) {
+            show("❌ " + (result.error || "Login failed"), "error");
             return;
           }
 
-          showMsg("❌ " + (result.error || "Login failed"), "error");
+          show("✅ Success! Redirecting...", "success");
+          const role = (result.role || localStorage.getItem("cleaning_timesheet_role") || "employee").toLowerCase();
+          window.location.href = role === "manager" ? "manager.html" : "employee.html";
         } catch (err) {
           console.error(err);
-          showMsg("❌ " + (err?.message || "Login failed"), "error");
+          show("❌ " + (err?.message || "Login failed"), "error");
         } finally {
-          setBtnLoading(false);
+          setLoading(false);
         }
       });
     });
