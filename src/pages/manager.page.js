@@ -21,10 +21,9 @@ function nukeInvisibleBlockers() {
   selectors.forEach((sel) => {
     document.querySelectorAll(sel).forEach((el) => {
       try {
-        // If it's the real loader, we'll hide it later via hideManagerLoader().
-        // But if it gets stuck as an invisible overlay, kill it.
         el.style.display = "none";
         el.style.pointerEvents = "none";
+        // remove overlays that might remain in DOM and block clicks
         el.remove();
       } catch (_) {}
     });
@@ -45,6 +44,33 @@ function hideManagerLoader() {
   if (app) app.style.display = "block";
 
   console.log("✅ Manager UI unlocked");
+}
+
+/* -------------------------
+   User menu: open/close dropdown
+------------------------- */
+function rebindUserMenuToggle() {
+  // Bind toggle to every menu button (needed after tab restore)
+  document.querySelectorAll(".user-menu-button").forEach((btn) => {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const menu = btn.nextElementSibling; // .user-menu-dropdown
+      if (!menu) return;
+
+      // close other open dropdowns first
+      document.querySelectorAll(".user-menu-dropdown.open").forEach((m) => {
+        if (m !== menu) m.classList.remove("open");
+      });
+
+      menu.classList.toggle("open");
+    };
+  });
+}
+
+function closeUserMenus() {
+  document.querySelectorAll(".user-menu-dropdown.open").forEach((m) => m.classList.remove("open"));
 }
 
 /* -------------------------
@@ -96,17 +122,15 @@ async function doLogout() {
   } catch (e) {
     console.warn("auth.logout failed:", e?.message || e);
   }
-
-  // Fallback
   window.location.href = "login.html";
 }
 
 /* -------------------------
-   Action router (data-action only)
+   Action router
 ------------------------- */
 async function handleManagerAction(action) {
   switch (action) {
-    // User menu
+    // user-menu
     case "help":
       showHelpModal();
       return;
@@ -120,10 +144,9 @@ async function handleManagerAction(action) {
       await doLogout();
       return;
 
-    // Header / list controls
+    // shifts refresh
     case "refresh-shifts":
       console.log("🔄 Refresh shifts clicked");
-      // prefer whichever exists in your modules
       if (typeof window.loadManagerUpcomingShifts === "function") {
         await window.loadManagerUpcomingShifts();
       } else if (typeof window.refreshShifts === "function") {
@@ -135,7 +158,7 @@ async function handleManagerAction(action) {
       }
       return;
 
-    // Quick actions (right column)
+    // quick actions
     case "invite":
       console.log("✉️ Invite clicked");
       window.showInviteEmployeeModal?.();
@@ -143,8 +166,6 @@ async function handleManagerAction(action) {
 
     case "employees":
       console.log("👥 Employees clicked");
-      // IMPORTANT: your module must export one of these to window
-      // We'll try a few likely names.
       if (typeof window.showEmployeesModal === "function") {
         window.showEmployeesModal();
       } else if (typeof window.openEmployeesModal === "function") {
@@ -177,24 +198,49 @@ async function handleManagerAction(action) {
       return;
 
     default:
-      // ignore unknown buttons
       return;
   }
+}
+
+/* -------------------------
+   Infer action for legacy buttons (no data-action)
+------------------------- */
+function inferActionFromButton(btn) {
+  // 1) data-action wins
+  const da = btn?.dataset?.action;
+  if (da) return da;
+
+  // 2) onclick mapping (if present)
+  const oc = btn.getAttribute?.("onclick") || "";
+  const ocl = oc.toLowerCase();
+  if (ocl.includes("showinviteemployeemodal")) return "invite";
+  if (ocl.includes("showemployeesmodal")) return "employees";
+  if (ocl.includes("showcreateshiftmodal")) return "create-shift";
+  if (ocl.includes("showeditshiftsmodal")) return "edit-shifts";
+  if (ocl.includes("showallshiftsmodal")) return "shifts";
+  if (ocl.includes("viewalltimesheets")) return "timesheets";
+  if (ocl.includes("refreshshifts") || ocl.includes("loadmanagerupcomingshifts")) return "refresh-shifts";
+
+  // 3) text fallback
+  const text = (btn.textContent || "").trim().toLowerCase();
+  if (text.includes("invite")) return "invite";
+  if (text.includes("employee")) return "employees";
+  if (text.includes("create shift")) return "create-shift";
+  if (text.includes("edit shifts")) return "edit-shifts";
+  if (text === "shifts" || text.includes("shifts")) return "shifts";
+  if (text.includes("timesheet")) return "timesheets";
+
+  return null;
 }
 
 /* -------------------------
    Sticky click delegation (capture)
 ------------------------- */
 function bindManagerActionsSticky() {
-  // 🔁 ALWAYS rebind menu toggle (needed after BFCache restore)
-  document.querySelectorAll(".user-menu-button").forEach((btn) => {
-    btn.onclick = () => {
-      const menu = btn.nextElementSibling;
-      if (menu) menu.classList.toggle("open");
-    };
-  });
+  // always rebind menu toggle (needed after BFCache restore)
+  rebindUserMenuToggle();
 
-  // Only bind the big document click handler once
+  // bind the document click handler only once
   if (document.documentElement.dataset.managerActionsBound === "1") return;
   document.documentElement.dataset.managerActionsBound = "1";
 
@@ -205,32 +251,22 @@ function bindManagerActionsSticky() {
     async (e) => {
       if (!isManagerPage()) return;
 
+      // close dropdown if click is outside menu
+      if (!e.target.closest(".user-menu")) {
+        closeUserMenus();
+      }
+
       const btn = e.target.closest("button, .action-btn");
       if (!btn) return;
 
-      const action = btn.dataset ? btn.dataset.action : null;
+      const action = inferActionFromButton(btn);
+      if (!action) return;
 
-      if (action === "help") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        showHelpModal();
-        return;
-      }
+      // For our routed actions, prevent default + stop competing handlers
+      e.preventDefault();
+      e.stopImmediatePropagation();
 
-      if (action === "settings") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        openSettingsPanel();
-        return;
-      }
-
-      if (action === "logout") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        console.log("🚪 Logout clicked");
-        await doLogout();
-        return;
-      }
+      await handleManagerAction(action);
     },
     true
   );
@@ -243,16 +279,16 @@ async function initManagerPage() {
   try {
     if (!isManagerPage()) return;
 
-    // Clean overlays early
+    // clean overlays early
     nukeInvisibleBlockers();
 
-    // Protect route
+    // protect route
     if (window.auth?.protectRoute) {
       const ok = await window.auth.protectRoute("manager");
       if (!ok) return;
     }
 
-    // Init modules if they exist
+    // init modules if they exist
     if (typeof window.initShifts === "function") await window.initShifts();
     if (typeof window.initTimesheets === "function") await window.initTimesheets();
 
@@ -275,31 +311,20 @@ document.addEventListener("DOMContentLoaded", () => {
 window.addEventListener("pageshow", (e) => {
   if (!isManagerPage()) return;
 
-  console.log("🔁 BFCache restore detected:", e.persisted);
+  // BFCache restore: DO NOT clone DOM (it breaks state). Just rebind + cleanup.
+  console.log("🔁 pageshow (bfcache?):", !!e.persisted);
 
-  if (e.persisted) {
-    // HARD reset UI shell
-    const app = document.getElementById("managerApp");
-    if (app) {
-      const clone = app.cloneNode(true);
-      app.replaceWith(clone);
-    }
-
-    // rebind everything
-    document.documentElement.dataset.managerActionsBound = "0";
-    nukeInvisibleBlockers();
-    bindManagerActionsSticky();
-    initManagerPage();
-  }
+  nukeInvisibleBlockers();
+  rebindUserMenuToggle();
+  // click handler already bound once; no need to reset the flag
+  initManagerPage();
 });
-
 
 document.addEventListener("visibilitychange", () => {
   if (!isManagerPage()) return;
   if (document.visibilityState === "visible") {
     nukeInvisibleBlockers();
-    // binding is document-level and capture, but keep call for safety
-    bindManagerActionsSticky();
+    rebindUserMenuToggle();
   }
 });
 
