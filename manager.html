@@ -19,7 +19,7 @@
     </div>
   </div>
 
-  <!-- ✅ REAL APP (everything goes inside here) -->
+  <!-- ✅ REAL APP -->
   <div id="managerApp" style="display:none;">
 
     <!-- Header -->
@@ -50,7 +50,7 @@
 
           <!-- ✅ 3-line menu -->
           <div class="user-menu">
-            <button class="user-menu-button" title="Menu" type="button">
+            <button class="user-menu-button" type="button" title="Menu">
               <i class="fas fa-bars"></i>
             </button>
 
@@ -108,9 +108,8 @@
         <div class="card">
           <div class="card-header">
             <h2><i class="fas fa-calendar-alt"></i> Upcoming Shifts (All Staff)</h2>
-
-            <!-- ✅ no onclick -->
-            <button type="button" class="btn-icon" data-action="refresh-shifts" aria-label="Refresh shifts">
+            <!-- ✅ removed inline onclick -->
+            <button class="btn-icon" type="button" data-action="refresh-shifts">
               <i class="fas fa-sync-alt"></i>
             </button>
           </div>
@@ -151,38 +150,36 @@
 
           <div class="card-body">
             <div class="actions-grid">
-
-              <!-- ✅ no onclick: everything uses data-action -->
-              <button type="button" class="action-btn" data-action="invite">
+              <!-- ✅ removed inline onclick, replaced with data-action -->
+              <button class="action-btn" type="button" data-action="invite">
                 <i class="fas fa-user-plus"></i>
                 <span>Invite Employee</span>
               </button>
 
-              <button type="button" class="action-btn" data-action="employees">
+              <button class="action-btn" type="button" data-action="employees">
                 <i class="fas fa-user-friends"></i>
                 <span>Employees</span>
               </button>
 
-              <button type="button" class="action-btn" data-action="create-shift">
+              <button class="action-btn" type="button" data-action="create-shift">
                 <i class="fas fa-plus-circle"></i>
                 <span>Create Shift</span>
               </button>
 
-              <button type="button" class="action-btn" data-action="edit-shifts">
+              <button class="action-btn" type="button" data-action="edit-shifts">
                 <i class="fas fa-pen-to-square"></i>
                 <span>Edit Shifts</span>
               </button>
 
-              <button type="button" class="action-btn" data-action="shifts">
+              <button class="action-btn" type="button" data-action="shifts">
                 <i class="fas fa-clipboard-list"></i>
                 <span>Shifts</span>
               </button>
 
-              <button type="button" class="action-btn" data-action="timesheets">
+              <button class="action-btn" type="button" data-action="timesheets">
                 <i class="fas fa-file-invoice-dollar"></i>
                 <span>Timesheets</span>
               </button>
-
             </div>
           </div>
         </div>
@@ -238,7 +235,7 @@
   </div>
   <!-- ✅ END managerApp -->
 
-  <!-- Scripts -->
+  <!-- Scripts (IMPORTANT: no type="module" anywhere) -->
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
 
@@ -252,8 +249,7 @@
   <script src="modules/employee-management.js"></script>
   <script src="modules/manager-shifts.js"></script>
   <script src="modules/cancel-shifts.js"></script>
-  
-  <script src="modules/manager-bridge.js"></script>
+
   <script src="src/pages/manager.page.js"></script>
 </body>
 </html>
