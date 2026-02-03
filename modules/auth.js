@@ -133,15 +133,25 @@ async function login(email, password) {
 }
 
 async function logout() {
+  sessionStorage.setItem('just_logged_out', '1');
+
+  // Always redirect even if Supabase signOut hangs after tab restore.
   try {
     ensureClient();
-    await supabaseClient?.auth?.signOut();
+
+    const signOutPromise = supabaseClient?.auth?.signOut?.();
+    const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 800));
+
+    // Race: either signOut finishes or we give up after 800ms.
+    await Promise.race([signOutPromise, timeoutPromise]);
   } catch (e) {
-    console.warn("signOut error:", e?.message || e);
+    console.warn('signOut error (ignored):', e?.message || e);
   }
 
   clearAuthStorage();
-  window.location.href = "login.html";
+
+  // Use replace() so back button doesn't bring you back into a cached dashboard
+  window.location.replace('login.html');
 }
 
 async function protectRoute(requiredRole = null) {
