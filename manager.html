@@ -50,14 +50,14 @@
 
           <!-- ✅ 3-line menu -->
           <div class="user-menu">
-            <button class="user-menu-button" title="Menu">
+            <button class="user-menu-button" title="Menu" type="button">
               <i class="fas fa-bars"></i>
             </button>
 
             <div class="user-menu-dropdown">
-              <button data-action="help"><i class="fas fa-question-circle"></i> Help</button>
-              <button data-action="settings"><i class="fas fa-cog"></i> Settings</button>
-              <button data-action="logout" class="danger"><i class="fas fa-sign-out-alt"></i> Logout</button>
+              <button type="button" data-action="help"><i class="fas fa-question-circle"></i> Help</button>
+              <button type="button" data-action="settings"><i class="fas fa-cog"></i> Settings</button>
+              <button type="button" data-action="logout" class="danger"><i class="fas fa-sign-out-alt"></i> Logout</button>
             </div>
           </div>
         </div>
@@ -108,7 +108,11 @@
         <div class="card">
           <div class="card-header">
             <h2><i class="fas fa-calendar-alt"></i> Upcoming Shifts (All Staff)</h2>
-            <button class="btn-icon" onclick="refreshShifts()"><i class="fas fa-sync-alt"></i></button>
+
+            <!-- ✅ no onclick -->
+            <button type="button" class="btn-icon" data-action="refresh-shifts" aria-label="Refresh shifts">
+              <i class="fas fa-sync-alt"></i>
+            </button>
           </div>
 
           <div class="card-body">
@@ -147,35 +151,38 @@
 
           <div class="card-body">
             <div class="actions-grid">
-              <button class="action-btn" onclick="showInviteEmployeeModal()">
+
+              <!-- ✅ no onclick: everything uses data-action -->
+              <button type="button" class="action-btn" data-action="invite">
                 <i class="fas fa-user-plus"></i>
                 <span>Invite Employee</span>
               </button>
 
-              <button class="action-btn" onclick="showEmployeesModal()">
+              <button type="button" class="action-btn" data-action="employees">
                 <i class="fas fa-user-friends"></i>
                 <span>Employees</span>
               </button>
 
-              <button class="action-btn" onclick="showCreateShiftModal()">
+              <button type="button" class="action-btn" data-action="create-shift">
                 <i class="fas fa-plus-circle"></i>
                 <span>Create Shift</span>
               </button>
 
-              <button class="action-btn" onclick="showEditShiftsModal()">
+              <button type="button" class="action-btn" data-action="edit-shifts">
                 <i class="fas fa-pen-to-square"></i>
                 <span>Edit Shifts</span>
               </button>
 
-              <button class="action-btn" onclick="showAllShiftsModal()">
+              <button type="button" class="action-btn" data-action="shifts">
                 <i class="fas fa-clipboard-list"></i>
                 <span>Shifts</span>
               </button>
 
-              <button class="action-btn" onclick="viewAllTimesheets()">
+              <button type="button" class="action-btn" data-action="timesheets">
                 <i class="fas fa-file-invoice-dollar"></i>
                 <span>Timesheets</span>
               </button>
+
             </div>
           </div>
         </div>
@@ -247,7 +254,5 @@
   <script src="modules/cancel-shifts.js"></script>
 
   <script src="src/pages/manager.page.js"></script>
-
-  <!-- Keep glue last -->
 </body>
 </html>
