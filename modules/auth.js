@@ -120,24 +120,17 @@ async function initializeAuth() {
     }
 
     // Keep cache in sync with auth changes
-    supabaseClient.auth.onAuthStateChange(async (event, nextSession) => {
-      if (sessionStorage.getItem('just_logged_out') === '1') return;
+    supabaseClient.auth.onAuthStateChange(async (event, session2) => {
+  console.log('Auth event:', event);
 
-      if (nextSession?.user) {
-        const meta = await persistSession(nextSession);
+  if (sessionStorage.getItem('just_logged_out') === '1') return;
 
-        if (isAuthPage() && !isInviteAcceptPage()) {
-          window.location.href = (meta.role === 'manager') ? 'manager.html' : 'employee.html';
-        }
-      } else {
-        clearAuthStorage();
-        if (!isAuthPage() && !isInviteAcceptPage()) window.location.href = 'login.html';
-      }
-    });
-  } catch (e) {
-    console.error('initializeAuth error:', e);
+  if (session2?.user) {
+    await persistSession(session2.user, session2);
+  } else {
+    clearAuthStorage();
   }
-}
+});
 
 // Login must return {success:true/false} because login.html expects it
 async function login(email, password) {
