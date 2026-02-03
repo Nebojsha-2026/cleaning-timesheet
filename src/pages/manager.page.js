@@ -186,39 +186,50 @@ async function handleManagerAction(action) {
    Sticky click delegation (capture)
 ------------------------- */
 function bindManagerActionsSticky() {
-  if (document.documentElement.dataset.managerActionsBound === "1") return;
-  document.documentElement.dataset.managerActionsBound = "1";
-
-  console.log("✅ Binding manager actions (capture delegation)");
-
-  // 🔁 Always rebind menu toggle (fixes BFCache dead menu)
-  document.querySelectorAll(".user-menu-button").forEach(btn => {
+  // 🔁 ALWAYS rebind menu toggle (needed after BFCache restore)
+  document.querySelectorAll(".user-menu-button").forEach((btn) => {
     btn.onclick = () => {
       const menu = btn.nextElementSibling;
       if (menu) menu.classList.toggle("open");
     };
   });
-  
+
+  // Only bind the big document click handler once
+  if (document.documentElement.dataset.managerActionsBound === "1") return;
+  document.documentElement.dataset.managerActionsBound = "1";
+
+  console.log("✅ Binding manager actions (capture delegation)");
+
   document.addEventListener(
     "click",
     async (e) => {
       if (!isManagerPage()) return;
 
-      const el = e.target.closest("[data-action]");
-      if (!el) return;
+      const btn = e.target.closest("button, .action-btn");
+      if (!btn) return;
 
-      const action = el.dataset.action;
-      if (!action) return;
+      const action = btn.dataset ? btn.dataset.action : null;
 
-      // Critical: capture + stopImmediatePropagation avoids weird bfcache/tab restore handlers
-      e.preventDefault();
-      e.stopImmediatePropagation();
+      if (action === "help") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        showHelpModal();
+        return;
+      }
 
-      try {
-        await handleManagerAction(action);
-      } catch (err) {
-        console.error("Action failed:", action, err);
-        window.showMessage?.("Action failed: " + action, "error");
+      if (action === "settings") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        openSettingsPanel();
+        return;
+      }
+
+      if (action === "logout") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        console.log("🚪 Logout clicked");
+        await doLogout();
+        return;
       }
     },
     true
