@@ -13,28 +13,6 @@ function hideManagerLoader() {
   console.log("✅ Manager UI unlocked");
 }
 
-function bindUserMenu() {
-  // toggle
-  document.querySelectorAll(".user-menu-button").forEach((btn) => {
-    btn.onclick = () => {
-      const menu = btn.nextElementSibling;
-      if (menu) menu.classList.toggle("open");
-    };
-  });
-
-  // click outside closes
-  document.addEventListener(
-    "click",
-    (e) => {
-      if (e.target.closest(".user-menu")) return;
-      document.querySelectorAll(".user-menu-dropdown.open").forEach((m) => m.classList.remove("open"));
-    },
-    true
-  );
-
-  console.log("✅ User menu bound");
-}
-
 function showHelpModal() {
   if (!window.showModal) return alert("Modal system not loaded.");
   window.showModal(`
@@ -62,7 +40,40 @@ function openSettingsPanel() {
   window.showMessage?.("Settings opened.", "info");
 }
 
-async function routeAction(action) {
+async function doLogout() {
+  try {
+    await window.auth?.logout?.();
+  } catch (e) {
+    console.warn("logout failed:", e?.message || e);
+    window.location.replace("login.html?logged_out=1");
+  }
+}
+
+function bindMenuToggle() {
+  document.querySelectorAll(".user-menu-button").forEach((btn) => {
+    btn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const menu = btn.nextElementSibling;
+      if (menu) menu.classList.toggle("open");
+    };
+  });
+
+  // close on outside click
+  document.addEventListener(
+    "click",
+    (e) => {
+      document.querySelectorAll(".user-menu-dropdown.open").forEach((menu) => {
+        if (!menu.contains(e.target) && !menu.previousElementSibling?.contains(e.target)) {
+          menu.classList.remove("open");
+        }
+      });
+    },
+    true
+  );
+}
+
+async function handleAction(action) {
   switch (action) {
     case "help":
       showHelpModal();
@@ -74,44 +85,33 @@ async function routeAction(action) {
 
     case "logout":
       console.log("🚪 Logout clicked");
-      if (window.auth?.logout) return window.auth.logout();
-      window.location.replace("login.html");
+      await doLogout();
       return;
 
     case "refresh-shifts":
-      console.log("🔄 Refresh shifts clicked");
-      if (typeof window.loadManagerUpcomingShifts === "function") return window.loadManagerUpcomingShifts();
-      if (typeof window.refreshShifts === "function") return window.refreshShifts();
-      if (typeof window.initShifts === "function") return window.initShifts();
-      window.showMessage?.("Shifts refresh not available yet.", "info");
-      return;
+      if (typeof window.loadManagerUpcomingShifts === "function") return await window.loadManagerUpcomingShifts();
+      if (typeof window.refreshShifts === "function") return await window.refreshShifts();
+      if (typeof window.initShifts === "function") return await window.initShifts();
+      return window.showMessage?.("Shifts refresh not available yet.", "info");
 
     case "invite":
-      console.log("✉️ Invite clicked");
       return window.showInviteEmployeeModal?.();
 
     case "employees":
-      console.log("👥 Employees clicked");
       if (typeof window.showEmployeesModal === "function") return window.showEmployeesModal();
       if (typeof window.openEmployeesModal === "function") return window.openEmployeesModal();
-      if (typeof window.showEmployeeManagementModal === "function") return window.showEmployeeManagementModal();
-      window.showMessage?.("Employees modal not loaded yet.", "error");
-      return;
+      return window.showMessage?.("Employees modal not loaded yet.", "error");
 
     case "create-shift":
-      console.log("➕ Create shift clicked");
       return window.showCreateShiftModal?.();
 
     case "edit-shifts":
-      console.log("✏️ Edit shifts clicked");
       return window.showEditShiftsModal?.();
 
     case "shifts":
-      console.log("📋 Shifts clicked");
       return window.showAllShiftsModal?.();
 
     case "timesheets":
-      console.log("📄 Timesheets clicked");
       return window.viewAllTimesheets?.();
 
     default:
@@ -119,9 +119,11 @@ async function routeAction(action) {
   }
 }
 
-function bindActionRouter() {
-  if (document.documentElement.dataset.managerRouterBound === "1") return;
-  document.documentElement.dataset.managerRouterBound = "1";
+function bindActionDelegation() {
+  if (document.documentElement.dataset.managerBound === "1") return;
+  document.documentElement.dataset.managerBound = "1";
+
+  console.log("✅ Binding manager actions (data-action delegation)");
 
   document.addEventListener(
     "click",
@@ -136,31 +138,23 @@ function bindActionRouter() {
 
       e.preventDefault();
       e.stopImmediatePropagation();
-
-      try {
-        await routeAction(action);
-      } catch (err) {
-        console.error("Action error:", action, err);
-        window.showMessage?.("Action failed: " + action, "error");
-      }
+      await handleAction(action);
     },
     true
   );
-
-  console.log("✅ Manager router bound");
 }
 
-async function initManager() {
+let initRunning = false;
+
+async function initManagerPage() {
+  if (!isManagerPage()) return;
+  if (initRunning) return;
+  initRunning = true;
+
   try {
-    if (!isManagerPage()) return;
+    const ok = await window.auth?.protectRoute?.("manager");
+    if (!ok) return;
 
-    // Protect route ONCE (auth.js should handle tab restore delays)
-    if (window.auth?.protectRoute) {
-      const ok = await window.auth.protectRoute("manager");
-      if (!ok) return;
-    }
-
-    // init modules if they expose init functions
     if (typeof window.initShifts === "function") await window.initShifts();
     if (typeof window.initTimesheets === "function") await window.initTimesheets();
 
@@ -168,29 +162,29 @@ async function initManager() {
   } catch (err) {
     console.error("❌ Manager init failed:", err);
     window.showMessage?.("Could not load dashboard", "error");
+  } finally {
+    initRunning = false;
   }
 }
 
-function boot() {
+document.addEventListener("DOMContentLoaded", () => {
   if (!isManagerPage()) return;
-  bindUserMenu();
-  bindActionRouter();
-  initManager();
-}
+  bindMenuToggle();
+  bindActionDelegation();
+  initManagerPage();
+});
 
-document.addEventListener("DOMContentLoaded", boot);
-
-// BFCache restore (tab switching)
-window.addEventListener("pageshow", (e) => {
+// BFCache/tab restore
+window.addEventListener("pageshow", () => {
   if (!isManagerPage()) return;
+  bindMenuToggle();
+  initManagerPage();
+});
 
-  // Always rebind menu and router after restore
-  bindUserMenu();
-  bindActionRouter();
-
-  if (e.persisted) {
-    console.log("🔁 BFCache restore -> re-init");
-    initManager();
+document.addEventListener("visibilitychange", () => {
+  if (!isManagerPage()) return;
+  if (document.visibilityState === "visible") {
+    bindMenuToggle();
   }
 });
 
