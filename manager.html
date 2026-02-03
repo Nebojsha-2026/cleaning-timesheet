@@ -19,10 +19,8 @@
     </div>
   </div>
 
-  <!-- ✅ REAL APP -->
+  <!-- APP -->
   <div id="managerApp" style="display:none;">
-
-    <!-- Header -->
     <header class="header" id="mainHeader">
       <div class="header-content">
         <div style="display:flex; align-items:center; gap:12px;">
@@ -48,7 +46,6 @@
             <span>Connecting...</span>
           </div>
 
-          <!-- ✅ 3-line menu -->
           <div class="user-menu">
             <button class="user-menu-button" type="button" title="Menu">
               <i class="fas fa-bars"></i>
@@ -100,18 +97,12 @@
       </div>
     </div>
 
-    <!-- Two Column Layout -->
     <div class="two-column">
-      <!-- Left Column -->
       <div class="column">
-
         <div class="card">
           <div class="card-header">
             <h2><i class="fas fa-calendar-alt"></i> Upcoming Shifts (All Staff)</h2>
-            <!-- ✅ removed inline onclick -->
-            <button class="btn-icon" type="button" data-action="refresh-shifts">
-              <i class="fas fa-sync-alt"></i>
-            </button>
+            <button class="btn-icon" type="button" data-action="refresh-shifts"><i class="fas fa-sync-alt"></i></button>
           </div>
 
           <div class="card-body">
@@ -128,21 +119,15 @@
           <div class="card-header">
             <h2><i class="fas fa-history"></i> Recent Activity</h2>
           </div>
-
           <div class="card-body">
             <div id="activityFeed">
-              <p style="text-align:center; color:#666; padding:30px 0;">
-                Activity log coming soon...
-              </p>
+              <p style="text-align:center; color:#666; padding:30px 0;">Activity log coming soon...</p>
             </div>
           </div>
         </div>
-
       </div>
 
-      <!-- Right Column -->
       <div class="column">
-
         <div class="card">
           <div class="card-header">
             <h2><i class="fas fa-bolt"></i> Quick Actions</h2>
@@ -150,41 +135,33 @@
 
           <div class="card-body">
             <div class="actions-grid">
-              <!-- ✅ removed inline onclick, replaced with data-action -->
               <button class="action-btn" type="button" data-action="invite">
-                <i class="fas fa-user-plus"></i>
-                <span>Invite Employee</span>
+                <i class="fas fa-user-plus"></i><span>Invite Employee</span>
               </button>
 
               <button class="action-btn" type="button" data-action="employees">
-                <i class="fas fa-user-friends"></i>
-                <span>Employees</span>
+                <i class="fas fa-user-friends"></i><span>Employees</span>
               </button>
 
               <button class="action-btn" type="button" data-action="create-shift">
-                <i class="fas fa-plus-circle"></i>
-                <span>Create Shift</span>
+                <i class="fas fa-plus-circle"></i><span>Create Shift</span>
               </button>
 
               <button class="action-btn" type="button" data-action="edit-shifts">
-                <i class="fas fa-pen-to-square"></i>
-                <span>Edit Shifts</span>
+                <i class="fas fa-pen-to-square"></i><span>Edit Shifts</span>
               </button>
 
               <button class="action-btn" type="button" data-action="shifts">
-                <i class="fas fa-clipboard-list"></i>
-                <span>Shifts</span>
+                <i class="fas fa-clipboard-list"></i><span>Shifts</span>
               </button>
 
               <button class="action-btn" type="button" data-action="timesheets">
-                <i class="fas fa-file-invoice-dollar"></i>
-                <span>Timesheets</span>
+                <i class="fas fa-file-invoice-dollar"></i><span>Timesheets</span>
               </button>
             </div>
           </div>
         </div>
 
-        <!-- Company Settings card (hidden by default) -->
         <div class="card" id="companySettingsCard" style="display:none;">
           <div class="card-header">
             <h2><i class="fas fa-building"></i> Company Settings</h2>
@@ -231,11 +208,9 @@
 
       </div>
     </div>
-
   </div>
-  <!-- ✅ END managerApp -->
 
-  <!-- Scripts (IMPORTANT: no type="module" anywhere) -->
+  <!-- Scripts (NO modules, NO legacy script.js) -->
   <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.38.4/dist/umd/supabase.min.js"></script>
 
