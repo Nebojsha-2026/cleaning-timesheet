@@ -46,4 +46,28 @@ window.addEventListener("pageshow", () => {
   initManagerPage();
 });
 
+function bindManagerActionsSticky() {
+  if (document.documentElement.dataset.managerActionsBound === "1") return;
+  document.documentElement.dataset.managerActionsBound = "1";
+
+  document.addEventListener("click", (e) => {
+    if (!isManagerPage()) return;
+
+    const btn = e.target.closest("button, .action-btn");
+    if (!btn) return;
+
+    const text = btn.textContent?.toLowerCase() || "";
+
+    if (text.includes("timesheet")) viewAllTimesheets();
+    if (text.includes("create shift")) showCreateShiftModal();
+    if (text.includes("shifts")) showAllShiftsModal();
+  }, true);
+}
+
+document.addEventListener("DOMContentLoaded", bindManagerActionsSticky);
+window.addEventListener("pageshow", bindManagerActionsSticky);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") bindManagerActionsSticky();
+});
+
 console.log("📄 Manager page script loaded");
